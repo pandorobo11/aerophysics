@@ -2,6 +2,8 @@
 
 from importlib.metadata import version
 
+from aerophysics.gas import AIR, PerfectGas
+
 __version__ = version("aerophysics")
 
-__all__ = ["__version__"]
+__all__ = ["AIR", "PerfectGas", "__version__"]
