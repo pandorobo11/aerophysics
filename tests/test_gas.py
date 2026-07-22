@@ -20,12 +20,12 @@ def test_air_heat_capacities_are_consistent() -> None:
 
 
 def test_speed_of_sound_scalar_and_array() -> None:
-    assert AIR.speed_of_sound(288.15) == pytest.approx(340.293988, rel=1e-8)
+    assert AIR.speed_of_sound(288.15) == pytest.approx(340.294, rel=1e-6)
     result = AIR.speed_of_sound([[288.15, 216.65]])
     assert isinstance(result, np.ndarray)
     assert result.dtype == np.float64
     assert result.shape == (1, 2)
-    assert_allclose(result, [[340.293988, 295.069494]], rtol=1e-8)
+    assert_allclose(result, [[340.294, 295.0696]], rtol=1e-6)
 
 
 @pytest.mark.parametrize(

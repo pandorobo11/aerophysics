@@ -139,7 +139,10 @@ class USSAConductivityModel:
         return return_float(result, scalar=scalar)
 
 
-AIR = PerfectGas(specific_gas_constant=287.05287, heat_capacity_ratio=1.4)
+AIR = PerfectGas(
+    specific_gas_constant=8_314.32 / 28.9644,
+    heat_capacity_ratio=1.4,
+)
 """Calorically perfect dry air using U.S. Standard Atmosphere constants."""
 
 AIR_VISCOSITY = SutherlandModel(
