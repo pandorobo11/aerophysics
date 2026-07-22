@@ -141,11 +141,14 @@ aerophysics/
 - 代表的な教科書値、解析解、既知の基準データを使ってテストする。
 - 公開 API は小さく保ち、内部実装と分離する。
 
-## 次の作業
+## 0.1 の実装状況
 
-- `pyproject.toml` と `src/` レイアウトを作成する。
-- 標準大気、完全気体、等エントロピー流れから実装を開始する。
-- 各モデルの基準文献と検証値を選定する。
+- Python パッケージ、開発ツール、3 OS の CI を構成済み。
+- 完全気体、空気輸送物性、U.S. Standard Atmosphere 1976 を実装済み。
+- 航空慣用単位の明示的変換、等エントロピー流れ、`FlightCondition` を実装済み。
+- 出典、仮定、適用範囲、API reference、実行可能例を Sphinx 文書として整備済み。
+- lint、型検査、branch coverage 95% 以上、doctest、wheel/sdist build、隔離環境への wheel 導入を検証済み。
+- GitHub への push、PyPI への公開は別作業とする。
 
 ## 0.1 の設計決定
 
