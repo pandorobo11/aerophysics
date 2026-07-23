@@ -12,7 +12,7 @@ models.
 
 All temperatures must be positive. High-temperature dissociation, chemical
 reactions, vibrational excitation, and thermodynamic nonequilibrium are outside
-version 0.2.
+version 0.3.
 
 Standard atmosphere
 -------------------
@@ -60,6 +60,74 @@ the requested solution with a detached normal shock.
 the finite limiting Prandtl–Meyer angle. The numerical inverses use fixed
 high-accuracy tolerances. The governing equations and reference values follow
 NACA Report 1135.
+
+Flat-plate boundary layers
+--------------------------
+
+``flat_plate_boundary_layer`` models one side of a smooth flat plate with a
+sharp leading edge, zero pressure gradient, and constant edge conditions.
+Distance is measured from the leading edge. Surface roughness, pressure
+gradients, separation, suction, blowing, and natural-transition prediction are
+outside version 0.3.
+
+The caller explicitly selects ``BoundaryLayerRegime.LAMINAR``,
+``TURBULENT``, or ``TRANSITIONAL``. A transitional calculation requires
+``transition_reynolds``; no transition Reynolds number is inferred. The
+laminar model uses the Blasius relations
+
+.. math::
+
+   \delta_{99}/x = 5/\sqrt{Re_x},\quad
+   \delta^*/x = 1.7208/\sqrt{Re_x},\quad
+   \theta/x = 0.664/\sqrt{Re_x}.
+
+The local and average laminar skin-friction coefficients are
+``0.664/sqrt(Re_x)`` and ``1.328/sqrt(Re_x)``. Turbulent thickness uses
+``delta_99/x = 0.37 Re_x**(-1/5)`` with a one-seventh-power profile estimate
+for displacement and momentum thickness.
+
+``TurbulentCorrelation.POWER_LAW`` uses local and average coefficients
+``0.0592 Re_x**(-1/5)`` and ``0.074 Re_x**(-1/5)``.
+``TurbulentCorrelation.SCHLICHTING``, the default, uses
+
+.. math::
+
+   \bar C_f = 0.455/(\log_{10} Re_x)^{2.58}
+
+and obtains the local coefficient by differentiating accumulated drag.
+Turbulent use outside ``5e5 <= Re_x <= 1e9`` emits
+``ApplicabilityWarning``.
+
+For a specified transition, local quantities switch at the requested
+Reynolds number. Average skin friction preserves the laminar drag accumulated
+before transition by applying a leading-edge offset to the selected turbulent
+correlation.
+
+Compressibility
+^^^^^^^^^^^^^^^
+
+Compressibility is opt-in. ``CompressibilityCorrection.ECKERT`` evaluates
+the incompressible correlation at reference properties using
+
+.. math::
+
+   T^* = 0.22 T_r + 0.28 T_e + 0.50 T_w.
+
+The effective Reynolds number accounts for ideal-gas density and Sutherland
+viscosity ratios. ``VAN_DRIEST_II`` applies Eckert to laminar portions and a
+Reynolds-number-based Van Driest II engineering transform to turbulent
+portions: ``F_theta = mu_e/mu_w``, the selected incompressible correlation is
+evaluated at ``F_theta Re_x``, and skin friction is divided by ``F_c``.
+
+The original Van Driest II momentum-thickness transformation does not uniquely
+define ``delta_99``. Version 0.3 estimates compressible thicknesses by applying
+the corresponding incompressible thickness relation at the effective Reynolds
+number. These thicknesses are engineering estimates, not profile solutions.
+
+If wall temperature is omitted, the wall is adiabatic. Recovery factors are
+``sqrt(Pr)`` for laminar flow and ``Pr**(1/3)`` for turbulent flow. Results
+expose the recovery and wall temperatures used. The gas remains calorically
+perfect and transport properties follow the supplied Sutherland model.
 
 Flight condition
 ----------------

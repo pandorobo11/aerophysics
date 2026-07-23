@@ -3,6 +3,21 @@
 All notable changes to this project are documented in this file. The project
 uses Semantic Versioning, including during the pre-1.0 period.
 
+## [0.3.0] - 2026-07-23
+
+### Added
+
+- Smooth zero-pressure-gradient flat-plate boundary layers with explicit
+  laminar, turbulent, and specified-transition regimes.
+- Blasius laminar thickness and friction relations.
+- Selectable one-fifth-power and Schlichting turbulent correlations, with
+  Schlichting as the default and applicability warnings outside the nominal
+  Reynolds-number range.
+- Eckert reference-temperature and Reynolds-number-based Van Driest II
+  compressibility corrections.
+- Adiabatic-wall defaults, optional specified wall temperature, recovery
+  temperature, wall shear, and one-sided drag per unit width.
+
 ## [0.2.0] - 2026-07-23
 
 ### Added
@@ -31,5 +46,6 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Typed public APIs, cross-platform CI, Sphinx documentation, and validated
   examples.
 
+[0.3.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.3.0
 [0.2.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.2.0
 [0.1.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.1.0

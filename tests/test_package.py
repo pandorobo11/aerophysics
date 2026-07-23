@@ -1,8 +1,12 @@
 """Package-level smoke tests."""
 
 from aerophysics import (
+    BoundaryLayerRegime,
+    CompressibilityCorrection,
     ShockBranch,
+    TurbulentCorrelation,
     __version__,
+    flat_plate_boundary_layer,
     normal_shock,
     oblique_shock,
     prandtl_meyer_expansion,
@@ -15,7 +19,7 @@ from aerophysics.exceptions import (
 
 
 def test_version() -> None:
-    assert __version__ == "0.2.0"
+    assert __version__ == "0.3.0"
 
 
 def test_public_diagnostics() -> None:
@@ -29,3 +33,16 @@ def test_primary_compressible_flow_api_is_exported() -> None:
     assert normal_shock(2.0).downstream_mach < 1.0
     assert oblique_shock(2.0, 0.1).downstream_mach > 1.0
     assert prandtl_meyer_expansion(2.0, 0.1).downstream_mach > 2.0
+
+
+def test_primary_boundary_layer_api_is_exported() -> None:
+    result = flat_plate_boundary_layer(
+        1.0,
+        10.0,
+        1.0,
+        1e-5,
+        regime=BoundaryLayerRegime.TURBULENT,
+        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
+        compressibility_correction=CompressibilityCorrection.NONE,
+    )
+    assert result.drag_per_unit_width > 0.0

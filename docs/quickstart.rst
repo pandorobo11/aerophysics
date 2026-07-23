@@ -50,6 +50,27 @@ Angles are supplied in radians and branch selection is explicit:
 >>> round(expansion.downstream_mach, 6)
 2.384887
 
+Flat-plate boundary layer
+-------------------------
+
+Select the boundary-layer state explicitly. This laminar example uses SI
+edge conditions and returns the one-sided drag per unit width:
+
+>>> from aerophysics import BoundaryLayerRegime, flat_plate_boundary_layer
+>>> layer = flat_plate_boundary_layer(
+...     1.0,
+...     edge_velocity=10.0,
+...     edge_density=1.0,
+...     edge_dynamic_viscosity=1e-5,
+...     regime=BoundaryLayerRegime.LAMINAR,
+... )
+>>> round(layer.reynolds_number, 1)
+1000000.0
+>>> round(layer.boundary_layer_thickness, 6)
+0.005
+>>> round(layer.drag_per_unit_width, 6)
+0.0664
+
 Unit conversion
 ---------------
 

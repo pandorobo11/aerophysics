@@ -37,6 +37,12 @@ Expansion waves
 .. automodule:: aerophysics.expansion
    :members:
 
+Boundary layers
+---------------
+
+.. automodule:: aerophysics.boundary_layer
+   :members:
+
 Flight condition
 ----------------
 
