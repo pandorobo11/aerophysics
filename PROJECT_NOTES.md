@@ -150,6 +150,18 @@ aerophysics/
 - lint、型検査、branch coverage 95% 以上、doctest、wheel/sdist build、隔離環境への wheel 導入を検証済み。
 - GitHub への push、PyPI への公開は別作業とする。
 
+## 0.2 の実装状況
+
+- 垂直衝撃波、斜め衝撃波、theta–beta–Mach 関係、弱解・強解、
+  Prandtl–Meyer 膨張、超音速ピトー管関係を実装済み。
+- 角度は radian、状態量比は下流／上流、衝撃波の全圧比は下流全圧／
+  上流全圧で統一した。
+- 斜め衝撃波の非付着条件は `NoAttachedShockError` とし、垂直衝撃波への
+  暗黙の切り替えは行わない。
+- 逆問題は SciPy の有界数値解法を内部の固定高精度許容誤差で使用する。
+- スカラーと NumPy 配列、ブロードキャスト、凍結 dataclass の結果型、
+  NACA Report 1135 の代表値をテスト済み。
+
 ## 0.1 の設計決定
 
 - Python 3.12 以上を対象とし、MIT License で公開する。
@@ -167,16 +179,16 @@ aerophysics/
 - pytest、ruff、mypy を使用し、branch coverage 95% 以上を 0.1 の完了条件とする。
 - 0.x でも Semantic Versioning を使用し、可能な限り 1 minor version の非推奨期間を設ける。
 
-## 将来リリースの方針
-
-### 0.2: 衝撃波・膨張波
+## 0.2 の設計決定
 
 - 垂直衝撃波、斜め衝撃波、theta–beta–Mach 関係、弱解・強解、Prandtl–Meyer 膨張、超音速ピトー管関係を対象とする。
 - 角度の入力と出力は radian に固定し、degree との変換は `units` の明示的な変換関数で行う。
 - 複数の状態量は、名前付きフィールドを持つ凍結 dataclass で返す。
 - 斜め衝撃波に付着解がない場合は、暗黙に垂直衝撃波へ切り替えず、`NoAttachedShockError` を送出する。
 - 数式と基準値は NASA Report 1135 を中心に選定する。
-- 詳細な公開 API、数値解法、許容誤差は 0.2 の着手時に確定する。
+- 数値解法の許容誤差は実装内部で固定し、利用者向け引数にはしない。
+
+## 将来リリースの方針
 
 ### 0.3: 平板境界層
 

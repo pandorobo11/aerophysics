@@ -25,6 +25,18 @@ Isentropic flow
 .. automodule:: aerophysics.isentropic
    :members:
 
+Shock waves
+-----------
+
+.. automodule:: aerophysics.shocks
+   :members:
+
+Expansion waves
+---------------
+
+.. automodule:: aerophysics.expansion
+   :members:
+
 Flight condition
 ----------------
 
@@ -42,4 +54,3 @@ Diagnostics
 
 .. automodule:: aerophysics.exceptions
    :members:
-

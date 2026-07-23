@@ -34,6 +34,22 @@ State ratios use the total-to-static convention:
 >>> round(ratios.total_pressure_ratio, 6)
 7.824449
 
+Shock and expansion waves
+-------------------------
+
+Angles are supplied in radians and branch selection is explicit:
+
+>>> from aerophysics import ShockBranch, oblique_shock, prandtl_meyer_expansion
+>>> from aerophysics.units import degrees_to_radians, radians_to_degrees
+>>> shock = oblique_shock(
+...     2.0, degrees_to_radians(10.0), branch=ShockBranch.WEAK
+... )
+>>> round(radians_to_degrees(shock.shock_angle), 3)
+39.314
+>>> expansion = prandtl_meyer_expansion(2.0, degrees_to_radians(10.0))
+>>> round(expansion.downstream_mach, 6)
+2.384887
+
 Unit conversion
 ---------------
 

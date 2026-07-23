@@ -3,9 +3,10 @@
 `aerophysics` is a Python scientific-computing package for traceable,
 vectorized atmospheric and aerodynamic physics models.
 
-Version 0.1 focuses on perfect-gas properties, the U.S. Standard Atmosphere
-1976, isentropic compressible flow, flight conditions, and explicit aviation
-unit conversions. Public calculation APIs use SI units.
+Version 0.2 includes perfect-gas properties, the U.S. Standard Atmosphere 1976,
+isentropic compressible flow, normal and oblique shocks, Prandtl–Meyer
+expansion, flight conditions, and explicit aviation unit conversions. Public
+calculation APIs use SI units; angles use radians.
 
 > The project is in its initial development phase. The public API may evolve
 > under the documented pre-1.0 deprecation policy.
@@ -47,6 +48,8 @@ Calculation APIs use SI units. Use explicit functions from
   1976*, NOAA-S/T 76-1562 and NASA-TM-X-74335.
 - Isentropic perfect-gas relations: NACA Report 1135, *Equations, Tables, and
   Charts for Compressible Flow*.
+- Normal and oblique shocks, supersonic Pitot pressure, and Prandtl–Meyer
+  expansion: NACA Report 1135.
 - Unit conversion factors: NIST Special Publication 811, Appendix B.
 
 The API documentation records assumptions, valid ranges, units, and ratio

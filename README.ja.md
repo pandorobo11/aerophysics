@@ -3,9 +3,9 @@
 `aerophysics` は、標準大気や圧縮性流れなどの基礎物理モデルを、
 出典と適用範囲を追跡できる Python API として提供する科学計算パッケージです。
 
-0.1 では完全気体、U.S. Standard Atmosphere 1976、等エントロピー流れ、
-飛行条件、航空慣用単位の明示的変換を対象とします。公開計算 API の単位は
-SI を基本とします。
+0.2 では完全気体、U.S. Standard Atmosphere 1976、等エントロピー流れ、
+垂直・斜め衝撃波、Prandtl–Meyer 膨張、飛行条件、航空慣用単位の明示的変換を
+対象とします。公開計算 API の単位は SI、角度は radian を基本とします。
 
 ## インストール
 
@@ -47,4 +47,3 @@ uv run sphinx-build -W -b html docs docs/_build/html
 ```
 
 モデルの数式、出典、仮定、適用範囲は英語の API 文書に記載します。
-
