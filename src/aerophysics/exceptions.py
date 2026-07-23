@@ -9,4 +9,8 @@ class ApplicabilityWarning(UserWarning):
     """Warn when a computable result is outside a model's validated range."""
 
 
-__all__ = ["ApplicabilityWarning", "ModelRangeError"]
+class NoAttachedShockError(ValueError):
+    """Raised when no attached oblique-shock solution exists."""
+
+
+__all__ = ["ApplicabilityWarning", "ModelRangeError", "NoAttachedShockError"]
