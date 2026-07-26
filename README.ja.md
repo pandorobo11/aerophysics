@@ -48,3 +48,19 @@ uv run sphinx-build -W -b html docs docs/_build/html
 ```
 
 モデルの数式、出典、仮定、適用範囲は英語の API 文書に記載します。
+
+## リリース
+
+`pyproject.toml` のバージョンを更新してコミットし、一致する `vX.Y.Z`
+タグを push します。
+
+```console
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+リリースワークフローはすべての検証を実行し、wheel、sdist、
+`aerophysics-docs-X.Y.Z.zip` を非公開リポジトリの GitHub Release に
+添付します。ドキュメントZIPを展開し、
+`aerophysics-docs-X.Y.Z/index.html` をブラウザで開いてください。
+Releaseの取得には、このリポジトリの読み取り権限が必要です。

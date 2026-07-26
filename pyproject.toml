@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://pandorobo11.github.io/aerophysics/"
+Documentation = "https://github.com/pandorobo11/aerophysics/releases/latest"
 Issues = "https://github.com/pandorobo11/aerophysics/issues"
 Repository = "https://github.com/pandorobo11/aerophysics"
 

@@ -68,6 +68,22 @@ uv run mypy
 uv run sphinx-build -W -b html docs docs/_build/html
 ```
 
+## Releases
+
+Update the version in `pyproject.toml`, commit the change, and push a matching
+`vX.Y.Z` tag:
+
+```console
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+The release workflow runs the full test suite and publishes the wheel, source
+distribution, and `aerophysics-docs-X.Y.Z.zip` to the private repository's
+GitHub Release. Extract the documentation archive and open
+`aerophysics-docs-X.Y.Z/index.html` in a browser. Access to the release requires
+read permission for this repository.
+
 ## License
 
 MIT
