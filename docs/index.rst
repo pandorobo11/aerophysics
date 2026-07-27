@@ -15,5 +15,6 @@ and explicit unit conversions.
 
    quickstart
    models
+   equations
    api
    references

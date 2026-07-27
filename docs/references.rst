@@ -20,6 +20,11 @@ https://www.nasa.gov/wp-content/uploads/2023/03/equations-tables-charts-compress
 Boundary layers
 ---------------
 
+Schlichting, H. and Gersten, K. *Boundary-Layer Theory*, 8th ed. Springer,
+2000.
+
+White, F. M. *Viscous Fluid Flow*, 3rd ed. McGraw-Hill, 2006.
+
 Glass, C. E. and Hunt, L. R. *Aerothermal Tests of Quilted Dome Models on a
 Flat Plate at a Mach Number of 6.5*. NASA TP-2804, 1988. The report records
 the Eckert reference-temperature expression used here.
