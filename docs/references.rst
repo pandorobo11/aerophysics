@@ -47,12 +47,34 @@ https://ntrs.nasa.gov/citations/20110013216
 Compressible turbulent mean-velocity transformations
 -----------------------------------------------------
 
+.. _ref-coles-1956:
+
+Coles, D. *The Law of the Wake in the Turbulent Boundary Layer*. Journal of
+Fluid Mechanics, 1(2), 191--226, 1956.
+
+https://doi.org/10.1017/S0022112056000135
+
 .. _ref-van-driest-1951:
 
 Van Driest, E. R. *Turbulent Boundary Layer in Compressible Fluids*.
 Journal of the Aeronautical Sciences, 18(3), 145--160 and 216, 1951.
 
 https://doi.org/10.2514/8.1895
+
+.. _ref-spalding-1961:
+
+Spalding, D. B. *A Single Formula for the Law of the Wall*. Journal of Applied
+Mechanics, 28(3), 455--458, 1961.
+
+https://doi.org/10.1115/1.3641728
+
+.. _ref-zhang-bi-hussain-she-2014:
+
+Zhang, Y.-S., Bi, W.-T., Hussain, F., and She, Z.-S. *A Generalized Reynolds
+Analogy for Compressible Wall-Bounded Turbulent Flows*. Journal of Fluid
+Mechanics, 739, 392--420, 2014.
+
+https://doi.org/10.1017/jfm.2013.620
 
 .. _ref-trettel-larsson-2016:
 

@@ -18,9 +18,12 @@ prediction also requires an incompressible wall law or wall model, a
 temperature--velocity closure, property models, outer matching data, and a
 method for determining wall shear stress.
 
-The discussion is limited to the inner layer of turbulent wall-bounded flows.
-It does not provide a laminar or transition model, an outer-layer wake model,
-or a universal treatment of roughness, three-dimensionality, separation, or
+The four transformations themselves are primarily inner-layer models.  The
+library additionally provides one explicit engineering construction for a
+smooth zero-pressure-gradient (ZPG) boundary layer: a Spalding inner profile
+plus a Coles wake, coupled to the inverse Van Driest or Volpiani mapping.  It
+does not provide a laminar or transition model or a universal treatment of
+roughness, three-dimensionality, pressure gradients, separation, or
 thermochemical nonequilibrium.
 
 Common notation
@@ -322,6 +325,39 @@ as :math:`r_\rho` and :math:`r_\mu` must be evaluated at the same local
 position as each velocity or wall-distance increment.  Substituting one edge
 or wall value throughout generally changes the transformation.
 
+Implemented forward transformations
+-----------------------------------
+
+:func:`~aerophysics.boundary_layer_profile.transform_compressible_velocity_profile`
+implements the Van Driest and Volpiani path integrals.  It requires resolved
+wall values and uses cumulative trapezoidal integration on the supplied grid.
+For example:
+
+>>> import numpy as np
+>>> from aerophysics import (
+...     CompressibleVelocityTransformation,
+...     transform_compressible_velocity_profile,
+... )
+>>> y = np.linspace(0.0, 0.01, 101)
+>>> velocity = 100.0 * y / y[-1]
+>>> transformed = transform_compressible_velocity_profile(
+...     y,
+...     velocity,
+...     np.full_like(y, 1.2),
+...     np.full_like(y, 1.8e-5),
+...     12.0,
+...     transformation=CompressibleVelocityTransformation.VAN_DRIEST,
+... )
+>>> np.allclose(
+...     transformed.transformed_velocity_plus,
+...     transformed.velocity_plus,
+... )
+True
+
+The equality in this example follows from the constant density.  A
+wall-resolved grid is essential: a coarse first interval can dominate a
+trapezoidal path integral even when the remainder of the profile is dense.
+
 Inverse use for profile prediction
 ----------------------------------
 
@@ -346,6 +382,149 @@ an incompressible wall model; their tested implementation predicts velocity,
 temperature, wall shear, and heat flux from matching data.  See
 :ref:`Griffin, Fu, and Moin (2023) <ref-griffin-fu-moin-2023>`.
 
+Spalding--Coles composite prediction
+------------------------------------
+
+The implemented inverse model closes the incompressible reference profile
+with Spalding's single law of the wall,
+
+.. math::
+
+   Y^+
+   = U_S^+
+   + e^{-\kappa B}
+     \left[
+       e^{\kappa U_S^+}-1-\kappa U_S^+
+       -\frac{(\kappa U_S^+)^2}{2}
+       -\frac{(\kappa U_S^+)^3}{6}
+     \right],
+
+and adds the Coles wake in transformed velocity:
+
+.. math::
+
+   U_c^+
+   = U_S^+ + \frac{\Pi}{\kappa}W(\eta),
+   \qquad
+   W(\eta)=2\sin^2\left(\frac{\pi\eta}{2}\right),
+   \qquad
+   \eta=\frac{y}{\delta_{99}}.
+
+Here :math:`Y^+=y^+` for Van Driest and :math:`Y^+=y_V^+` for
+Volpiani.  The wake coordinate remains the physical outer coordinate
+:math:`y/\delta_{99}`.  Unless :math:`\Pi` is supplied, the implementation
+uses a bounded scalar solve over :math:`0\leq\Pi\leq1` to impose
+
+.. math::
+
+   \frac{U(\delta_{99})}{U_e}=0.99.
+
+An explicitly supplied :math:`\Pi` must satisfy the same edge condition.  A
+failure to find a root indicates that the supplied :math:`U_e`,
+:math:`\tau_w`, and :math:`\delta_{99}` are not mutually consistent with this
+ZPG composite model.  Coles used :math:`\Pi=0.62` as a representative ZPG
+value, but the parameter is not universal.  See
+:ref:`Coles (1956) <ref-coles-1956>` and
+:ref:`Spalding (1961) <ref-spalding-1961>`.
+
+At each integration point, the model closes temperature with either Walz's
+relation,
+
+.. math::
+
+   T = T_w + (T_r-T_w)q + (T_e-T_r)q^2,
+   \qquad q=\frac{U}{U_e},
+
+or the generalized Reynolds analogy (GRA),
+
+.. math::
+
+   T = T_w
+       + s\,Pr\,(T_r-T_w)q(1-q)
+       + (T_e-T_w)q^2.
+
+The defaults are GRA and :math:`s=1.14`.  The turbulent recovery temperature
+is
+
+.. math::
+
+   T_r=T_e+\frac{Pr^{1/3}U_e^2}{2c_p}.
+
+If :math:`T_w` is omitted, :math:`T_w=T_r`.  Density follows the constant
+pressure perfect-gas relation :math:`\rho=\rho_eT_e/T`, and viscosity follows
+the selected Sutherland model.  See
+:ref:`Zhang et al. (2014) <ref-zhang-bi-hussain-she-2014>`.
+
+The profile API returns velocity, temperature, density, viscosity, local Mach
+number, and dynamic pressure, together with transformed variables.  It also
+integrates the compressible displacement and momentum thicknesses through
+:math:`\delta_{99}`:
+
+.. math::
+
+   \delta^*
+   = \int_0^{\delta_{99}}
+     \left(1-\frac{\rho U}{\rho_eU_e}\right)\,\mathrm{d}y,
+   \qquad
+   \theta
+   = \int_0^{\delta_{99}}
+     \frac{\rho U}{\rho_eU_e}
+     \left(1-\frac{U}{U_e}\right)\,\mathrm{d}y.
+
+These are truncated engineering estimates: the small remaining velocity
+defect beyond :math:`\delta_{99}` is not modeled.
+
+The following example passes the thickness and shear from the existing
+flat-plate correlation to the new, independent profile API:
+
+>>> from aerophysics import (
+...     BoundaryLayerRegime,
+...     compressible_turbulent_boundary_layer_profile,
+...     flat_plate_boundary_layer,
+... )
+>>> from aerophysics.gas import AIR_VISCOSITY
+>>> mu_e = float(AIR_VISCOSITY.dynamic_viscosity(300.0))
+>>> layer = flat_plate_boundary_layer(
+...     1.0,
+...     300.0,
+...     1.0,
+...     mu_e,
+...     regime=BoundaryLayerRegime.TURBULENT,
+... )
+>>> delta_99 = float(layer.boundary_layer_thickness)
+>>> y = np.linspace(0.0, delta_99, 257)
+>>> profile = compressible_turbulent_boundary_layer_profile(
+...     y,
+...     300.0,
+...     1.0,
+...     300.0,
+...     delta_99,
+...     float(layer.wall_shear_stress),
+...     transformation=CompressibleVelocityTransformation.VAN_DRIEST,
+... )
+>>> round(float(profile.velocity[-1]), 1)
+297.0
+>>> round(profile.wake_parameter, 3)
+0.228
+
+The returned arrays can be passed directly to the provided-profile mode of
+:func:`~aerophysics.protrusion.protrusion_drag`:
+
+>>> from aerophysics import protrusion_drag
+>>> drag = protrusion_drag(
+...     1.0,
+...     0.005,
+...     0.002,
+...     300.0,
+...     1.0,
+...     delta_99,
+...     profile_height=profile.wall_distance,
+...     profile_velocity=profile.velocity,
+...     profile_density=profile.density,
+... )
+>>> round(drag.shielding_factor, 3)
+0.598
+
 Applicability and evidence
 --------------------------
 
@@ -366,11 +545,13 @@ bounds.  Extrapolation needs independent evidence.  In particular:
   for strongly cooled hypersonic ZPG data, including mappings used by
   Trettel--Larsson and GFM.  See
   :ref:`Danis and Durbin (2024) <ref-danis-durbin-2024>`.
-* Outer-layer wake behavior, rough walls, three-dimensional boundary layers,
-  strong adverse pressure gradients, separation, shock/boundary-layer
-  interaction away from the tested cases, high-enthalpy chemistry,
-  supercritical properties, and strong thermodynamic nonequilibrium require
-  separate validation.
+* The implemented Coles coupling supplies one ZPG outer-layer engineering
+  profile, but it does not extend the validation claims of the original
+  compressibility transformations into the wake region.  Rough walls,
+  three-dimensional boundary layers, pressure gradients, separation,
+  shock/boundary-layer interaction, high-enthalpy chemistry, supercritical
+  properties, and strong thermodynamic nonequilibrium require separate
+  validation.
 
 The original papers' favorable results and later assessments' limitations are
 therefore complementary evidence: the former establish useful operating

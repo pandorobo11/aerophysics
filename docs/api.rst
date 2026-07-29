@@ -43,6 +43,12 @@ Boundary layers
 .. automodule:: aerophysics.boundary_layer
    :members:
 
+Compressible boundary-layer profiles
+------------------------------------
+
+.. automodule:: aerophysics.boundary_layer_profile
+   :members:
+
 Boundary-layer protrusions
 --------------------------
 

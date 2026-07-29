@@ -1,16 +1,22 @@
 """Package-level smoke tests."""
 
+import pytest
+
 from aerophysics import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
+    CompressibleVelocityTransformation,
     ShockBranch,
+    TemperatureVelocityRelation,
     TurbulentCorrelation,
     __version__,
+    compressible_turbulent_boundary_layer_profile,
     flat_plate_boundary_layer,
     normal_shock,
     oblique_shock,
     prandtl_meyer_expansion,
     protrusion_drag,
+    transform_compressible_velocity_profile,
 )
 from aerophysics.exceptions import (
     ApplicabilityWarning,
@@ -47,6 +53,32 @@ def test_primary_boundary_layer_api_is_exported() -> None:
         compressibility_correction=CompressibilityCorrection.NONE,
     )
     assert result.drag_per_unit_width > 0.0
+
+
+def test_compressible_boundary_layer_profile_api_is_exported() -> None:
+    transformed = transform_compressible_velocity_profile(
+        [0.0, 1.0],
+        [0.0, 1.0],
+        [1.0, 1.0],
+        [1.0, 1.0],
+        1.0,
+        transformation=CompressibleVelocityTransformation.VAN_DRIEST,
+    )
+    assert transformed.transformed_velocity_plus[-1] == 1.0
+    predicted = compressible_turbulent_boundary_layer_profile(
+        [0.0, 0.05],
+        300.0,
+        1.0,
+        300.0,
+        0.05,
+        85.0,
+        transformation=CompressibleVelocityTransformation.VAN_DRIEST,
+        temperature_velocity_relation=(
+            TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY
+        ),
+        wall_temperature=250.0,
+    )
+    assert predicted.edge_velocity_ratio == pytest.approx(0.99)
 
 
 def test_primary_protrusion_drag_api_is_exported() -> None:

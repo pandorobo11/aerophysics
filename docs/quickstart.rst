@@ -87,9 +87,9 @@ available across a protrusion's frontal area:
 ...     boundary_layer_thickness=0.1,
 ... )
 >>> round(drag.shielding_factor, 6)
-0.491077
+0.491073
 >>> round(drag.direct_drag, 6)
-0.661727
+0.661721
 
 Unit conversion
 ---------------

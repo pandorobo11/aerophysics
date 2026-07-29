@@ -132,6 +132,24 @@ If wall temperature is omitted, the wall is adiabatic. Recovery factors are
 expose the recovery and wall temperatures used. The gas remains calorically
 perfect and transport properties follow the supplied Sutherland model.
 
+Mean-property profiles
+^^^^^^^^^^^^^^^^^^^^^^
+
+``compressible_turbulent_boundary_layer_profile`` predicts a smooth-wall ZPG
+mean profile from supplied edge conditions, ``delta_99``, and wall shear
+stress. It combines Spalding's wall law and the Coles wake with either the
+Van Driest or Volpiani inverse transformation. GRA is the default
+temperature--velocity closure; Walz is selectable. The result includes
+velocity and thermodynamic-property arrays plus profile-integrated
+displacement and momentum thicknesses.
+
+The profile API is independent of ``flat_plate_boundary_layer``. The latter
+can provide an engineering ``delta_99`` and wall shear estimate, but the
+caller passes those values explicitly. The implemented composite model is
+limited to fully turbulent, smooth, approximately ZPG flow. See
+:ref:`compressible-velocity-transformations` for equations, applicability,
+and examples.
+
 Boundary-layer-immersed protrusions
 -----------------------------------
 
