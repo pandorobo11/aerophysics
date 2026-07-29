@@ -53,6 +53,8 @@ Calculation APIs use SI units. Use explicit functions from
   expansion: NACA Report 1135.
 - Smooth flat-plate boundary layers: Blasius and smooth-wall turbulent
   correlations, with Eckert and Van Driest II compressibility corrections.
+- Direct drag of isolated boundary-layer protrusions using an
+  effective-dynamic-pressure integral and optional Walz density profile.
 - Unit conversion factors: NIST Special Publication 811, Appendix B.
 
 The API documentation records assumptions, valid ranges, units, and ratio

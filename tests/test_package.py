@@ -10,6 +10,7 @@ from aerophysics import (
     normal_shock,
     oblique_shock,
     prandtl_meyer_expansion,
+    protrusion_drag,
 )
 from aerophysics.exceptions import (
     ApplicabilityWarning,
@@ -46,3 +47,8 @@ def test_primary_boundary_layer_api_is_exported() -> None:
         compressibility_correction=CompressibilityCorrection.NONE,
     )
     assert result.drag_per_unit_width > 0.0
+
+
+def test_primary_protrusion_drag_api_is_exported() -> None:
+    result = protrusion_drag(1.0, 0.01, 0.005, 10.0, 1.0, 0.02)
+    assert result.direct_drag > 0.0

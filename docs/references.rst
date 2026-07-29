@@ -44,6 +44,31 @@ Van Driest II transformation factors used here.
 
 https://ntrs.nasa.gov/citations/20110013216
 
+Boundary-layer protrusions
+--------------------------
+
+Young, A. D. and Paterson, J. H. *Aircraft Excrescence Drag*. AGARD-AG-264,
+1981.
+
+https://ntrl.ntis.gov/NTRL/dashboard/searchResults/titleDetail/ADA106030.xhtml
+
+Hoerner, S. F. *Fluid-Dynamic Drag*. Published by the author, 1965,
+Chapter 5.
+
+https://home.hvl.no/ansatte/gste/ftp/MarinLab_files/Litteratur/Hoerner_1965_Fluid-dynamic_drag.pdf
+
+Johnson, D. F. and Mitchell, G. A. *Experimental Investigation of Two Methods
+for Generating an Artificially Thickened Boundary Layer*. NASA TM X-2238,
+1971.
+
+https://ntrs.nasa.gov/citations/19710013205
+
+Stallings, R. L., Jr., Lamb, M., and Howell, D. T. *Drag Characteristics of
+Circular Cylinders in a Laminar Boundary Layer at Supersonic Free-stream
+Velocities*. NASA TN D-7369, 1973.
+
+https://ntrs.nasa.gov/citations/19740003973
+
 Units
 -----
 

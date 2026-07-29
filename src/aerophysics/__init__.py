@@ -12,6 +12,11 @@ from aerophysics.boundary_layer import (
 from aerophysics.expansion import prandtl_meyer_expansion
 from aerophysics.flight import FlightCondition
 from aerophysics.gas import AIR, PerfectGas
+from aerophysics.protrusion import (
+    ProtrusionDragResult,
+    ProtrusionProfile,
+    protrusion_drag,
+)
 from aerophysics.shocks import ShockBranch, normal_shock, oblique_shock
 
 __version__ = version("aerophysics")
@@ -23,6 +28,8 @@ __all__ = [
     "CompressibilityCorrection",
     "FlightCondition",
     "PerfectGas",
+    "ProtrusionDragResult",
+    "ProtrusionProfile",
     "ShockBranch",
     "TurbulentCorrelation",
     "__version__",
@@ -30,5 +37,6 @@ __all__ = [
     "normal_shock",
     "oblique_shock",
     "prandtl_meyer_expansion",
+    "protrusion_drag",
     "standard_atmosphere",
 ]

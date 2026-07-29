@@ -71,6 +71,26 @@ edge conditions and returns the one-sided drag per unit width:
 >>> round(layer.drag_per_unit_width, 6)
 0.0664
 
+Boundary-layer protrusion
+-------------------------
+
+Scale a separately known free-stream drag coefficient by the dynamic pressure
+available across a protrusion's frontal area:
+
+>>> from aerophysics import protrusion_drag
+>>> drag = protrusion_drag(
+...     1.1,
+...     height=0.02,
+...     frontal_width=0.01,
+...     edge_velocity=100.0,
+...     edge_density=1.225,
+...     boundary_layer_thickness=0.1,
+... )
+>>> round(drag.shielding_factor, 6)
+0.491077
+>>> round(drag.direct_drag, 6)
+0.661727
+
 Unit conversion
 ---------------
 

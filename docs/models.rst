@@ -129,6 +129,23 @@ If wall temperature is omitted, the wall is adiabatic. Recovery factors are
 expose the recovery and wall temperatures used. The gas remains calorically
 perfect and transport properties follow the supplied Sutherland model.
 
+Boundary-layer-immersed protrusions
+-----------------------------------
+
+``protrusion_drag`` estimates the direct drag of one isolated protrusion by
+integrating the undisturbed local dynamic pressure over its frontal area. The
+caller supplies a free-stream drag coefficient. The default undisturbed
+turbulent velocity profile is the one-seventh-power approximation; measured
+or computed velocity and density profiles can be supplied instead.
+
+The optional compressible approximation uses the Walz temperature relation,
+constant static pressure normal to the wall, and ideal-gas density scaling.
+This is an effective-dynamic-pressure correction, not a solution of the flow
+around the protrusion. Wall interference, horseshoe vortices, roughness-induced
+transition, downstream skin-friction changes, multiple-element interference,
+and shock/protrusion interactions are excluded. A transonic calculation with a
+single supplied drag coefficient emits ``ApplicabilityWarning``.
+
 Flight condition
 ----------------
 

@@ -3,6 +3,17 @@
 All notable changes to this project are documented in this file. The project
 uses Semantic Versioning, including during the pre-1.0 period.
 
+## [Unreleased]
+
+### Added
+
+- Direct drag estimates for isolated boundary-layer-immersed protrusions using
+  frontal-area effective dynamic pressure.
+- Constant or height-dependent frontal width, provided velocity and density
+  profiles, and a default turbulent one-seventh-power profile.
+- Optional Walz temperature and ideal-gas density approximation for
+  compressible turbulent boundary layers.
+
 ## [0.3.0] - 2026-07-23
 
 ### Added

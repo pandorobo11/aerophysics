@@ -43,6 +43,12 @@ Boundary layers
 .. automodule:: aerophysics.boundary_layer
    :members:
 
+Boundary-layer protrusions
+--------------------------
+
+.. automodule:: aerophysics.protrusion
+   :members:
+
 Flight condition
 ----------------
 

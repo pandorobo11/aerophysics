@@ -816,6 +816,71 @@ See :func:`aerophysics.boundary_layer.flat_plate_boundary_layer` for the full
 input contract and returned
 :class:`aerophysics.boundary_layer.FlatPlateBoundaryLayerResult`.
 
+Boundary-layer protrusion drag
+------------------------------
+
+:func:`aerophysics.protrusion.protrusion_drag` estimates the direct drag of an
+isolated protrusion from the undisturbed boundary-layer profile. For
+protrusion height :math:`h` and projected width :math:`b(y)`, the frontal area
+and effective dynamic pressure are
+
+.. math::
+
+   A_f = \int_0^h b(y)\,\mathrm{d}y,
+   \qquad
+   q_\mathrm{eff}
+   = \frac{1}{A_f}\int_0^h
+     \frac{1}{2}\rho(y)U(y)^2 b(y)\,\mathrm{d}y.
+
+The direct drag and shielding factor are
+
+.. math::
+
+   D = C_D q_\mathrm{eff} A_f,
+   \qquad
+   \eta_q = \frac{q_\mathrm{eff}}{q_e},
+   \qquad
+   q_e = \frac{1}{2}\rho_e U_e^2.
+
+The default turbulent approximation is
+
+.. math::
+
+   \frac{U}{U_e}
+   = \min\left[\left(\frac{y}{\delta}\right)^{1/7},1\right].
+
+For constant width, constant density, and :math:`h\leq\delta`, integration
+gives
+
+.. math::
+
+   \eta_q = \frac{7}{9}
+   \left(\frac{h}{\delta}\right)^{2/7}.
+
+The older Hoerner engineering approximation is
+:math:`0.75(h/\delta)^{1/3}`. Over
+:math:`0.01\leq h/\delta\leq1`, the one-seventh-power analytic result is about
+3.7 to 29.2 percent higher. For the optional compressible approximation, the
+Walz relation is
+
+.. math::
+
+   T(y) = T_w
+   + (T_r-T_w)\frac{U}{U_e}
+   + (T_e-T_r)\left(\frac{U}{U_e}\right)^2,
+
+.. math::
+
+   T_r = T_e\left[
+   1 + Pr^{1/3}\frac{\gamma-1}{2}M_e^2
+   \right],
+   \qquad
+   \frac{\rho(y)}{\rho_e} = \frac{T_e}{T(y)}.
+
+The calculation excludes the change in drag on the surrounding wall and
+downstream surface. It does not correct the supplied free-stream
+:math:`C_D` for wall interference or shock/protrusion interaction.
+
 Integrated flight condition
 ---------------------------
 
