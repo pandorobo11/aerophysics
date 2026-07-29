@@ -15,6 +15,7 @@ and explicit unit conversions.
 
    quickstart
    models
+   compressible_velocity_transformations
    equations
    api
    references

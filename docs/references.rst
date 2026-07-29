@@ -44,6 +44,62 @@ Van Driest II transformation factors used here.
 
 https://ntrs.nasa.gov/citations/20110013216
 
+Compressible turbulent mean-velocity transformations
+-----------------------------------------------------
+
+.. _ref-van-driest-1951:
+
+Van Driest, E. R. *Turbulent Boundary Layer in Compressible Fluids*.
+Journal of the Aeronautical Sciences, 18(3), 145--160 and 216, 1951.
+
+https://doi.org/10.2514/8.1895
+
+.. _ref-trettel-larsson-2016:
+
+Trettel, A. and Larsson, J. *Mean Velocity Scaling for Compressible Wall
+Turbulence with Heat Transfer*. Physics of Fluids, 28, 026102, 2016.
+
+https://doi.org/10.1063/1.4942022
+
+.. _ref-volpiani-2020:
+
+Volpiani, P. S., Iyer, P. S., Pirozzoli, S., and Larsson, J. *Data-Driven
+Compressibility Transformation for Turbulent Wall Layers*. Physical Review
+Fluids, 5, 052602(R), 2020.
+
+https://doi.org/10.1103/PhysRevFluids.5.052602
+
+.. _ref-griffin-fu-moin-2021:
+
+Griffin, K. P., Fu, L., and Moin, P. *Velocity Transformation for Compressible
+Wall-Bounded Turbulent Flows with and without Heat Transfer*. Proceedings of
+the National Academy of Sciences, 118(34), e2111144118, 2021.
+
+https://doi.org/10.1073/pnas.2111144118
+
+.. _ref-bai-griffin-fu-2022:
+
+Bai, T., Griffin, K. P., and Fu, L. *Compressible Velocity Transformations for
+Various Noncanonical Wall-Bounded Turbulent Flows*. AIAA Journal, 60(7),
+4325--4337, 2022.
+
+https://doi.org/10.2514/1.J061554
+
+.. _ref-griffin-fu-moin-2023:
+
+Griffin, K. P., Fu, L., and Moin, P. *Near-Wall Model for Compressible
+Turbulent Boundary Layers Based on an Inverse Velocity Transformation*.
+Journal of Fluid Mechanics, 970, A36, 2023.
+
+https://doi.org/10.1017/jfm.2023.627
+
+.. _ref-danis-durbin-2024:
+
+Danis, M. E. and Durbin, P. *On the Accuracy of Compressibility
+Transformations*. Physics of Fluids, 36, 126119, 2024.
+
+https://doi.org/10.1063/5.0242189
+
 Boundary-layer protrusions
 --------------------------
 

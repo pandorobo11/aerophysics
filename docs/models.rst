@@ -123,6 +123,9 @@ The original Van Driest II momentum-thickness transformation does not uniquely
 define ``delta_99``. Version 0.3 estimates compressible thicknesses by applying
 the corresponding incompressible thickness relation at the effective Reynolds
 number. These thicknesses are engineering estimates, not profile solutions.
+Van Driest II is distinct from the 1951 density-weighted mean-velocity
+transformation. See :ref:`compressible-velocity-transformations` for that
+transformation and comparisons with newer turbulent mean-velocity mappings.
 
 If wall temperature is omitted, the wall is adiabatic. Recovery factors are
 ``sqrt(Pr)`` for laminar flow and ``Pr**(1/3)`` for turbulent flow. Results
