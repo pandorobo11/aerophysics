@@ -16,6 +16,19 @@ Python 3.12 以上が必要です。
 python -m pip install aerophysics
 ```
 
+### ローカルGUI
+
+GUI用の追加依存関係を含めてインストールすると、ブラウザ上で標準大気、
+飛行条件、斜め衝撃波、平板境界層を計算・プロットできます。
+
+```console
+python -m pip install "aerophysics[gui]"
+aerophysics-gui
+```
+
+起動後にローカルURLがブラウザで開きます。入力値は選択した表示単位から
+SIへ明示変換され、結果CSVと再現用の設定JSONをダウンロードできます。
+
 ## 使用例
 
 ```python
@@ -44,7 +57,7 @@ print(condition.reynolds_number)
 ## 開発
 
 ```console
-uv sync --all-groups
+uv sync --all-groups --all-extras
 uv run pytest
 uv run ruff check .
 uv run mypy

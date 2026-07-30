@@ -1,0 +1,152 @@
+"""Tests for GUI unit, configuration, and table helpers."""
+
+import json
+
+import numpy as np
+import pytest
+
+from aerophysics.gui.config import (
+    CONFIG_SCHEMA_VERSION,
+    ConfigurationError,
+    dump_configuration,
+    load_configuration,
+    make_configuration,
+    validate_configuration,
+)
+from aerophysics.gui.tables import columns_for, display_rows, rows_to_csv
+from aerophysics.gui.units import (
+    UnitPreferences,
+    from_si,
+    selected_unit,
+    to_si,
+)
+
+
+@pytest.mark.parametrize(
+    ("kind", "unit", "values"),
+    [
+        ("length", "ft", [0.0, 3.0, 10.0]),
+        ("speed", "kt", [0.0, 100.0]),
+        ("pressure", "psi", [0.0, 14.7]),
+        ("density", "slug/ft³", [0.0, 0.00237]),
+        ("angle", "deg", [0.0, 10.0, 90.0]),
+        ("temperature", "°F", [-40.0, 32.0, 100.0]),
+    ],
+)
+def test_display_unit_round_trip(kind: str, unit: str, values: list[float]) -> None:
+    si = to_si(values, kind, unit)  # type: ignore[arg-type]
+    assert np.asarray(from_si(si, kind, unit)) == pytest.approx(values)  # type: ignore[arg-type]
+
+
+def test_scalar_units_and_preferences_validation() -> None:
+    assert to_si(1.0, "length", "m") == 1.0
+    preferences = UnitPreferences(
+        length="ft",
+        speed="kt",
+        pressure="psi",
+        temperature="°F",
+        density="slug/ft³",
+        angle="rad",
+    )
+    assert selected_unit("speed", preferences) == "kt"
+    assert UnitPreferences.from_dict(preferences.to_dict()) == preferences
+    with pytest.raises(ValueError, match="unsupported length"):
+        UnitPreferences(length="yard")
+    with pytest.raises(ValueError, match="units must"):
+        UnitPreferences.from_dict([])
+    with pytest.raises(ValueError, match="missing"):
+        UnitPreferences.from_dict({"length": "m"})
+    with pytest.raises(ValueError, match="finite"):
+        to_si(np.nan, "length", "m")
+    with pytest.raises(ValueError, match="unsupported"):
+        to_si(1.0, "pressure", "bar")
+
+
+def test_configuration_round_trip() -> None:
+    preferences = UnitPreferences(length="ft", angle="deg")
+    configuration = make_configuration(
+        calculator="flight",
+        mode="sweep",
+        inputs_si={
+            "geometric_altitude": 1000.0,
+            "motion": 0.8,
+            "characteristic_length": None,
+        },
+        models={"motion_basis": "mach"},
+        units=preferences,
+        sweep_si={"field": "altitude", "start": 0.0, "stop": 2000.0, "points": 3},
+    )
+    serialized = dump_configuration(configuration)
+    restored = load_configuration(serialized)
+    assert restored == configuration
+    assert restored["schema_version"] == CONFIG_SCHEMA_VERSION
+    assert json.loads(serialized)["display_units"]["length"] == "ft"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        [],
+        {},
+        {
+            "schema_version": 99,
+            "calculator": "flight",
+            "mode": "single",
+            "inputs_si": {},
+            "models": {},
+            "display_units": UnitPreferences().to_dict(),
+        },
+    ],
+)
+def test_configuration_rejects_invalid_objects(value: object) -> None:
+    with pytest.raises(ConfigurationError):
+        validate_configuration(value)
+
+
+def test_configuration_rejects_invalid_json_and_fields() -> None:
+    with pytest.raises(ConfigurationError, match="valid JSON"):
+        load_configuration("{")
+    base = {
+        "schema_version": 1,
+        "calculator": "unknown",
+        "mode": "single",
+        "inputs_si": {},
+        "models": {},
+        "display_units": UnitPreferences().to_dict(),
+    }
+    with pytest.raises(ConfigurationError, match="calculator"):
+        validate_configuration(base)
+    base["calculator"] = "flight"
+    base["mode"] = "other"
+    with pytest.raises(ConfigurationError, match="mode"):
+        validate_configuration(base)
+    base["mode"] = "sweep"
+    with pytest.raises(ConfigurationError, match="sweep_si"):
+        validate_configuration(base)
+
+
+def test_display_table_and_csv() -> None:
+    rows = (
+        {
+            "upstream_mach": 2.0,
+            "deflection_angle": np.deg2rad(10.0),
+            "maximum_deflection_angle": np.deg2rad(23.0),
+            "shock_angle": np.deg2rad(39.0),
+            "downstream_mach": 1.64,
+            "static_pressure_ratio": 1.7,
+            "static_density_ratio": 1.45,
+            "static_temperature_ratio": 1.17,
+            "total_pressure_ratio": 0.98,
+            "status": "ok",
+            "message": "",
+        },
+    )
+    table = display_rows("oblique_shock", rows, UnitPreferences())
+    assert table[0]["偏向角 θ [deg]"] == pytest.approx(10.0)
+    csv_text = rows_to_csv(table)
+    assert csv_text.startswith("\ufeff")
+    assert "偏向角 θ [deg]" in csv_text
+    with pytest.raises(ValueError, match="empty"):
+        rows_to_csv([])
+    with pytest.raises(ValueError, match="unsupported"):
+        columns_for("missing")

@@ -27,6 +27,15 @@ dependencies = [
   "scipy>=1.14",
 ]
 
+[project.optional-dependencies]
+gui = [
+  "plotly>=6.9,<7",
+  "streamlit>=1.59,<2",
+]
+
+[project.scripts]
+aerophysics-gui = "aerophysics.gui.launcher:main"
+
 [project.urls]
 Documentation = "https://github.com/pandorobo11/aerophysics/releases/latest"
 Issues = "https://github.com/pandorobo11/aerophysics/issues"
@@ -63,10 +72,17 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["aerophysics"]
+omit = [
+  "src/aerophysics/gui/app.py",
+  "src/aerophysics/gui/components.py",
+  "src/aerophysics/gui/launcher.py",
+  "src/aerophysics/gui/pages.py",
+]
 
 [tool.coverage.report]
 exclude_also = [
   "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
   "raise NotImplementedError",
 ]
 
@@ -78,9 +94,14 @@ line-length = 88
 select = ["B", "E", "F", "I", "N", "NPY", "RUF", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
+"src/aerophysics/gui/**/*.py" = ["RUF001"]
 "tests/**/*.py" = ["N802"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["plotly", "plotly.*"]
+ignore_missing_imports = true

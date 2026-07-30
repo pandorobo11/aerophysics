@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add an optional Streamlit and Plotly local GUI prototype for flight
+  conditions, oblique shocks, and flat-plate boundary layers.
+- Add single-condition and parameter-sweep views, selectable display units,
+  plots, flight-case handoff, CSV export, and versioned JSON settings.
+
 All notable changes to this project are documented in this file. The project
 uses Semantic Versioning, including during the pre-1.0 period.
 

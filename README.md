@@ -22,6 +22,20 @@ The package requires Python 3.12 or newer.
 python -m pip install aerophysics
 ```
 
+### Local GUI
+
+Install the optional GUI dependencies to calculate and plot standard-atmosphere,
+flight-condition, oblique-shock, and flat-plate boundary-layer results in a
+local browser:
+
+```console
+python -m pip install "aerophysics[gui]"
+aerophysics-gui
+```
+
+The GUI explicitly converts selected display units to the SI core API and can
+export result CSV files and versioned calculation-configuration JSON files.
+
 ## Quick start
 
 ```python
@@ -63,7 +77,7 @@ conventions for each model.
 ## Development
 
 ```console
-uv sync --all-groups
+uv sync --all-groups --all-extras
 uv run pytest
 uv run ruff check .
 uv run mypy
