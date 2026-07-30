@@ -548,51 +548,83 @@ at :math:`Re_x^*`.
 
 For turbulent
 :class:`~aerophysics.boundary_layer.CompressibilityCorrection`\ ``.VAN_DRIEST_II``,
-the Reynolds-number transform is
+the Hopkins--Inouye form of the Van Driest II transform first defines
 
 .. math::
 
+   r = Pr^{1/3},
+   \qquad
+   m = r\frac{\gamma-1}{2}M^2,
+   \qquad
+   T_r = T_e(1+m),
+   \qquad
+   F = \frac{T_w}{T_e}.
+
+The two angular factors are
+
+.. math::
+
+   \alpha
+   =
+   \frac{m-1+F}
+        {\sqrt{(m+1+F)^2-4F}},
+   \qquad
+   \beta
+   =
+   \frac{m+1-F}
+        {\sqrt{(m+1+F)^2-4F}}.
+
+The arguments supplied to :math:`\sin^{-1}` are clipped to :math:`[-1,1]`
+to suppress floating-point excursions at the endpoints. The transformation
+factors and equivalent incompressible length Reynolds number are
+
+.. math::
+
+   F_C
+   =
+   \frac{m}
+        {\left[\sin^{-1}(\alpha)+\sin^{-1}(\beta)\right]^2},
+   \qquad
    F_\theta = \frac{\mu_e}{\mu_w},
    \qquad
-   Re_{x,\mathrm{eff}} = F_\theta Re_x.
+   F_x = \frac{F_\theta}{F_C},
+   \qquad
+   Re_{x,i} = F_x Re_x.
 
-The implemented friction transform defines
+The equivalent incompressible local skin-friction coefficient is not taken
+from ``TurbulentCorrelation``. It is the positive solution of the Willems
+et al. equation (7),
 
 .. math::
 
-   a_v
+   \frac{0.242}{\sqrt{C_{f,i}}}
    =
-   \sqrt{
-     \frac{1}{2}Pr^{1/3}(\gamma-1)M^2\frac{T_e}{T_w}
-   },
+   0.41+\log_{10}\left(Re_{x,i}C_{f,i}\right),
    \qquad
-   b_v = \frac{T_r}{T_w}-1,
+   C_f = \frac{C_{f,i}}{F_C}.
+
+For the average coefficient the corresponding positive solution is
 
 .. math::
 
-   \alpha_v
-   = \frac{2a_v^2-b_v}{\sqrt{b_v^2+4a_v^2}},
-   \qquad
-   \beta_v
-   = \frac{b_v}{\sqrt{b_v^2+4a_v^2}},
-
-.. math::
-
-   F_c
+   \frac{0.242}{\sqrt{\bar C_{f,i}}}
    =
-   \frac{T_r/T_e-1}
-        {\left[
-          \sin^{-1}(\alpha_v)+\sin^{-1}(\beta_v)
-        \right]^2},
+   \log_{10}\left(Re_{x,i}\bar C_{f,i}\right),
    \qquad
-   C_f
-   =
-   \frac{C_{f,\mathrm{inc}}(Re_{x,\mathrm{eff}})}{F_c}.
+   \bar C_f = \frac{\bar C_{f,i}}{F_C}.
+
+The local equation contains the :math:`0.41` intercept; the average equation
+does not. Both monotonic equations are solved on a verified positive bracket
+with Brent's method. A missing bracket or failed solve raises
+``ModelRangeError``. In the incompressible adiabatic limit :math:`M\to0`, the
+implementation evaluates :math:`F_C=F_\theta=F_x=1` directly to avoid the
+indeterminate angular expression.
 
 Laminar portions still use the Eckert method. Thicknesses are engineering
 estimates obtained by evaluating the incompressible thickness relations at
-the effective Reynolds number; they are not transformed velocity-profile
-solutions.
+:math:`F_\theta Re_x`, not at the friction Reynolds number
+:math:`Re_{x,i}`; they are not transformed velocity-profile solutions.
+``turbulent_correlation`` is ignored for VD2 turbulent portions.
 
 .. list-table::
    :header-rows: 1
@@ -618,13 +650,21 @@ solutions.
      - internal
      - Eckert reference temperature
      - K
-   * - :math:`Re_{x,\mathrm{eff}}`
+   * - :math:`Re_{x,i}`
      - ``effective_reynolds_number``
-     - Reynolds number supplied to the selected correlation
+     - Equivalent incompressible Reynolds number used for VD2 friction
      - dimensionless
-   * - :math:`F_c`
+   * - :math:`F_C`
      - internal
      - Van Driest II skin-friction factor
+     - dimensionless
+   * - :math:`F_\theta`
+     - internal
+     - Momentum-thickness/viscosity factor
+     - dimensionless
+   * - :math:`F_x`
+     - internal
+     - Length Reynolds-number factor :math:`F_\theta/F_C`
      - dimensionless
 
 .. _flat-plate-skin-friction-coefficients:
@@ -662,6 +702,11 @@ The average coefficient from the leading edge to :math:`x` is
 
 where :math:`D'` is the accumulated one-sided drag per unit width. These
 definitions assume that :math:`q_e` is constant along the plate.
+
+.. math::
+
+   D'(x)
+   = \frac{1}{2}\rho_e U_e^2 x\bar C_f.
 
 The coefficients on this page are flat-plate *skin-friction coefficients*.
 They are not the Darcy or Fanning friction factors used for internal pipe

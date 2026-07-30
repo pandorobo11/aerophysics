@@ -44,6 +44,24 @@ Van Driest II transformation factors used here.
 
 https://ntrs.nasa.gov/citations/20110013216
 
+Hopkins, E. J. and Inouye, M. *An Evaluation of Theories for Predicting
+Turbulent Skin Friction and Heat Transfer on Flat Plates at Supersonic and
+Hypersonic Mach Numbers*. AIAA Journal, 9(6), 993--1003, 1971.
+
+https://doi.org/10.2514/3.6323
+
+Hopkins, E. J. *Charts for Predicting Turbulent Skin Friction from the Van
+Driest Method (II)*. NASA TN D-6945, 1972.
+
+https://ntrs.nasa.gov/citations/19730001588
+
+Willems, S. and Gülhan, A. *Experiments on Shock Induced Laminar-Turbulent
+Transition on a Flat Plate at Mach 6*. 5th European Conference for Aeronautics
+and Space Sciences (EUCASS), 2013. Equation (7) gives the local implicit
+skin-friction relation used here.
+
+https://elib.dlr.de/89126/
+
 Compressible turbulent mean-velocity transformations
 -----------------------------------------------------
 
