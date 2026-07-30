@@ -14,6 +14,15 @@ a Flat Plate at a Mach Number of 6.5*, NASA TP-2804, 1988.
 Gnoffo, P. A., Berry, S. A., and Van Norman, J. W., *Uncertainty Assessments
 of 2D and Axisymmetric Hypersonic Shock Wave--Turbulent Boundary Layer
 Interaction Simulations at Compression Corners*, 2011, Appendix A.
+Van Driest, E. R., *Turbulent Boundary Layer in Compressible Fluids*, 1951,
+doi:10.2514/8.1895.
+Hopkins, E. J. and Inouye, M., *An Evaluation of Theories for Predicting
+Turbulent Skin Friction and Heat Transfer on Flat Plates at Supersonic and
+Hypersonic Mach Numbers*, AIAA Journal, 1971.
+Hopkins, E. J., *Charts for Predicting Turbulent Skin Friction from the Van
+Driest Method (II)*, NASA TN D-6945, 1972.
+Willems, S. and Gülhan, A., *Experiments on Shock Induced Laminar-Turbulent
+Transition on a Flat Plate at Mach 6*, EUCASS 2013, equation (7).
 """
 
 import warnings
@@ -22,6 +31,7 @@ from enum import StrEnum
 
 import numpy as np
 from numpy.typing import ArrayLike
+from scipy.optimize import brentq
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
@@ -111,9 +121,7 @@ def _turbulent_correlations(
     reynolds: FloatArray,
     correlation: TurbulentCorrelation,
 ) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
-    thickness = 0.37 * distance * reynolds**-0.2
-    displacement = 0.125 * thickness
-    momentum = (7.0 / 72.0) * thickness
+    thickness, displacement, momentum = _turbulent_thicknesses(distance, reynolds)
     local_friction, average_friction = _turbulent_friction(reynolds, correlation)
     return (
         thickness,
@@ -122,6 +130,16 @@ def _turbulent_correlations(
         local_friction,
         average_friction,
     )
+
+
+def _turbulent_thicknesses(
+    distance: FloatArray,
+    reynolds: FloatArray,
+) -> tuple[FloatArray, FloatArray, FloatArray]:
+    thickness = 0.37 * distance * reynolds**-0.2
+    displacement = 0.125 * thickness
+    momentum = (7.0 / 72.0) * thickness
+    return thickness, displacement, momentum
 
 
 def _validate_model_choices(
@@ -216,6 +234,17 @@ def _eckert_effective_reynolds(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _VanDriestIIState:
+    friction_reynolds: FloatArray
+    thickness_reynolds: FloatArray
+    friction_factor: FloatArray
+    momentum_factor: FloatArray
+    reynolds_factor: FloatArray
+    recovery_temperature: FloatArray
+    wall_temperature: FloatArray
+
+
 def _van_driest_ii_state(
     reynolds: FloatArray,
     edge_temperature: FloatArray,
@@ -225,7 +254,8 @@ def _van_driest_ii_state(
     prandtl_number: float,
     gas: PerfectGas,
     viscosity_model: SutherlandModel,
-) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
+) -> _VanDriestIIState:
+    """Return the Hopkins--Inouye form of the Van Driest II factors."""
     recovery = _recovery_temperature(
         edge_temperature,
         mach,
@@ -243,35 +273,135 @@ def _van_driest_ii_state(
         wall_viscosity = np.asarray(
             viscosity_model.dynamic_viscosity(wall), dtype=np.float64
         )
-    theta_factor = edge_viscosity / wall_viscosity
-    effective_reynolds = reynolds * theta_factor
+    momentum_factor = edge_viscosity / wall_viscosity
 
-    recovery_rise = recovery / edge_temperature - 1.0
-    a = np.sqrt(
-        0.5
-        * prandtl_number ** (1.0 / 3.0)
+    # Hopkins--Inouye / Willems notation.  This is the Van Driest II
+    # skin-friction transformation, not the 1951 velocity transformation.
+    recovery_rise = (
+        np.cbrt(prandtl_number)
+        * 0.5
         * (gas.heat_capacity_ratio - 1.0)
         * mach**2
-        * edge_temperature
-        / wall
     )
-    b = recovery / wall - 1.0
-    denominator = np.sqrt(b**2 + 4.0 * a**2)
-    alpha = np.clip((2.0 * a**2 - b) / denominator, -1.0, 1.0)
-    beta = np.clip(b / denominator, -1.0, 1.0)
+    temperature_factor = wall / edge_temperature
+    discriminant = (
+        recovery_rise + 1.0 + temperature_factor
+    ) ** 2 - 4.0 * temperature_factor
+    incompressible_limit = recovery_rise <= 1e-12
+    safe_discriminant = np.where(incompressible_limit, 1.0, discriminant)
+    denominator = np.sqrt(safe_discriminant)
+    alpha = np.clip(
+        (recovery_rise - 1.0 + temperature_factor) / denominator,
+        -1.0,
+        1.0,
+    )
+    beta = np.clip(
+        (recovery_rise + 1.0 - temperature_factor) / denominator,
+        -1.0,
+        1.0,
+    )
     angle = np.arcsin(alpha) + np.arcsin(beta)
     with np.errstate(divide="ignore", invalid="ignore"):
         friction_factor = recovery_rise / angle**2
-    if np.any(~np.isfinite(friction_factor) | (friction_factor <= 0.0)):
+    friction_factor = np.where(incompressible_limit, 1.0, friction_factor)
+    momentum_factor = np.where(incompressible_limit, 1.0, momentum_factor)
+    reynolds_factor = momentum_factor / friction_factor
+    friction_reynolds = reynolds * reynolds_factor
+    thickness_reynolds = reynolds * momentum_factor
+    invalid = (
+        ~np.isfinite(friction_factor)
+        | (friction_factor <= 0.0)
+        | ~np.isfinite(momentum_factor)
+        | (momentum_factor <= 0.0)
+        | ~np.isfinite(reynolds_factor)
+        | (reynolds_factor <= 0.0)
+        | ~np.isfinite(friction_reynolds)
+        | (friction_reynolds <= 0.0)
+    )
+    if np.any(invalid):
         raise ModelRangeError(
             "Van Driest II transformation is undefined for this thermal state"
         )
-    return (
-        np.asarray(effective_reynolds, dtype=np.float64),
-        np.asarray(friction_factor, dtype=np.float64),
-        recovery,
-        np.asarray(wall, dtype=np.float64),
+    return _VanDriestIIState(
+        friction_reynolds=np.asarray(friction_reynolds, dtype=np.float64),
+        thickness_reynolds=np.asarray(thickness_reynolds, dtype=np.float64),
+        friction_factor=np.asarray(friction_factor, dtype=np.float64),
+        momentum_factor=np.asarray(momentum_factor, dtype=np.float64),
+        reynolds_factor=np.asarray(reynolds_factor, dtype=np.float64),
+        recovery_temperature=recovery,
+        wall_temperature=np.asarray(wall, dtype=np.float64),
     )
+
+
+def _positive_decreasing_root(
+    reynolds: FloatArray,
+    *,
+    right_hand_offset: float,
+    description: str,
+) -> FloatArray:
+    """Solve independent positive monotonic equations with Brent's method."""
+    lower = np.finfo(np.float64).eps
+    upper = 1.0
+    roots = np.empty_like(reynolds)
+    for index in np.ndindex(reynolds.shape):
+        reynolds_value = float(reynolds[index])
+
+        def residual(
+            friction: float,
+            reynolds_value: float = reynolds_value,
+        ) -> float:
+            return float(
+                0.242 / np.sqrt(friction)
+                - right_hand_offset
+                - np.log10(reynolds_value * friction)
+            )
+
+        lower_residual = residual(lower)
+        upper_residual = residual(upper)
+        if (
+            not np.isfinite(lower_residual)
+            or lower_residual <= 0.0
+            or not np.isfinite(upper_residual)
+            or upper_residual >= 0.0
+        ):
+            raise ModelRangeError(
+                f"could not bracket a positive {description} solution"
+            )
+        try:
+            roots[index] = brentq(
+                residual,
+                lower,
+                upper,
+                xtol=np.finfo(np.float64).tiny,
+                rtol=4.0 * np.finfo(np.float64).eps,
+            )
+        except (ValueError, RuntimeError) as error:
+            raise ModelRangeError(
+                f"could not solve the {description} equation"
+            ) from error
+    return np.asarray(roots, dtype=np.float64)
+
+
+def _willems_friction(
+    reynolds: FloatArray,
+) -> tuple[FloatArray, FloatArray]:
+    """Solve the Willems et al. (2013) local and mean implicit equations."""
+    if np.any(~np.isfinite(reynolds) | (reynolds <= 0.0)):
+        raise ModelRangeError(
+            "Willems skin-friction equations require a positive finite Reynolds number"
+        )
+
+    local = _positive_decreasing_root(
+        reynolds,
+        right_hand_offset=0.41,
+        description="local Willems skin-friction",
+    )
+    average = _positive_decreasing_root(
+        reynolds,
+        right_hand_offset=0.0,
+        description="average Willems skin-friction",
+    )
+    return local, average
 
 
 def flat_plate_boundary_layer(
@@ -310,6 +440,9 @@ def flat_plate_boundary_layer(
     turbulent_correlation:
         Skin-friction correlation used wherever the boundary layer is
         turbulent. The default is the Schlichting logarithmic correlation.
+        This option is ignored for turbulent portions when
+        ``compressibility_correction=VAN_DRIEST_II`` because that correction
+        uses its dedicated Willems implicit equations.
     transition_reynolds:
         Reynolds number at transition. Required only for ``TRANSITIONAL``;
         there is deliberately no default transition location.
@@ -403,8 +536,10 @@ def flat_plate_boundary_layer(
         turbulent_mask = reynolds > transition
 
     laminar_reynolds = np.asarray(reynolds, dtype=np.float64)
-    turbulent_reynolds = np.asarray(reynolds, dtype=np.float64)
+    turbulent_friction_reynolds = np.asarray(reynolds, dtype=np.float64)
+    turbulent_thickness_reynolds = np.asarray(reynolds, dtype=np.float64)
     turbulent_friction_factor = np.ones_like(reynolds)
+    turbulent_reynolds_factor = np.ones_like(reynolds)
     recovery_temperature: FloatArray | None = None
     used_wall_temperature: FloatArray | None = None
     if compressibility_correction is not CompressibilityCorrection.NONE:
@@ -421,14 +556,6 @@ def flat_plate_boundary_layer(
             raise ValueError("edge_temperature must be greater than zero")
         if specified_wall is not None and np.any(specified_wall <= 0.0):
             raise ValueError("wall_temperature must be greater than zero")
-        if (
-            compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II
-            and np.any(turbulent_mask & (mach_values <= 0.0))
-        ):
-            raise ModelRangeError(
-                "Van Driest II requires Mach number greater than zero"
-            )
-
         (
             laminar_reynolds,
             laminar_recovery,
@@ -448,7 +575,7 @@ def flat_plate_boundary_layer(
             used_wall_temperature = laminar_wall
         elif compressibility_correction is CompressibilityCorrection.ECKERT:
             (
-                turbulent_reynolds,
+                turbulent_friction_reynolds,
                 turbulent_recovery,
                 turbulent_wall,
             ) = _eckert_effective_reynolds(
@@ -461,6 +588,8 @@ def flat_plate_boundary_layer(
                 gas=gas,
                 viscosity_model=viscosity_model,
             )
+            turbulent_thickness_reynolds = turbulent_friction_reynolds
+            turbulent_reynolds_factor = turbulent_friction_reynolds / reynolds
             recovery_temperature = np.where(
                 turbulent_mask, turbulent_recovery, laminar_recovery
             )
@@ -468,12 +597,7 @@ def flat_plate_boundary_layer(
                 turbulent_mask, turbulent_wall, laminar_wall
             )
         else:
-            (
-                turbulent_reynolds,
-                turbulent_friction_factor,
-                turbulent_recovery,
-                turbulent_wall,
-            ) = _van_driest_ii_state(
+            van_driest = _van_driest_ii_state(
                 reynolds,
                 edge_temperature_values,
                 mach_values,
@@ -482,50 +606,77 @@ def flat_plate_boundary_layer(
                 gas=gas,
                 viscosity_model=viscosity_model,
             )
+            turbulent_friction_reynolds = van_driest.friction_reynolds
+            turbulent_thickness_reynolds = van_driest.thickness_reynolds
+            turbulent_friction_factor = van_driest.friction_factor
+            turbulent_reynolds_factor = van_driest.reynolds_factor
             recovery_temperature = np.where(
-                turbulent_mask, turbulent_recovery, laminar_recovery
+                turbulent_mask,
+                van_driest.recovery_temperature,
+                laminar_recovery,
             )
             used_wall_temperature = np.where(
-                turbulent_mask, turbulent_wall, laminar_wall
+                turbulent_mask,
+                van_driest.wall_temperature,
+                laminar_wall,
             )
 
     laminar = _laminar_correlations(x, laminar_reynolds)
     if regime is BoundaryLayerRegime.LAMINAR:
         selected = laminar
     elif regime is BoundaryLayerRegime.TURBULENT:
-        turbulent_base = _turbulent_correlations(
-            x, turbulent_reynolds, turbulent_correlation
-        )
-        turbulent = (
-            turbulent_base[0],
-            turbulent_base[1],
-            turbulent_base[2],
-            turbulent_base[3] / turbulent_friction_factor,
-            turbulent_base[4] / turbulent_friction_factor,
-        )
+        if compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II:
+            turbulent_thickness = _turbulent_thicknesses(
+                x, turbulent_thickness_reynolds
+            )
+            local_i, average_i = _willems_friction(turbulent_friction_reynolds)
+            turbulent = (
+                *turbulent_thickness,
+                local_i / turbulent_friction_factor,
+                average_i / turbulent_friction_factor,
+            )
+        else:
+            turbulent = _turbulent_correlations(
+                x, turbulent_friction_reynolds, turbulent_correlation
+            )
         selected = turbulent
     else:
         assert transition is not None
-        turbulent_scale = turbulent_reynolds / reynolds
-        turbulent_base = _turbulent_correlations(
+        turbulent_thickness_scale = turbulent_thickness_reynolds / reynolds
+        turbulent_thickness = _turbulent_thicknesses(
             x,
-            turbulent_scale * np.maximum(reynolds, transition),
-            turbulent_correlation,
+            turbulent_thickness_scale * np.maximum(reynolds, transition),
         )
-        turbulent = (
-            turbulent_base[0],
-            turbulent_base[1],
-            turbulent_base[2],
-            turbulent_base[3] / turbulent_friction_factor,
-            turbulent_base[4] / turbulent_friction_factor,
-        )
+        if compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II:
+            friction_reynolds = turbulent_reynolds_factor * np.maximum(
+                reynolds, transition
+            )
+            local_i, average_i = _willems_friction(friction_reynolds)
+            turbulent = (
+                *turbulent_thickness,
+                local_i / turbulent_friction_factor,
+                average_i / turbulent_friction_factor,
+            )
+        else:
+            local, average = _turbulent_friction(
+                turbulent_reynolds_factor * np.maximum(reynolds, transition),
+                turbulent_correlation,
+            )
+            turbulent = (*turbulent_thickness, local, average)
         laminar_transition_reynolds = laminar_reynolds / reynolds * transition
-        turbulent_transition_reynolds = turbulent_scale * transition
         laminar_average = 1.328 / np.sqrt(laminar_transition_reynolds)
-        _, turbulent_average = _turbulent_friction(
-            turbulent_transition_reynolds, turbulent_correlation
-        )
-        turbulent_average = turbulent_average / turbulent_friction_factor
+        if compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II:
+            _, turbulent_average_i = _willems_friction(
+                turbulent_reynolds_factor * transition
+            )
+            turbulent_average = (
+                turbulent_average_i / turbulent_friction_factor
+            )
+        else:
+            _, turbulent_average = _turbulent_friction(
+                turbulent_reynolds_factor * transition,
+                turbulent_correlation,
+            )
         mixed_average = turbulent[4] + (transition / reynolds) * (
             laminar_average - turbulent_average
         )
@@ -539,7 +690,9 @@ def flat_plate_boundary_layer(
 
     _warn_outside_correlation_range(reynolds, turbulent_mask)
     thickness, displacement, momentum, local_friction, average_friction = selected
-    effective_reynolds = np.where(turbulent_mask, turbulent_reynolds, laminar_reynolds)
+    effective_reynolds = np.where(
+        turbulent_mask, turbulent_friction_reynolds, laminar_reynolds
+    )
     dynamic_pressure = 0.5 * density * velocity**2
     shear = dynamic_pressure * local_friction
     drag = dynamic_pressure * x * average_friction

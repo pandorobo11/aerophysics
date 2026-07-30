@@ -115,14 +115,19 @@ the incompressible correlation at reference properties using
 
 The effective Reynolds number accounts for ideal-gas density and Sutherland
 viscosity ratios. ``VAN_DRIEST_II`` applies Eckert to laminar portions and a
-Reynolds-number-based Van Driest II engineering transform to turbulent
-portions: ``F_theta = mu_e/mu_w``, the selected incompressible correlation is
-evaluated at ``F_theta Re_x``, and skin friction is divided by ``F_c``.
+Hopkins--Inouye form of the Van Driest II transform to turbulent portions.
+It uses ``F_theta = mu_e/mu_w``, ``F_x = F_theta/F_C``, and
+``Re_x_i = F_x Re_x``. The equivalent incompressible local and average
+coefficients are obtained from their dedicated implicit von Kármán equations,
+then divided by ``F_C``. ``turbulent_correlation`` is therefore ignored for
+VD2 turbulent portions; it remains active for ``NONE`` and ``ECKERT``.
 
 The original Van Driest II momentum-thickness transformation does not uniquely
 define ``delta_99``. Version 0.3 estimates compressible thicknesses by applying
-the corresponding incompressible thickness relation at the effective Reynolds
-number. These thicknesses are engineering estimates, not profile solutions.
+the corresponding incompressible thickness relation at ``F_theta Re_x``.
+The friction Reynolds number exposed as ``effective_reynolds_number`` is kept
+separate from this thickness Reynolds number. These thicknesses are engineering
+estimates, not profile solutions.
 Van Driest II is distinct from the 1951 density-weighted mean-velocity
 transformation. See :ref:`compressible-velocity-transformations` for that
 transformation and comparisons with newer turbulent mean-velocity mappings.
