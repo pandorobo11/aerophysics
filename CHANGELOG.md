@@ -7,6 +7,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- NASA seven- and nine-coefficient thermochemistry, reusable ideal-gas species,
+  and frozen-composition thermally perfect gas mixtures.
+- Built-in NASA7 and NASA9 dry-air models with temperature-dependent heat
+  capacities, heat-capacity ratio, enthalpy, entropy, and speed of sound from
+  200 to 6000 K.
 - Direct drag estimates for isolated boundary-layer-immersed protrusions using
   frontal-area effective dynamic pressure.
 - Constant or height-dependent frontal width, provided velocity and density

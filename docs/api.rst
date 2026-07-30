@@ -13,6 +13,12 @@ Gas and transport properties
 .. automodule:: aerophysics.gas
    :members:
 
+Thermochemistry
+---------------
+
+.. automodule:: aerophysics.thermochemistry
+   :members:
+
 Standard atmosphere
 -------------------
 

@@ -3,11 +3,14 @@
 import pytest
 
 from aerophysics import (
+    AIR_NASA7,
+    AIR_NASA9,
     BoundaryLayerRegime,
     CompressibilityCorrection,
     CompressibleVelocityTransformation,
     ShockBranch,
     TemperatureVelocityRelation,
+    ThermallyPerfectGas,
     TurbulentCorrelation,
     __version__,
     compressible_turbulent_boundary_layer_profile,
@@ -40,6 +43,12 @@ def test_primary_compressible_flow_api_is_exported() -> None:
     assert normal_shock(2.0).downstream_mach < 1.0
     assert oblique_shock(2.0, 0.1).downstream_mach > 1.0
     assert prandtl_meyer_expansion(2.0, 0.1).downstream_mach > 2.0
+
+
+def test_thermally_perfect_air_api_is_exported() -> None:
+    assert isinstance(AIR_NASA7, ThermallyPerfectGas)
+    assert isinstance(AIR_NASA9, ThermallyPerfectGas)
+    assert AIR_NASA9.heat_capacity_ratio(300.0) < 1.4
 
 
 def test_primary_boundary_layer_api_is_exported() -> None:

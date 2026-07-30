@@ -1,5 +1,7 @@
 """Tests for smooth flat-plate boundary-layer correlations."""
 
+from typing import Any
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -349,7 +351,7 @@ def test_willems_equation_7_direct_local_residual() -> None:
 
 
 def test_van_driest_ignores_turbulent_correlation_selection() -> None:
-    arguments = {
+    arguments: dict[str, Any] = {
         "distance": 1.0,
         "edge_velocity": 100.0,
         "edge_density": 1.0,
