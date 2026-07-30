@@ -8,6 +8,6 @@ __pycache__/
 build/
 dist/
 docs/_build/
+/literature/
 *.egg-info/
 *.py[cod]
-
