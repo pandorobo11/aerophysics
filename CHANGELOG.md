@@ -8,6 +8,10 @@
   plots, flight-case handoff, CSV export, and versioned JSON settings.
 - Extend the local GUI with isentropic forward and inverse relations, normal
   shocks and supersonic pitot pressure, and Prandtl-Meyer expansions.
+- Add GUI pages for compressible turbulent boundary-layer profiles,
+  boundary-layer-immersed protrusion drag, and NASA7/NASA9 frozen-air
+  thermochemistry, including model comparison, validated CSV inputs, and
+  SI-preserving handoff between viscous-flow pages.
 
 All notable changes to this project are documented in this file. The project
 uses Semantic Versioning, including during the pre-1.0 period.

@@ -27,7 +27,8 @@ python -m pip install aerophysics
 Install the optional GUI dependencies to calculate and plot standard-atmosphere,
 flight-condition, isentropic-flow, normal- and oblique-shock,
 Prandtl-Meyer-expansion, and flat-plate boundary-layer results in a local
-browser:
+browser. Compressible boundary-layer profiles, boundary-layer-immersed
+protrusion drag, and NASA7/NASA9 frozen-air thermochemistry are also available:
 
 ```console
 python -m pip install "aerophysics[gui]"
@@ -36,6 +37,9 @@ aerophysics-gui
 
 The GUI explicitly converts selected display units to the SI core API and can
 export result CSV files and versioned calculation-configuration JSON files.
+Turbulent flat-plate cases can be handed to the profile predictor, and generated
+profiles can be handed to the protrusion calculator without leaving SI. Profile
+and projected-shape CSV inputs are supported by the protrusion page.
 
 ## Quick start
 

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import streamlit as st
 
+from aerophysics.gui.analysis_pages import (
+    render_boundary_layer_profile,
+    render_protrusion_drag,
+    render_thermochemistry,
+)
 from aerophysics.gui.components import render_unit_sidebar
 from aerophysics.gui.flow_pages import (
     render_expansion,
@@ -49,6 +54,18 @@ def expansion_page() -> None:
     render_expansion(preferences)
 
 
+def boundary_layer_profile_page() -> None:
+    render_boundary_layer_profile(preferences)
+
+
+def protrusion_drag_page() -> None:
+    render_protrusion_drag(preferences)
+
+
+def thermochemistry_page() -> None:
+    render_thermochemistry(preferences)
+
+
 pages = {
     "飛行状態": [
         st.Page(
@@ -85,6 +102,23 @@ pages = {
             boundary_layer_page,
             title="平板境界層",
             icon="📐",
+        ),
+        st.Page(
+            boundary_layer_profile_page,
+            title="圧縮性境界層プロファイル",
+            icon="📈",
+        ),
+        st.Page(
+            protrusion_drag_page,
+            title="突起抗力",
+            icon="🧱",
+        ),
+    ],
+    "熱物性": [
+        st.Page(
+            thermochemistry_page,
+            title="熱化学",
+            icon="🔥",
         ),
     ],
 }

@@ -83,6 +83,21 @@ def test_configuration_round_trip() -> None:
     assert json.loads(serialized)["display_units"]["length"] == "ft"
 
 
+def test_configuration_round_trip_with_embedded_profile_arrays() -> None:
+    configuration = make_configuration(
+        calculator="protrusion_drag",
+        mode="single",
+        inputs_si={
+            "profile_height": [0.0, 0.01],
+            "profile_velocity": [0.0, 100.0],
+            "profile_density": [1.2, 1.0],
+        },
+        models={"profile_source": "csv"},
+        units=UnitPreferences(),
+    )
+    assert load_configuration(dump_configuration(configuration)) == configuration
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -152,7 +167,17 @@ def test_display_table_and_csv() -> None:
         columns_for("missing")
 
 
-@pytest.mark.parametrize("calculator", ["isentropic", "normal_shock", "expansion"])
+@pytest.mark.parametrize(
+    "calculator",
+    [
+        "isentropic",
+        "normal_shock",
+        "expansion",
+        "boundary_layer_profile",
+        "protrusion_drag",
+        "thermochemistry",
+    ],
+)
 def test_additional_calculator_tables_and_config(calculator: str) -> None:
     assert columns_for(calculator)
     configuration = make_configuration(

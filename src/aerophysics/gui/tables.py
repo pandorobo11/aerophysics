@@ -128,6 +128,73 @@ BOUNDARY_LAYER_COLUMNS = (
     Column("message", "message"),
 )
 
+BOUNDARY_LAYER_PROFILE_COLUMNS = (
+    Column("model", "変換モデル"),
+    Column("wall_distance", "壁面距離 y", "length"),
+    Column("outer_coordinate", "y/δ₉₉"),
+    Column("wall_distance_plus", "y⁺"),
+    Column("transformed_wall_coordinate", "変換壁座標"),
+    Column("velocity", "速度 U", "speed"),
+    Column("velocity_ratio", "U/U_e"),
+    Column("velocity_plus", "U⁺"),
+    Column("transformed_velocity_plus", "変換速度 U⁺"),
+    Column("temperature", "温度 T", "temperature"),
+    Column("density", "密度 ρ", "density"),
+    Column("dynamic_viscosity", "粘性係数 μ", fixed_unit="Pa·s"),
+    Column("local_mach_number", "局所 Mach M"),
+    Column("dynamic_pressure", "動圧 q", "pressure"),
+    Column("friction_velocity", "摩擦速度 u_τ", "speed"),
+    Column("friction_reynolds_number", "摩擦 Reynolds数 Re_τ"),
+    Column("recovery_temperature", "回復温度 T_r", "temperature"),
+    Column("wall_temperature", "壁温 T_w", "temperature"),
+    Column("wake_parameter", "wake parameter Π"),
+    Column("displacement_thickness", "排除厚さ δ*", "length"),
+    Column("momentum_thickness", "運動量厚さ θ", "length"),
+    Column("shape_factor", "形状係数 H"),
+    Column("local_skin_friction_coefficient", "局所摩擦係数 C_f"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
+PROTRUSION_COLUMNS = (
+    Column("drag_coefficient", "抗力係数 C_D"),
+    Column("height", "突起高さ h", "length"),
+    Column("base_width", "代表幅 b₀", "length"),
+    Column("boundary_layer_thickness", "境界層厚さ δ", "length"),
+    Column("shape", "投影形状"),
+    Column("mach", "Mach M_e"),
+    Column("direct_drag", "直接抗力 D", fixed_unit="N"),
+    Column("effective_dynamic_pressure", "実効動圧 q_eff", "pressure"),
+    Column("shielding_factor", "遮蔽係数"),
+    Column("frontal_area", "前面面積", fixed_unit="m²"),
+    Column("edge_dynamic_pressure", "外縁動圧 q_e", "pressure"),
+    Column("height_to_boundary_layer_thickness", "h/δ"),
+    Column("profile", "プロファイル"),
+    Column("compressibility_applied", "圧縮性適用"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
+THERMOCHEMISTRY_COLUMNS = (
+    Column("model", "モデル"),
+    Column("temperature", "温度 T", "temperature"),
+    Column("pressure", "圧力 p", "pressure"),
+    Column("reference_temperature", "基準温度 T_ref", "temperature"),
+    Column("molar_mass", "モル質量", fixed_unit="kg/mol"),
+    Column("specific_gas_constant", "比気体定数 R", fixed_unit="J/(kg·K)"),
+    Column("cp", "定圧比熱 c_p", fixed_unit="J/(kg·K)"),
+    Column("cv", "定容比熱 c_v", fixed_unit="J/(kg·K)"),
+    Column("heat_capacity_ratio", "比熱比 γ"),
+    Column("speed_of_sound", "音速 a", "speed"),
+    Column("standard_enthalpy", "標準エンタルピー h°", fixed_unit="J/kg"),
+    Column("standard_internal_energy", "標準内部エネルギー u°", fixed_unit="J/kg"),
+    Column("sensible_enthalpy", "顕熱エンタルピー Δh", fixed_unit="J/kg"),
+    Column("sensible_internal_energy", "顕熱内部エネルギー Δu", fixed_unit="J/kg"),
+    Column("entropy", "エントロピー s", fixed_unit="J/(kg·K)"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
 
 def columns_for(calculator: str) -> tuple[Column, ...]:
     """Return ordered table columns for a calculator."""
@@ -138,6 +205,9 @@ def columns_for(calculator: str) -> tuple[Column, ...]:
         "oblique_shock": SHOCK_COLUMNS,
         "expansion": EXPANSION_COLUMNS,
         "boundary_layer": BOUNDARY_LAYER_COLUMNS,
+        "boundary_layer_profile": BOUNDARY_LAYER_PROFILE_COLUMNS,
+        "protrusion_drag": PROTRUSION_COLUMNS,
+        "thermochemistry": THERMOCHEMISTRY_COLUMNS,
     }
     try:
         return choices[calculator]

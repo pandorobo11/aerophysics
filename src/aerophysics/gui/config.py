@@ -11,11 +11,14 @@ from aerophysics.gui.units import UnitPreferences
 CONFIG_SCHEMA_VERSION = 1
 CALCULATORS = {
     "boundary_layer",
+    "boundary_layer_profile",
     "expansion",
     "flight",
     "isentropic",
     "normal_shock",
     "oblique_shock",
+    "protrusion_drag",
+    "thermochemistry",
 }
 MODES = {"single", "sweep"}
 

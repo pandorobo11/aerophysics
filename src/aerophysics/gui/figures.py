@@ -482,3 +482,264 @@ def boundary_layer_figures(
         thermal.update_yaxes(title_text=preferences.temperature)
         figures["温度"] = _style(thermal, "境界層の熱状態")
     return figures
+
+
+def _model_rows(rows: tuple[Row, ...]) -> dict[str, tuple[Row, ...]]:
+    models = {str(row.get("model", "")) for row in rows}
+    return {
+        model: tuple(row for row in rows if row.get("model") == model)
+        for model in sorted(models)
+    }
+
+
+def boundary_layer_profile_figures(
+    rows: tuple[Row, ...], preferences: UnitPreferences
+) -> dict[str, go.Figure]:
+    """Create profile, wall-law, property, and local-flow figures."""
+    velocity = go.Figure()
+    wall_law = go.Figure()
+    properties = make_subplots(
+        rows=1,
+        cols=3,
+        subplot_titles=("温度 T", "密度 ρ", "粘性係数 μ"),
+    )
+    local = make_subplots(rows=1, cols=2, subplot_titles=("局所 Mach", "動圧 q"))
+    for model, selected in _model_rows(rows).items():
+        outer = _numeric(selected, "outer_coordinate")
+        velocity.add_trace(
+            go.Scatter(x=_numeric(selected, "velocity_ratio"), y=outer, name=model)
+        )
+        wall_law.add_trace(
+            go.Scatter(
+                x=_numeric(selected, "transformed_wall_coordinate"),
+                y=_numeric(selected, "transformed_velocity_plus"),
+                name=model,
+            )
+        )
+        property_values = (
+            _converted(selected, "temperature", "temperature", preferences),
+            _converted(selected, "density", "density", preferences),
+            _numeric(selected, "dynamic_viscosity"),
+        )
+        for index, values in enumerate(property_values):
+            properties.add_trace(
+                go.Scatter(x=outer, y=values, name=model, legendgroup=model),
+                row=1,
+                col=index + 1,
+            )
+        local.add_trace(
+            go.Scatter(x=outer, y=_numeric(selected, "local_mach_number"), name=model),
+            row=1,
+            col=1,
+        )
+        local.add_trace(
+            go.Scatter(
+                x=outer,
+                y=_converted(selected, "dynamic_pressure", "pressure", preferences),
+                name=model,
+                legendgroup=model,
+            ),
+            row=1,
+            col=2,
+        )
+    velocity.update_xaxes(title_text="U/U_e")
+    velocity.update_yaxes(title_text="y/δ₉₉")
+    wall_law.update_xaxes(title_text="変換壁座標", type="log")
+    wall_law.update_yaxes(title_text="変換速度 U⁺")
+    for column in range(1, 4):
+        properties.update_xaxes(title_text="y/δ₉₉", row=1, col=column)
+    properties.update_yaxes(title_text=preferences.temperature, row=1, col=1)
+    properties.update_yaxes(title_text=preferences.density, row=1, col=2)
+    properties.update_yaxes(title_text="Pa·s", row=1, col=3)
+    local.update_xaxes(title_text="y/δ₉₉")
+    local.update_yaxes(title_text="Mach", row=1, col=1)
+    local.update_yaxes(title_text=preferences.pressure, row=1, col=2)
+    return {
+        "速度分布": _style(velocity, "圧縮性境界層速度分布"),
+        "壁法則": _style(wall_law, "変換壁座標と速度"),
+        "熱物性": _style(properties, "温度・密度・粘性係数"),
+        "局所流れ": _style(local, "Mach数と動圧"),
+    }
+
+
+def protrusion_shape_figure(
+    *,
+    height: float,
+    base_width: float,
+    boundary_layer_thickness: float,
+    shape: str,
+    preferences: UnitPreferences,
+    shape_height: np.ndarray | None = None,
+    shape_width: np.ndarray | None = None,
+) -> go.Figure:
+    """Draw the projected protrusion width and boundary-layer edge."""
+    if shape == "csv" and shape_height is not None and shape_width is not None:
+        selected = shape_height < height
+        y = np.append(shape_height[selected], height)
+        width = np.append(
+            shape_width[selected], np.interp(height, shape_height, shape_width)
+        )
+    else:
+        y = np.linspace(0.0, height, 201)
+        if shape == "rectangle":
+            width = np.full_like(y, base_width)
+        elif shape == "triangle":
+            width = base_width * (1.0 - y / height)
+        else:
+            width = base_width * np.sqrt(np.maximum(1.0 - (y / height) ** 2, 0.0))
+    display_y = np.asarray(from_si(y, "length", preferences.length))
+    display_width = np.asarray(from_si(width, "length", preferences.length))
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=display_width,
+            y=display_y,
+            fill="tozerox",
+            name="投影幅 b(y)",
+        )
+    )
+    delta = float(from_si(boundary_layer_thickness, "length", preferences.length))
+    figure.add_hline(
+        y=delta,
+        line_dash="dash",
+        line_color="#d62728",
+        annotation_text="δ₉₉",
+    )
+    figure.update_xaxes(title_text=f"幅 [{preferences.length}]")
+    figure.update_yaxes(title_text=f"壁面高さ [{preferences.length}]")
+    return _style(figure, "突起の投影形状")
+
+
+def protrusion_figures(
+    rows: tuple[Row, ...],
+    preferences: UnitPreferences,
+    *,
+    sweep_field: str,
+) -> dict[str, go.Figure]:
+    """Create protrusion drag and shielding trends."""
+    if sweep_field in {"height", "base_width", "boundary_layer_thickness"}:
+        x = _converted(rows, sweep_field, "length", preferences)
+        x_title = f"{sweep_field} [{preferences.length}]"
+    else:
+        x = _numeric(rows, sweep_field)
+        x_title = "Mach M" if sweep_field == "mach" else "抗力係数 C_D"
+    loads = make_subplots(rows=1, cols=2, subplot_titles=("直接抗力", "実効動圧"))
+    loads.add_trace(
+        go.Scatter(x=x, y=_numeric(rows, "direct_drag"), name="D"), row=1, col=1
+    )
+    loads.add_trace(
+        go.Scatter(
+            x=x,
+            y=_converted(rows, "effective_dynamic_pressure", "pressure", preferences),
+            name="q_eff",
+        ),
+        row=1,
+        col=2,
+    )
+    loads.update_xaxes(title_text=x_title)
+    loads.update_yaxes(title_text="N", row=1, col=1)
+    loads.update_yaxes(title_text=preferences.pressure, row=1, col=2)
+    shielding = go.Figure()
+    shielding.add_trace(
+        go.Scatter(x=x, y=_numeric(rows, "shielding_factor"), name="遮蔽係数")
+    )
+    shielding.add_trace(
+        go.Scatter(
+            x=x,
+            y=_numeric(rows, "height_to_boundary_layer_thickness"),
+            name="h/δ",
+        )
+    )
+    shielding.update_xaxes(title_text=x_title)
+    return {
+        "抗力・動圧": _style(loads, "突起抗力"),
+        "遮蔽": _style(shielding, "境界層による遮蔽"),
+    }
+
+
+def thermochemistry_figures(
+    rows: tuple[Row, ...], preferences: UnitPreferences
+) -> dict[str, go.Figure]:
+    """Create frozen-air heat-capacity, acoustic, energy, and entropy figures."""
+    heat = go.Figure()
+    acoustic = make_subplots(rows=1, cols=2, subplot_titles=("比熱比 γ", "音速 a"))
+    energy = make_subplots(
+        rows=1, cols=2, subplot_titles=("エンタルピー", "内部エネルギー")
+    )
+    entropy = go.Figure()
+    for model, selected in _model_rows(rows).items():
+        temperature = _converted(selected, "temperature", "temperature", preferences)
+        heat.add_trace(
+            go.Scatter(x=temperature, y=_numeric(selected, "cp"), name=f"{model} c_p")
+        )
+        heat.add_trace(
+            go.Scatter(x=temperature, y=_numeric(selected, "cv"), name=f"{model} c_v")
+        )
+        acoustic.add_trace(
+            go.Scatter(
+                x=temperature, y=_numeric(selected, "heat_capacity_ratio"), name=model
+            ),
+            row=1,
+            col=1,
+        )
+        acoustic.add_trace(
+            go.Scatter(
+                x=temperature,
+                y=_converted(selected, "speed_of_sound", "speed", preferences),
+                name=model,
+                legendgroup=model,
+            ),
+            row=1,
+            col=2,
+        )
+        for column, standard, sensible in (
+            (1, "standard_enthalpy", "sensible_enthalpy"),
+            (2, "standard_internal_energy", "sensible_internal_energy"),
+        ):
+            energy.add_trace(
+                go.Scatter(
+                    x=temperature,
+                    y=_numeric(selected, standard),
+                    name=f"{model} standard",
+                ),
+                row=1,
+                col=column,
+            )
+            energy.add_trace(
+                go.Scatter(
+                    x=temperature,
+                    y=_numeric(selected, sensible),
+                    name=f"{model} sensible",
+                ),
+                row=1,
+                col=column,
+            )
+        entropy.add_trace(
+            go.Scatter(x=temperature, y=_numeric(selected, "entropy"), name=model)
+        )
+    x_title = f"温度 [{preferences.temperature}]"
+    heat.update_xaxes(title_text=x_title)
+    heat.update_yaxes(title_text="J/(kg·K)")
+    acoustic.update_xaxes(title_text=x_title)
+    acoustic.update_yaxes(title_text="γ", row=1, col=1)
+    acoustic.update_yaxes(title_text=preferences.speed, row=1, col=2)
+    energy.update_xaxes(title_text=x_title)
+    energy.update_yaxes(title_text="J/kg")
+    entropy.update_xaxes(title_text=x_title)
+    entropy.update_yaxes(title_text="J/(kg·K)")
+    figures = {
+        "比熱": _style(heat, "温度依存比熱"),
+        "比熱比・音速": _style(acoustic, "比熱比と音速"),
+        "エネルギー": _style(energy, "標準値と顕熱値"),
+        "エントロピー": _style(entropy, "理想混合気体エントロピー"),
+    }
+    for limit, label in ((200.0, "適用下限"), (6000.0, "適用上限")):
+        display_limit = float(from_si(limit, "temperature", preferences.temperature))
+        for figure in figures.values():
+            figure.add_vline(
+                x=display_limit,
+                line_dash="dot",
+                line_color="#777777",
+                annotation_text=label,
+            )
+    return figures

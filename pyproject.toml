@@ -74,6 +74,7 @@ testpaths = ["tests"]
 source = ["aerophysics"]
 omit = [
   "src/aerophysics/gui/app.py",
+  "src/aerophysics/gui/analysis_pages.py",
   "src/aerophysics/gui/components.py",
   "src/aerophysics/gui/flow_pages.py",
   "src/aerophysics/gui/launcher.py",

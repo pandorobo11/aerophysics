@@ -8,6 +8,10 @@ from aerophysics.boundary_layer import (
     CompressibilityCorrection,
     TurbulentCorrelation,
 )
+from aerophysics.boundary_layer_profile import (
+    CompressibleVelocityTransformation,
+    TemperatureVelocityRelation,
+)
 from aerophysics.gui.adapters import (
     expansion_sweep,
     flat_plate_sweep,
@@ -17,14 +21,23 @@ from aerophysics.gui.adapters import (
     oblique_shock_condition,
     oblique_shock_sweep,
 )
+from aerophysics.gui.advanced_adapters import (
+    boundary_layer_profiles,
+    protrusion_sweep,
+    thermochemistry_sweep,
+)
 from aerophysics.gui.figures import (
     boundary_layer_figures,
+    boundary_layer_profile_figures,
     expansion_figures,
     flight_figures,
     isentropic_figures,
     normal_shock_figures,
+    protrusion_figures,
+    protrusion_shape_figure,
     shock_geometry,
     shock_trends,
+    thermochemistry_figures,
 )
 from aerophysics.gui.units import UnitPreferences
 from aerophysics.isentropic import MachBranch
@@ -149,3 +162,88 @@ def test_additional_compressible_flow_figures() -> None:
     )
     assert set(expansion_plots) == {"Mach数", "角度", "状態量比"}
     assert "膨張角" in str(expansion_plots["Mach数"].layout.xaxis.title.text)
+
+
+def test_boundary_profile_and_protrusion_figures() -> None:
+    profile = boundary_layer_profiles(
+        edge_velocity=300.0,
+        edge_density=1.0,
+        edge_temperature=300.0,
+        boundary_layer_thickness=0.05,
+        wall_shear_stress=85.0,
+        transformations=tuple(CompressibleVelocityTransformation),
+        temperature_velocity_relation=(
+            TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY
+        ),
+        wall_temperature=250.0,
+        wake_parameter=None,
+        points=51,
+    )
+    profile_plots = boundary_layer_profile_figures(
+        profile.result.rows, UnitPreferences(length="ft")
+    )
+    assert set(profile_plots) == {"速度分布", "壁法則", "熱物性", "局所流れ"}
+    assert len(profile_plots["速度分布"].data) == 2
+    assert profile_plots["壁法則"].layout.xaxis.type == "log"
+
+    sweep = protrusion_sweep(
+        sweep_field="height",
+        start=0.005,
+        stop=0.02,
+        points=3,
+        drag_coefficient=1.0,
+        height=0.01,
+        base_width=0.005,
+        shape="rectangle",
+        edge_velocity=100.0,
+        edge_density=1.0,
+        boundary_layer_thickness=0.05,
+    )
+    trends = protrusion_figures(
+        sweep.rows, UnitPreferences(length="ft"), sweep_field="height"
+    )
+    assert set(trends) == {"抗力・動圧", "遮蔽"}
+    assert "ft" in str(trends["抗力・動圧"].layout.xaxis.title.text)
+    coefficient = protrusion_figures(
+        sweep.rows, UnitPreferences(), sweep_field="drag_coefficient"
+    )
+    assert "抗力係数" in str(coefficient["遮蔽"].layout.xaxis.title.text)
+
+
+@pytest.mark.parametrize("shape", ["rectangle", "triangle", "ellipse"])
+def test_representative_protrusion_shape_figures(shape: str) -> None:
+    figure = protrusion_shape_figure(
+        height=0.01,
+        base_width=0.005,
+        boundary_layer_thickness=0.02,
+        shape=shape,
+        preferences=UnitPreferences(),
+    )
+    assert len(figure.data) == 1
+    assert len(figure.layout.shapes) == 1
+
+
+def test_csv_shape_and_thermochemistry_figures() -> None:
+    shape = protrusion_shape_figure(
+        height=0.01,
+        base_width=0.005,
+        boundary_layer_thickness=0.02,
+        shape="csv",
+        preferences=UnitPreferences(),
+        shape_height=np.array([0.0, 0.01]),
+        shape_width=np.array([0.005, 0.0]),
+    )
+    assert list(shape.data[0].x) == pytest.approx([0.005, 0.0])
+    thermo = thermochemistry_sweep(
+        start=200.0,
+        stop=6000.0,
+        points=3,
+        pressure=101_325.0,
+        reference_temperature=298.15,
+        models=("NASA7", "NASA9"),
+        allow_extrapolation=False,
+    )
+    figures = thermochemistry_figures(thermo.rows, UnitPreferences(temperature="°F"))
+    assert set(figures) == {"比熱", "比熱比・音速", "エネルギー", "エントロピー"}
+    assert len(figures["比熱"].data) == 4
+    assert len(figures["比熱"].layout.shapes) == 2

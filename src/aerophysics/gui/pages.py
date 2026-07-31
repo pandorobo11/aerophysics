@@ -23,6 +23,7 @@ from aerophysics.gui.adapters import (
     oblique_shock_condition,
     oblique_shock_sweep,
 )
+from aerophysics.gui.advanced_adapters import BoundaryLayerCase
 from aerophysics.gui.components import (
     finite_number,
     pop_pending_configuration,
@@ -805,7 +806,11 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
                     "edge_dynamic_viscosity": edge_viscosity,
                     "transition_reynolds": transition_reynolds,
                     "mach": mach,
-                    "edge_temperature": edge_temperature,
+                    "edge_temperature": (
+                        edge_temperature
+                        if edge_temperature is not None
+                        else temperature_si
+                    ),
                     "wall_temperature": wall_temperature,
                 },
                 models={
@@ -872,6 +877,24 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
         filename_prefix="aerophysics-boundary-layer",
         metrics=metrics,
     )
+    config_models = configuration.get("models")
+    if (
+        configuration.get("mode") == "single"
+        and isinstance(config_models, dict)
+        and config_models.get("regime") == BoundaryLayerRegime.TURBULENT.value
+    ):
+        if st.button("現在の境界層ケースとして保存", key="boundary_save_case"):
+            row = result.rows[0]
+            input_values = configuration.get("inputs_si")
+            if isinstance(input_values, dict):
+                st.session_state["current_boundary_layer_case"] = BoundaryLayerCase(
+                    edge_velocity=float(input_values["edge_velocity"]),
+                    edge_density=float(input_values["edge_density"]),
+                    edge_temperature=float(input_values["edge_temperature"]),
+                    boundary_layer_thickness=float(row["boundary_layer_thickness"]),
+                    wall_shear_stress=float(row["wall_shear_stress"]),
+                )
+                st.success("乱流境界層ケースを保存しました。")
     with st.expander("モデルの前提・適用範囲"):
         st.write(
             "乱流相関の公称範囲は 5e5 ≤ Re_x ≤ 1e9です。"

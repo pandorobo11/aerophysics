@@ -1,10 +1,14 @@
 """Headless Streamlit GUI tests."""
 
 from pathlib import Path
+from typing import Any, cast
 
 from streamlit.testing.v1 import AppTest
 
 from aerophysics.gui.adapters import FlightCase
+from aerophysics.gui.advanced_adapters import BoundaryLayerCase, BoundaryProfileCase
+from aerophysics.gui.config import make_configuration
+from aerophysics.gui.units import UnitPreferences
 
 APP = Path("src/aerophysics/gui/app.py")
 
@@ -89,6 +93,10 @@ render_boundary_layer(UnitPreferences())
     assert not app.error
     assert len(app.metric) == 4
     assert len(app.get("plotly_chart")) == 3
+    app.button(key="boundary_save_case").click().run()
+    assert isinstance(
+        app.session_state["current_boundary_layer_case"], BoundaryLayerCase
+    )
 
 
 def test_additional_compressible_flow_pages() -> None:
@@ -129,3 +137,141 @@ render_expansion(UnitPreferences())
         for status in app.dataframe[0].value["status"].tolist()
     )
     assert app.warning
+
+
+def test_advanced_analysis_pages_default_calculations() -> None:
+    pages = (
+        ("render_boundary_layer_profile", "profile_form", 4),
+        ("render_protrusion_drag", "protrusion_form", 1),
+        ("render_thermochemistry", "thermo_form", 4),
+    )
+    for function, form, plot_count in pages:
+        script = f"""
+from aerophysics.gui.analysis_pages import {function}
+from aerophysics.gui.units import UnitPreferences
+{function}(UnitPreferences())
+"""
+        app = AppTest.from_string(script, default_timeout=30).run()
+        app.button(key=f"FormSubmitter:{form}-計算").click().run()
+        assert not app.exception
+        assert not app.error
+        assert len(app.metric) == 4
+        assert len(app.dataframe) == 1
+        assert len(app.get("plotly_chart")) == plot_count
+
+
+def test_profile_to_protrusion_session_transfer() -> None:
+    profile_script = """
+from aerophysics.gui.analysis_pages import render_boundary_layer_profile
+from aerophysics.gui.advanced_adapters import BoundaryLayerCase
+from aerophysics.gui.units import UnitPreferences
+import streamlit as st
+st.session_state["current_boundary_layer_case"] = BoundaryLayerCase(
+    300.0, 1.0, 300.0, 0.05, 85.0
+)
+render_boundary_layer_profile(UnitPreferences())
+"""
+    app = AppTest.from_string(profile_script, default_timeout=30).run()
+    app.radio(key="profile_source").set_value("現在の乱流平板境界層ケース").run()
+    app.button(key="FormSubmitter:profile_form-計算").click().run()
+    app.button(key="profile_save_case").click().run()
+    saved = app.session_state["current_boundary_profile"]
+    assert isinstance(saved, BoundaryProfileCase)
+
+    protrusion_script = """
+from aerophysics.gui.analysis_pages import render_protrusion_drag
+from aerophysics.gui.units import UnitPreferences
+render_protrusion_drag(UnitPreferences())
+"""
+    drag = AppTest.from_string(protrusion_script, default_timeout=30)
+    drag.session_state["current_boundary_profile"] = saved
+    drag.run()
+    assert "現在の境界層プロファイル" in drag.radio(key="protrusion_source").options
+    drag.radio(key="protrusion_source").set_value("現在の境界層プロファイル").run()
+    drag.button(key="FormSubmitter:protrusion_form-計算").click().run()
+    assert not drag.exception
+    assert not drag.error
+    assert drag.dataframe[0].value["プロファイル"].iloc[0] == "provided"
+
+
+def test_protrusion_csv_uploads() -> None:
+    script = """
+from aerophysics.gui.analysis_pages import render_protrusion_drag
+from aerophysics.gui.units import UnitPreferences
+render_protrusion_drag(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.radio(key="protrusion_source").set_value("プロファイルCSV").run()
+    profile = cast(
+        Any,
+        next(
+            item
+            for item in app.get("file_uploader")
+            if item.key == "protrusion_profile_upload"
+        ),
+    )
+    profile.upload(
+        "profile.csv",
+        b"wall_distance,velocity,density\n0,0,1\n0.05,300,1\n",
+        "text/csv",
+    ).run()
+    app.selectbox(key="protrusion_shape").set_value("形状CSV").run()
+    shape = cast(
+        Any,
+        next(
+            item
+            for item in app.get("file_uploader")
+            if item.key == "protrusion_shape_upload"
+        ),
+    )
+    shape.upload(
+        "shape.csv",
+        b"height,width\n0,0.005\n0.02,0\n",
+        "text/csv",
+    ).run()
+    app.button(key="FormSubmitter:protrusion_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert app.dataframe[0].value["投影形状"].iloc[0] == "csv"
+
+
+def test_protrusion_import_uses_embedded_profile() -> None:
+    script = """
+from aerophysics.gui.analysis_pages import render_protrusion_drag
+from aerophysics.gui.units import UnitPreferences
+render_protrusion_drag(UnitPreferences())
+"""
+    configuration = make_configuration(
+        calculator="protrusion_drag",
+        mode="single",
+        inputs_si={
+            "drag_coefficient": 1.0,
+            "height": 0.01,
+            "base_width": 0.005,
+            "edge_velocity": 100.0,
+            "edge_density": 1.0,
+            "boundary_layer_thickness": 0.02,
+            "mach": None,
+            "edge_temperature": None,
+            "wall_temperature": None,
+            "profile_height": [0.0, 0.02],
+            "profile_velocity": [0.0, 100.0],
+            "profile_density": [1.0, 1.0],
+            "shape_height": None,
+            "shape_width": None,
+        },
+        models={
+            "profile_source": "saved",
+            "shape": "rectangle",
+            "compressible": False,
+        },
+        units=UnitPreferences(),
+    )
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_protrusion_drag_configuration"] = configuration
+    app.run()
+    assert app.radio(key="protrusion_source").value == "csv"
+    app.button(key="FormSubmitter:protrusion_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert app.dataframe[0].value["プロファイル"].iloc[0] == "provided"
