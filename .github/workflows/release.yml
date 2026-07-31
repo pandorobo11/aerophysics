@@ -96,7 +96,11 @@ jobs:
           with ZipFile(expected[-1]) as archive:
               names = set(archive.namelist())
           required_docs = {
-              f"{prefix}/equations.html",
+              f"{prefix}/gas_and_atmosphere.html",
+              f"{prefix}/compressible_flow.html",
+              f"{prefix}/boundary_layers.html",
+              f"{prefix}/flight_conditions.html",
+              f"{prefix}/unit_conversions.html",
               f"{prefix}/index.html",
               f"{prefix}/searchindex.js",
               f"{prefix}/_static/basic.css",

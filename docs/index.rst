@@ -12,11 +12,40 @@ conditions, and explicit unit conversions.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Getting started
 
    quickstart
-   models
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Thermodynamics and atmosphere
+
+   gas_and_atmosphere
    thermochemistry
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Compressible flow
+
+   compressible_flow
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Boundary layers
+
+   boundary_layers
    compressible_velocity_transformations
-   equations
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Flight tools
+
+   flight_conditions
+   unit_conversions
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
    api
    references
