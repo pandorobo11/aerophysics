@@ -278,10 +278,7 @@ def _van_driest_ii_state(
     # Hopkins--Inouye / Willems notation.  This is the Van Driest II
     # skin-friction transformation, not the 1951 velocity transformation.
     recovery_rise = (
-        np.cbrt(prandtl_number)
-        * 0.5
-        * (gas.heat_capacity_ratio - 1.0)
-        * mach**2
+        np.cbrt(prandtl_number) * 0.5 * (gas.heat_capacity_ratio - 1.0) * mach**2
     )
     temperature_factor = wall / edge_temperature
     discriminant = (
@@ -669,9 +666,7 @@ def flat_plate_boundary_layer(
             _, turbulent_average_i = _willems_friction(
                 turbulent_reynolds_factor * transition
             )
-            turbulent_average = (
-                turbulent_average_i / turbulent_friction_factor
-            )
+            turbulent_average = turbulent_average_i / turbulent_friction_factor
         else:
             _, turbulent_average = _turbulent_friction(
                 turbulent_reynolds_factor * transition,

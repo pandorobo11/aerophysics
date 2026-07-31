@@ -1,5 +1,7 @@
 """Tests for smooth flat-plate boundary-layer correlations."""
 
+from typing import Any
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -195,12 +197,7 @@ def _van_driest_factors(
     wall_temperature: float | None = None,
 ) -> tuple[float, float, float, float]:
     recovery_factor = np.cbrt(0.72)
-    m = (
-        recovery_factor
-        * (AIR.heat_capacity_ratio - 1.0)
-        * mach**2
-        / 2.0
-    )
+    m = recovery_factor * (AIR.heat_capacity_ratio - 1.0) * mach**2 / 2.0
     recovery = edge_temperature * (1.0 + m)
     wall = recovery if wall_temperature is None else wall_temperature
     if m <= 1e-12:
@@ -209,16 +206,12 @@ def _van_driest_factors(
     denominator = np.sqrt(
         (m + 1.0 + temperature_factor) ** 2 - 4.0 * temperature_factor
     )
-    alpha = np.clip(
-        (m - 1.0 + temperature_factor) / denominator, -1.0, 1.0
-    )
-    beta = np.clip(
-        (m + 1.0 - temperature_factor) / denominator, -1.0, 1.0
-    )
+    alpha = np.clip((m - 1.0 + temperature_factor) / denominator, -1.0, 1.0)
+    beta = np.clip((m + 1.0 - temperature_factor) / denominator, -1.0, 1.0)
     friction_factor = m / (np.arcsin(alpha) + np.arcsin(beta)) ** 2
-    momentum_factor = float(
-        AIR_VISCOSITY.dynamic_viscosity(edge_temperature)
-    ) / float(AIR_VISCOSITY.dynamic_viscosity(wall))
+    momentum_factor = float(AIR_VISCOSITY.dynamic_viscosity(edge_temperature)) / float(
+        AIR_VISCOSITY.dynamic_viscosity(wall)
+    )
     return (
         friction_factor,
         momentum_factor,
@@ -240,8 +233,8 @@ def test_van_driest_factors_and_effective_reynolds() -> None:
         gas=AIR,
         viscosity_model=AIR_VISCOSITY,
     )
-    friction_factor, momentum_factor, reynolds_factor, recovery = (
-        _van_driest_factors(mach, edge_temperature)
+    friction_factor, momentum_factor, reynolds_factor, recovery = _van_driest_factors(
+        mach, edge_temperature
     )
     assert state.friction_factor == pytest.approx(friction_factor)
     assert state.momentum_factor == pytest.approx(momentum_factor)
@@ -263,9 +256,7 @@ def test_van_driest_factors_and_effective_reynolds() -> None:
         mach=mach,
         edge_temperature=edge_temperature,
     )
-    assert result.effective_reynolds_number == pytest.approx(
-        1e7 * reynolds_factor
-    )
+    assert result.effective_reynolds_number == pytest.approx(1e7 * reynolds_factor)
     assert result.wall_temperature == pytest.approx(recovery)
     assert result.boundary_layer_thickness == pytest.approx(
         0.37 * (1e7 * momentum_factor) ** -0.2
@@ -305,17 +296,11 @@ def test_van_driest_local_and_average_implicit_residuals(
     local_residual = 0.242 / np.sqrt(local * friction_factor) - (
         0.41
         + np.log10(
-            float(result.reynolds_number)
-            * reynolds_factor
-            * local
-            * friction_factor
+            float(result.reynolds_number) * reynolds_factor * local * friction_factor
         )
     )
     average_residual = 0.242 / np.sqrt(average * friction_factor) - np.log10(
-        float(result.reynolds_number)
-        * reynolds_factor
-        * average
-        * friction_factor
+        float(result.reynolds_number) * reynolds_factor * average * friction_factor
     )
     assert local_residual == pytest.approx(0.0, abs=2e-14)
     assert average_residual == pytest.approx(0.0, abs=2e-14)
@@ -336,20 +321,14 @@ def test_willems_equation_7_direct_local_residual() -> None:
         mach=5.0,
         edge_temperature=220.0,
     )
-    local_i = (
-        float(result.local_skin_friction_coefficient) * friction_factor
-    )
+    local_i = float(result.local_skin_friction_coefficient) * friction_factor
     reynolds_i = float(result.reynolds_number) * reynolds_factor
-    residual = (
-        0.242 / np.sqrt(local_i)
-        - 0.41
-        - np.log10(reynolds_i * local_i)
-    )
+    residual = 0.242 / np.sqrt(local_i) - 0.41 - np.log10(reynolds_i * local_i)
     assert residual == pytest.approx(0.0, abs=2e-14)
 
 
 def test_van_driest_ignores_turbulent_correlation_selection() -> None:
-    arguments = {
+    arguments: dict[str, Any] = {
         "distance": 1.0,
         "edge_velocity": 100.0,
         "edge_density": 1.0,
@@ -646,9 +625,7 @@ def test_van_driest_noncompressible_limit_is_stable() -> None:
     assert result.wall_temperature == 250.0
     local = float(result.local_skin_friction_coefficient)
     residual = (
-        0.242 / np.sqrt(local)
-        - 0.41
-        - np.log10(float(result.reynolds_number) * local)
+        0.242 / np.sqrt(local) - 0.41 - np.log10(float(result.reynolds_number) * local)
     )
     assert residual == pytest.approx(0.0, abs=2e-14)
 

@@ -9,6 +9,34 @@ NASA-TM-X-74335, 1976.
 
 https://ntrs.nasa.gov/citations/19770009539
 
+Thermochemistry
+---------------
+
+McBride, B. J., Gordon, S., and Reno, M. A. *Coefficients for Calculating
+Thermodynamic and Transport Properties of Individual Species*. NASA TM-4513,
+1993. This is the source of the NASA seven-coefficient data.
+
+https://ntrs.nasa.gov/citations/19940013151
+
+McBride, B. J., Zehe, M. J., and Gordon, S. *NASA Glenn Coefficients for
+Calculating Thermodynamic Properties of Individual Species*.
+NASA/TP-2002-211556, 2002. This documents the NASA nine-coefficient form and
+database.
+
+https://ntrs.nasa.gov/citations/20020085330
+
+NASA Glenn Research Center. *Chemical Equilibrium with Applications (CEA)*,
+``data/thermo.inp``, commit
+``2c33ae8ab74635beb85b580c37caccd61778554d``.
+
+https://github.com/nasa/cea
+
+Cantera Developers. ``data/nasa_gas.yaml``, commit
+``39cfc1436347cfe515cfe499c131ea1220743f16``. The file distributes the
+NASA TM-4513 species coefficients used by ``AIR_NASA7``.
+
+https://github.com/Cantera/cantera
+
 Compressible flow
 -----------------
 

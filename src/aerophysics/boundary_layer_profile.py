@@ -144,8 +144,7 @@ def _validate_temperature_relation(
 ) -> None:
     if not isinstance(relation, TemperatureVelocityRelation):
         raise ValueError(
-            "temperature_velocity_relation must be a "
-            "TemperatureVelocityRelation value"
+            "temperature_velocity_relation must be a TemperatureVelocityRelation value"
         )
 
 
@@ -158,9 +157,7 @@ def _profile_array(value: ArrayLike, *, name: str) -> FloatArray:
 
 def _validate_wall_grid(wall_distance: FloatArray, *, minimum_size: int = 2) -> None:
     if wall_distance.size < minimum_size:
-        raise ValueError(
-            f"wall_distance must contain at least {minimum_size} points"
-        )
+        raise ValueError(f"wall_distance must contain at least {minimum_size} points")
     if wall_distance[0] != 0.0:
         raise ValueError("wall_distance must start at zero")
     if np.any(np.diff(wall_distance) <= 0.0):
@@ -171,15 +168,9 @@ def _spalding_wall_coordinate(
     velocity_plus: FloatArray, *, von_karman_constant: float, intercept: float
 ) -> FloatArray:
     scaled = von_karman_constant * velocity_plus
-    remainder = (
-        np.expm1(scaled)
-        - scaled
-        - 0.5 * scaled**2
-        - scaled**3 / 6.0
-    )
+    remainder = np.expm1(scaled) - scaled - 0.5 * scaled**2 - scaled**3 / 6.0
     return np.asarray(
-        velocity_plus
-        + np.exp(-von_karman_constant * intercept) * remainder,
+        velocity_plus + np.exp(-von_karman_constant * intercept) * remainder,
         dtype=np.float64,
     )
 
@@ -188,9 +179,7 @@ def _spalding_coordinate_derivative(
     velocity_plus: float, *, von_karman_constant: float, intercept: float
 ) -> float:
     scaled = von_karman_constant * velocity_plus
-    remainder_derivative = (
-        np.expm1(scaled) - scaled - 0.5 * scaled**2
-    )
+    remainder_derivative = np.expm1(scaled) - scaled - 0.5 * scaled**2
     return float(
         1.0
         + np.exp(-von_karman_constant * intercept)
@@ -258,12 +247,8 @@ def _property_ratios(
             reynolds_analogy_factor=parameters.reynolds_analogy_factor,
         )[0]
     )
-    density = (
-        parameters.edge_density * parameters.edge_temperature / temperature
-    )
-    viscosity = float(
-        parameters.viscosity_model.dynamic_viscosity(temperature)
-    )
+    density = parameters.edge_density * parameters.edge_temperature / temperature
+    viscosity = float(parameters.viscosity_model.dynamic_viscosity(temperature))
     return (
         density / parameters.wall_density,
         viscosity / parameters.wall_viscosity,
@@ -294,9 +279,7 @@ def _integrate_inverse_profile(
     kappa = parameters.von_karman_constant
     intercept = parameters.log_law_intercept
 
-    def right_hand_side(
-        wall_distance_plus: float, state: FloatArray
-    ) -> FloatArray:
+    def right_hand_side(wall_distance_plus: float, state: FloatArray) -> FloatArray:
         physical_velocity_plus = float(state[0])
         wall_velocity_plus = float(state[1])
         coordinate_factor, velocity_factor = _mapping_factors(
@@ -346,16 +329,10 @@ def _integrate_inverse_profile(
 def _edge_velocity_ratio(
     wake_parameter: float, parameters: _InverseParameters
 ) -> float:
-    endpoint = np.asarray(
-        [parameters.friction_reynolds_number], dtype=np.float64
-    )
-    velocity_plus, _ = _integrate_inverse_profile(
-        wake_parameter, endpoint, parameters
-    )
+    endpoint = np.asarray([parameters.friction_reynolds_number], dtype=np.float64)
+    velocity_plus, _ = _integrate_inverse_profile(wake_parameter, endpoint, parameters)
     return float(
-        velocity_plus[-1]
-        * parameters.friction_velocity
-        / parameters.edge_velocity
+        velocity_plus[-1] * parameters.friction_velocity / parameters.edge_velocity
     )
 
 
@@ -366,9 +343,7 @@ def _choose_wake_parameter(
     target = 0.99
     tolerance = 1e-3
     if specified_wake_parameter is not None:
-        array, scalar = as_float_array(
-            specified_wake_parameter, name="wake_parameter"
-        )
+        array, scalar = as_float_array(specified_wake_parameter, name="wake_parameter")
         if not scalar:
             raise ValueError("wake_parameter must be a scalar")
         wake = float(array)
@@ -409,9 +384,7 @@ def _choose_wake_parameter(
 def _integration_grid(
     requested_wall_distance_plus: FloatArray, friction_reynolds_number: float
 ) -> FloatArray:
-    outer = np.linspace(
-        0.0, friction_reynolds_number, 2049, dtype=np.float64
-    )
+    outer = np.linspace(0.0, friction_reynolds_number, 2049, dtype=np.float64)
     first_positive = max(
         np.finfo(np.float64).eps,
         friction_reynolds_number * 1e-12,
@@ -422,9 +395,7 @@ def _integration_grid(
         2048,
         dtype=np.float64,
     )
-    return np.unique(
-        np.concatenate((outer, inner, requested_wall_distance_plus))
-    )
+    return np.unique(np.concatenate((outer, inner, requested_wall_distance_plus)))
 
 
 def transform_compressible_velocity_profile(
@@ -458,16 +429,9 @@ def transform_compressible_velocity_profile(
     height = _profile_array(wall_distance, name="wall_distance")
     speed = _profile_array(velocity, name="velocity")
     density_values = _profile_array(density, name="density")
-    viscosity_values = _profile_array(
-        dynamic_viscosity, name="dynamic_viscosity"
-    )
+    viscosity_values = _profile_array(dynamic_viscosity, name="dynamic_viscosity")
     _validate_wall_grid(height)
-    if not (
-        height.size
-        == speed.size
-        == density_values.size
-        == viscosity_values.size
-    ):
+    if not (height.size == speed.size == density_values.size == viscosity_values.size):
         raise ValueError("profile arrays must have the same length")
     if speed[0] != 0.0:
         raise ValueError("velocity must start at zero at the wall")
@@ -477,16 +441,12 @@ def transform_compressible_velocity_profile(
         raise ValueError("density must be greater than zero")
     if np.any(viscosity_values <= 0.0):
         raise ValueError("dynamic_viscosity must be greater than zero")
-    shear = _positive_scalar(
-        wall_shear_stress, name="wall_shear_stress"
-    )
+    shear = _positive_scalar(wall_shear_stress, name="wall_shear_stress")
 
     wall_density = float(density_values[0])
     wall_viscosity = float(viscosity_values[0])
     friction_velocity = np.sqrt(shear / wall_density)
-    wall_distance_plus = (
-        wall_density * friction_velocity * height / wall_viscosity
-    )
+    wall_distance_plus = wall_density * friction_velocity * height / wall_viscosity
     velocity_plus = speed / friction_velocity
     density_ratio = density_values / wall_density
     viscosity_ratio = viscosity_values / wall_viscosity
@@ -500,9 +460,7 @@ def transform_compressible_velocity_profile(
             x=wall_distance_plus,
             initial=0,
         )
-        velocity_integrand = (
-            np.sqrt(density_ratio) * viscosity_ratio**-0.5
-        )
+        velocity_integrand = np.sqrt(density_ratio) * viscosity_ratio**-0.5
     transformed_velocity = cumulative_trapezoid(
         velocity_integrand,
         x=velocity_plus,
@@ -516,9 +474,7 @@ def transform_compressible_velocity_profile(
         transformed_wall_coordinate=np.asarray(
             transformed_coordinate, dtype=np.float64
         ),
-        transformed_velocity_plus=np.asarray(
-            transformed_velocity, dtype=np.float64
-        ),
+        transformed_velocity_plus=np.asarray(transformed_velocity, dtype=np.float64),
         friction_velocity=float(friction_velocity),
     )
 
@@ -592,22 +548,16 @@ def compressible_turbulent_boundary_layer_profile(
     _validate_wall_grid(height)
     velocity_edge = _positive_scalar(edge_velocity, name="edge_velocity")
     density_edge = _positive_scalar(edge_density, name="edge_density")
-    temperature_edge = _positive_scalar(
-        edge_temperature, name="edge_temperature"
-    )
+    temperature_edge = _positive_scalar(edge_temperature, name="edge_temperature")
     thickness = _positive_scalar(
         boundary_layer_thickness, name="boundary_layer_thickness"
     )
-    shear = _positive_scalar(
-        wall_shear_stress, name="wall_shear_stress"
-    )
+    shear = _positive_scalar(wall_shear_stress, name="wall_shear_stress")
     prandtl = _positive_scalar(prandtl_number, name="prandtl_number")
     analogy_factor = _positive_scalar(
         reynolds_analogy_factor, name="reynolds_analogy_factor"
     )
-    kappa = _positive_scalar(
-        von_karman_constant, name="von_karman_constant"
-    )
+    kappa = _positive_scalar(von_karman_constant, name="von_karman_constant")
     intercept_array, intercept_scalar = as_float_array(
         log_law_intercept, name="log_law_intercept"
     )
@@ -615,14 +565,11 @@ def compressible_turbulent_boundary_layer_profile(
         raise ValueError("log_law_intercept must be a scalar")
     intercept = float(intercept_array)
     if height[-1] > thickness:
-        raise ValueError(
-            "wall_distance must not exceed boundary_layer_thickness"
-        )
+        raise ValueError("wall_distance must not exceed boundary_layer_thickness")
 
     recovery_factor = np.cbrt(prandtl)
-    recovery_temperature = (
-        temperature_edge
-        + recovery_factor * velocity_edge**2 / (2.0 * gas.cp)
+    recovery_temperature = temperature_edge + recovery_factor * velocity_edge**2 / (
+        2.0 * gas.cp
     )
     wall = (
         recovery_temperature
@@ -663,12 +610,8 @@ def compressible_turbulent_boundary_layer_profile(
     )
     wake, edge_ratio = _choose_wake_parameter(wake_parameter, parameters)
 
-    requested_plus = (
-        wall_density * friction_velocity * height / wall_viscosity
-    )
-    integration_plus = _integration_grid(
-        requested_plus, friction_reynolds_number
-    )
+    requested_plus = wall_density * friction_velocity * height / wall_viscosity
+    integration_plus = _integration_grid(requested_plus, friction_reynolds_number)
     velocity_plus_all, wall_velocity_plus_all = _integrate_inverse_profile(
         wake, integration_plus, parameters
     )
@@ -689,12 +632,9 @@ def compressible_turbulent_boundary_layer_profile(
     )
     density_all = density_edge * temperature_edge / temperature_all
     physical_height_all = (
-        integration_plus * wall_viscosity
-        / (wall_density * friction_velocity)
+        integration_plus * wall_viscosity / (wall_density * friction_velocity)
     )
-    mass_velocity_ratio = (
-        density_all * velocity_all / (density_edge * velocity_edge)
-    )
+    mass_velocity_ratio = density_all * velocity_all / (density_edge * velocity_edge)
     displacement_thickness = float(
         np.trapezoid(1.0 - mass_velocity_ratio, physical_height_all)
     )
@@ -709,9 +649,7 @@ def compressible_turbulent_boundary_layer_profile(
             "inverse model produced a non-positive momentum thickness"
         )
 
-    velocity_plus = np.interp(
-        requested_plus, integration_plus, velocity_plus_all
-    )
+    velocity_plus = np.interp(requested_plus, integration_plus, velocity_plus_all)
     wall_velocity_plus = np.interp(
         requested_plus, integration_plus, wall_velocity_plus_all
     )
@@ -736,13 +674,10 @@ def compressible_turbulent_boundary_layer_profile(
         von_karman_constant=kappa,
         intercept=intercept,
     )
-    transformed_velocity = (
-        wall_velocity_plus
-        + wake / kappa * _wake_function(outer_coordinate)
+    transformed_velocity = wall_velocity_plus + wake / kappa * _wake_function(
+        outer_coordinate
     )
-    speed_of_sound = np.asarray(
-        gas.speed_of_sound(temperature), dtype=np.float64
-    )
+    speed_of_sound = np.asarray(gas.speed_of_sound(temperature), dtype=np.float64)
     mach = velocity / speed_of_sound
     dynamic_pressure = 0.5 * density * velocity**2
     skin_friction = 2.0 * shear / (density_edge * velocity_edge**2)
@@ -755,9 +690,7 @@ def compressible_turbulent_boundary_layer_profile(
         transformed_wall_coordinate=transformed_coordinate,
         velocity=np.asarray(velocity, dtype=np.float64),
         velocity_plus=np.asarray(velocity_plus, dtype=np.float64),
-        transformed_velocity_plus=np.asarray(
-            transformed_velocity, dtype=np.float64
-        ),
+        transformed_velocity_plus=np.asarray(transformed_velocity, dtype=np.float64),
         temperature=temperature,
         density=np.asarray(density, dtype=np.float64),
         dynamic_viscosity=viscosity,

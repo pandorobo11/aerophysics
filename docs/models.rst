@@ -10,9 +10,15 @@ molecular weight from U.S. Standard Atmosphere 1976. Sutherland viscosity and
 the standard's air thermal-conductivity correlation are separate transport
 models.
 
-All temperatures must be positive. High-temperature dissociation, chemical
-reactions, vibrational excitation, and thermodynamic nonequilibrium are outside
-version 0.3.
+``ThermallyPerfectGas`` instead obtains temperature-dependent heat capacities
+from NASA-polynomial species data at fixed composition. ``AIR_NASA7`` and
+``AIR_NASA9`` cover 200--6000 K for frozen dry air. See
+:doc:`thermochemistry` for equations, reference states, and examples.
+
+All temperatures must be positive. The NASA fits include the temperature
+dependence of the individual fixed-composition species, but high-temperature
+dissociation, chemical reactions, ionization, and thermodynamic nonequilibrium
+remain outside the model.
 
 Standard atmosphere
 -------------------

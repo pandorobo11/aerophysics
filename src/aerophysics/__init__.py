@@ -26,22 +26,36 @@ from aerophysics.protrusion import (
     protrusion_drag,
 )
 from aerophysics.shocks import ShockBranch, normal_shock, oblique_shock
+from aerophysics.thermochemistry import (
+    AIR_NASA7,
+    AIR_NASA9,
+    IdealGasSpecies,
+    NASA7Polynomial,
+    NASA9Polynomial,
+    ThermallyPerfectGas,
+)
 
 __version__ = version("aerophysics")
 
 __all__ = [
     "AIR",
+    "AIR_NASA7",
+    "AIR_NASA9",
     "AtmosphereState",
     "BoundaryLayerRegime",
     "CompressibilityCorrection",
     "CompressibleBoundaryLayerProfileResult",
     "CompressibleVelocityTransformation",
     "FlightCondition",
+    "IdealGasSpecies",
+    "NASA7Polynomial",
+    "NASA9Polynomial",
     "PerfectGas",
     "ProtrusionDragResult",
     "ProtrusionProfile",
     "ShockBranch",
     "TemperatureVelocityRelation",
+    "ThermallyPerfectGas",
     "TransformedVelocityProfileResult",
     "TurbulentCorrelation",
     "__version__",

@@ -73,9 +73,7 @@ def _integration_grid(
     immersed = np.linspace(0.0, immersed_height, points, dtype=np.float64)
     if height <= boundary_layer_thickness:
         return immersed
-    outer = np.linspace(
-        boundary_layer_thickness, height, points, dtype=np.float64
-    )[1:]
+    outer = np.linspace(boundary_layer_thickness, height, points, dtype=np.float64)[1:]
     return np.concatenate((immersed, outer))
 
 
@@ -116,11 +114,7 @@ def _provided_profile(
     sample_height, _ = as_float_array(profile_height, name="profile_height")
     sample_velocity, _ = as_float_array(profile_velocity, name="profile_velocity")
     sample_density, _ = as_float_array(profile_density, name="profile_density")
-    if (
-        sample_height.ndim != 1
-        or sample_velocity.ndim != 1
-        or sample_density.ndim != 1
-    ):
+    if sample_height.ndim != 1 or sample_velocity.ndim != 1 or sample_density.ndim != 1:
         raise ValueError("provided profile arrays must be one-dimensional")
     if not (
         sample_height.size == sample_velocity.size == sample_density.size
@@ -130,14 +124,10 @@ def _provided_profile(
             "provided profile arrays must have the same length of at least two"
         )
     if sample_height[0] != 0.0 or np.any(np.diff(sample_height) <= 0.0):
-        raise ValueError(
-            "profile_height must start at zero and be strictly increasing"
-        )
+        raise ValueError("profile_height must start at zero and be strictly increasing")
     required_height = min(protrusion_height, boundary_layer_thickness)
     if sample_height[-1] < required_height:
-        raise ValueError(
-            "provided profile must cover the immersed protrusion height"
-        )
+        raise ValueError("provided profile must cover the immersed protrusion height")
     if np.any(sample_velocity < 0.0):
         raise ValueError("profile_velocity must be non-negative")
     if np.any(sample_density <= 0.0):
@@ -167,9 +157,7 @@ def _one_seventh_power_profile(
     prandtl_number: float,
     gas: PerfectGas,
 ) -> tuple[FloatArray, FloatArray, bool]:
-    velocity_ratio = np.minimum(height / boundary_layer_thickness, 1.0) ** (
-        1.0 / 7.0
-    )
+    velocity_ratio = np.minimum(height / boundary_layer_thickness, 1.0) ** (1.0 / 7.0)
     velocity = edge_velocity * velocity_ratio
     if mach is None:
         return velocity, np.full_like(height, edge_density), False
@@ -177,11 +165,7 @@ def _one_seventh_power_profile(
     assert edge_temperature is not None
     recovery_factor = np.cbrt(prandtl_number)
     recovery_temperature = edge_temperature * (
-        1.0
-        + recovery_factor
-        * 0.5
-        * (gas.heat_capacity_ratio - 1.0)
-        * mach**2
+        1.0 + recovery_factor * 0.5 * (gas.heat_capacity_ratio - 1.0) * mach**2
     )
     wall = recovery_temperature if wall_temperature is None else wall_temperature
     temperature = (
@@ -282,16 +266,12 @@ def protrusion_drag(
     thermal_inputs = mach is not None or edge_temperature is not None
     if thermal_inputs and (mach is None or edge_temperature is None):
         raise ValueError("mach and edge_temperature must be supplied together")
-    if has_profile and (
-        thermal_inputs or wall_temperature is not None
-    ):
+    if has_profile and (thermal_inputs or wall_temperature is not None):
         raise ValueError(
             "thermal inputs cannot be combined with a provided density profile"
         )
     if not thermal_inputs and wall_temperature is not None:
-        raise ValueError(
-            "wall_temperature requires mach and edge_temperature"
-        )
+        raise ValueError("wall_temperature requires mach and edge_temperature")
 
     mach_value: float | None = None
     edge_temperature_value: float | None = None
@@ -351,9 +331,7 @@ def protrusion_drag(
         profile = ProtrusionProfile.TURBULENT_ONE_SEVENTH_POWER
 
     dynamic_pressure = 0.5 * density * velocity**2
-    dynamic_pressure_area_integral = float(
-        np.trapezoid(dynamic_pressure * width, grid)
-    )
+    dynamic_pressure_area_integral = float(np.trapezoid(dynamic_pressure * width, grid))
     effective_dynamic_pressure = dynamic_pressure_area_integral / frontal_area
     edge_dynamic_pressure = 0.5 * density_edge * velocity_edge**2
     shielding_factor = effective_dynamic_pressure / edge_dynamic_pressure

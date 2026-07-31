@@ -44,6 +44,10 @@ The U.S. Standard Atmosphere air-conductivity correlation implemented by
 ``AIR_CONDUCTIVITY`` uses :math:`c_k=2.64638\times10^{-3}`,
 :math:`A_k=245.4\ \mathrm{K}`, and :math:`B_k=12\ \mathrm{K}`.
 
+Temperature-dependent heat capacities, NASA seven- and nine-coefficient
+forms, frozen-composition mixture rules, and ideal-mixture entropy are
+documented in :doc:`thermochemistry`.
+
 .. list-table::
    :header-rows: 1
    :widths: 16 26 42 16
