@@ -25,8 +25,9 @@ python -m pip install aerophysics
 ### Local GUI
 
 Install the optional GUI dependencies to calculate and plot standard-atmosphere,
-flight-condition, oblique-shock, and flat-plate boundary-layer results in a
-local browser:
+flight-condition, isentropic-flow, normal- and oblique-shock,
+Prandtl-Meyer-expansion, and flat-plate boundary-layer results in a local
+browser:
 
 ```console
 python -m pip install "aerophysics[gui]"

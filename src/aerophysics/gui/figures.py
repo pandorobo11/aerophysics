@@ -243,6 +243,148 @@ def shock_trends(
     }
 
 
+def isentropic_figures(
+    rows: tuple[Row, ...], *, input_label: str
+) -> dict[str, go.Figure]:
+    """Create isentropic ratio and mass-flow figures."""
+    x = _numeric(rows, "input_value")
+    ratios = go.Figure()
+    for key, name in (
+        ("total_temperature_ratio", "T₀/T"),
+        ("total_pressure_ratio", "p₀/p"),
+        ("total_density_ratio", "ρ₀/ρ"),
+    ):
+        ratios.add_trace(go.Scatter(x=x, y=_numeric(rows, key), name=name))
+    ratios.update_xaxes(title_text=input_label)
+    ratios.update_yaxes(title_text="全量/静量")
+
+    flow = make_subplots(specs=[[{"secondary_y": True}]])
+    flow.add_trace(
+        go.Scatter(x=x, y=_numeric(rows, "area_ratio"), name="A/A*"),
+        secondary_y=False,
+    )
+    flow.add_trace(
+        go.Scatter(
+            x=x,
+            y=_numeric(rows, "mass_flow_parameter"),
+            name="質量流量パラメータ",
+        ),
+        secondary_y=True,
+    )
+    flow.update_xaxes(title_text=input_label)
+    flow.update_yaxes(title_text="A/A*", secondary_y=False)
+    flow.update_yaxes(title_text="質量流量パラメータ", secondary_y=True)
+    figures = {
+        "状態量比": _style(ratios, "等エントロピー状態量比"),
+        "面積・流量": _style(flow, "面積-Mach関係と質量流量"),
+    }
+    if np.any(np.isfinite(_numeric(rows, "mass_flux"))):
+        flux = go.Figure()
+        flux.add_trace(go.Scatter(x=x, y=_numeric(rows, "mass_flux"), name="質量流束"))
+        flux.add_trace(
+            go.Scatter(
+                x=x,
+                y=_numeric(rows, "choked_mass_flux"),
+                name="チョーク質量流束",
+                line={"dash": "dash"},
+            )
+        )
+        flux.update_xaxes(title_text=input_label)
+        flux.update_yaxes(title_text="kg/(m²·s)")
+        figures["質量流束"] = _style(flux, "質量流束")
+    return figures
+
+
+def normal_shock_figures(rows: tuple[Row, ...]) -> dict[str, go.Figure]:
+    """Create normal-shock Mach and pressure-ratio figures."""
+    x = _numeric(rows, "upstream_mach")
+    states = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=("下流 Mach M₂", "p₂/p₁", "ρ₂/ρ₁", "T₂/T₁"),
+    )
+    for index, (key, name) in enumerate(
+        (
+            ("downstream_mach", "M₂"),
+            ("static_pressure_ratio", "p₂/p₁"),
+            ("static_density_ratio", "ρ₂/ρ₁"),
+            ("static_temperature_ratio", "T₂/T₁"),
+        )
+    ):
+        row, col = divmod(index, 2)
+        states.add_trace(
+            go.Scatter(x=x, y=_numeric(rows, key), name=name),
+            row=row + 1,
+            col=col + 1,
+        )
+    states.update_xaxes(title_text="上流 Mach M₁")
+
+    pressure = go.Figure()
+    pressure.add_trace(
+        go.Scatter(x=x, y=_numeric(rows, "total_pressure_ratio"), name="p₀₂/p₀₁")
+    )
+    pressure.add_trace(
+        go.Scatter(x=x, y=_numeric(rows, "pitot_pressure_ratio"), name="p₀₂/p₁")
+    )
+    pressure.update_xaxes(title_text="上流 Mach M₁")
+    pressure.update_yaxes(title_text="圧力比")
+    return {
+        "状態量": _style(states, "垂直衝撃波の状態量"),
+        "全圧・ピトー": _style(pressure, "全圧損失と超音速ピトー圧力比"),
+    }
+
+
+def expansion_figures(
+    rows: tuple[Row, ...],
+    preferences: UnitPreferences,
+    *,
+    sweep_field: str,
+) -> dict[str, go.Figure]:
+    """Create Prandtl-Meyer expansion trend figures."""
+    if sweep_field == "turn_angle":
+        x = _converted(rows, "turn_angle", "angle", preferences)
+        x_title = f"膨張角 θ [{preferences.angle}]"
+    else:
+        x = _numeric(rows, "upstream_mach")
+        x_title = "上流 Mach M₁"
+    mach = go.Figure()
+    mach.add_trace(go.Scatter(x=x, y=_numeric(rows, "upstream_mach"), name="M₁"))
+    mach.add_trace(go.Scatter(x=x, y=_numeric(rows, "downstream_mach"), name="M₂"))
+    mach.update_xaxes(title_text=x_title)
+    mach.update_yaxes(title_text="Mach数")
+
+    angles = go.Figure()
+    for key, name in (
+        ("upstream_prandtl_meyer_angle", "ν₁"),
+        ("downstream_prandtl_meyer_angle", "ν₂"),
+        ("maximum_turn_angle", "最大膨張角"),
+    ):
+        angles.add_trace(
+            go.Scatter(
+                x=x,
+                y=_converted(rows, key, "angle", preferences),
+                name=name,
+            )
+        )
+    angles.update_xaxes(title_text=x_title)
+    angles.update_yaxes(title_text=f"角度 [{preferences.angle}]")
+
+    ratios = go.Figure()
+    for key, name in (
+        ("static_temperature_ratio", "T₂/T₁"),
+        ("static_pressure_ratio", "p₂/p₁"),
+        ("static_density_ratio", "ρ₂/ρ₁"),
+    ):
+        ratios.add_trace(go.Scatter(x=x, y=_numeric(rows, key), name=name))
+    ratios.update_xaxes(title_text=x_title)
+    ratios.update_yaxes(title_text="下流/上流")
+    return {
+        "Mach数": _style(mach, "Prandtl-Meyer膨張のMach数"),
+        "角度": _style(angles, "Prandtl-Meyer角"),
+        "状態量比": _style(ratios, "膨張による静的状態量変化"),
+    }
+
+
 def boundary_layer_figures(
     rows: tuple[Row, ...],
     preferences: UnitPreferences,

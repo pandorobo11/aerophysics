@@ -6,6 +6,8 @@
   conditions, oblique shocks, and flat-plate boundary layers.
 - Add single-condition and parameter-sweep views, selectable display units,
   plots, flight-case handoff, CSV export, and versioned JSON settings.
+- Extend the local GUI with isentropic forward and inverse relations, normal
+  shocks and supersonic pitot pressure, and Prandtl-Meyer expansions.
 
 All notable changes to this project are documented in this file. The project
 uses Semantic Versioning, including during the pre-1.0 period.

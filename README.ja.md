@@ -20,7 +20,8 @@ python -m pip install aerophysics
 ### ローカルGUI
 
 GUI用の追加依存関係を含めてインストールすると、ブラウザ上で標準大気、
-飛行条件、斜め衝撃波、平板境界層を計算・プロットできます。
+飛行条件、等エントロピー流れ、垂直・斜め衝撃波、Prandtl–Meyer膨張、
+平板境界層を計算・プロットできます。
 
 ```console
 python -m pip install "aerophysics[gui]"

@@ -89,3 +89,43 @@ render_boundary_layer(UnitPreferences())
     assert not app.error
     assert len(app.metric) == 4
     assert len(app.get("plotly_chart")) == 3
+
+
+def test_additional_compressible_flow_pages() -> None:
+    pages = (
+        ("render_isentropic", "isentropic_form", "等エントロピー流れ", 2),
+        ("render_normal_shock", "normal_form", "垂直衝撃波", 2),
+        ("render_expansion", "expansion_form", "Prandtl\u2013Meyer膨張", 3),
+    )
+    for function, form, title, plot_count in pages:
+        script = f"""
+from aerophysics.gui.flow_pages import {function}
+from aerophysics.gui.units import UnitPreferences
+{function}(UnitPreferences())
+"""
+        app = AppTest.from_string(script, default_timeout=15).run()
+        assert app.title[0].value == title
+        app.button(key=f"FormSubmitter:{form}-計算").click().run()
+        assert not app.exception
+        assert not app.error
+        assert len(app.metric) == 4
+        assert len(app.get("plotly_chart")) == plot_count
+        assert len(app.download_button) == 2
+
+
+def test_expansion_sweep_marks_limit_rows() -> None:
+    script = """
+from aerophysics.gui.flow_pages import render_expansion
+from aerophysics.gui.units import UnitPreferences
+render_expansion(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=15).run()
+    app.radio(key="expansion_mode").set_value("1変数スイープ").run()
+    app.number_input(key="expansion_sweep_stop").set_value(130.0).run()
+    app.button(key="FormSubmitter:expansion_form-計算").click().run()
+    assert not app.exception
+    assert any(
+        status == "limit_exceeded"
+        for status in app.dataframe[0].value["status"].tolist()
+    )
+    assert app.warning

@@ -9,18 +9,25 @@ from aerophysics.boundary_layer import (
     TurbulentCorrelation,
 )
 from aerophysics.gui.adapters import (
+    expansion_sweep,
     flat_plate_sweep,
     flight_sweep,
+    isentropic_sweep,
+    normal_shock_sweep,
     oblique_shock_condition,
     oblique_shock_sweep,
 )
 from aerophysics.gui.figures import (
     boundary_layer_figures,
+    expansion_figures,
     flight_figures,
+    isentropic_figures,
+    normal_shock_figures,
     shock_geometry,
     shock_trends,
 )
 from aerophysics.gui.units import UnitPreferences
+from aerophysics.isentropic import MachBranch
 from aerophysics.shocks import ShockBranch
 
 
@@ -108,3 +115,37 @@ def test_boundary_layer_figures_include_transition_and_thermal() -> None:
     assert set(figures) == {"厚さ", "摩擦係数", "せん断・抗力", "温度"}
     assert len(figures["厚さ"].layout.shapes) == 1
     assert len(figures["温度"].data) == 2
+
+
+def test_additional_compressible_flow_figures() -> None:
+    isentropic = isentropic_sweep(
+        input_basis="mach",
+        branch=MachBranch.SUBSONIC,
+        start=0.1,
+        stop=3.0,
+        points=3,
+        total_pressure=101_325.0,
+        total_temperature=300.0,
+    )
+    isentropic_plots = isentropic_figures(isentropic.rows, input_label="Mach M")
+    assert set(isentropic_plots) == {"状態量比", "面積・流量", "質量流束"}
+    assert len(isentropic_plots["状態量比"].data) == 3
+
+    shock = normal_shock_sweep(start=1.0, stop=3.0, points=3)
+    shock_plots = normal_shock_figures(shock.rows)
+    assert set(shock_plots) == {"状態量", "全圧・ピトー"}
+    assert len(shock_plots["状態量"].data) == 4
+
+    expansion = expansion_sweep(
+        fixed_mach=2.0,
+        fixed_turn_angle=0.05,
+        sweep_field="turn_angle",
+        start=0.0,
+        stop=0.2,
+        points=3,
+    )
+    expansion_plots = expansion_figures(
+        expansion.rows, UnitPreferences(), sweep_field="turn_angle"
+    )
+    assert set(expansion_plots) == {"Mach数", "角度", "状態量比"}
+    assert "膨張角" in str(expansion_plots["Mach数"].layout.xaxis.title.text)

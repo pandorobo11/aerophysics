@@ -9,7 +9,14 @@ from typing import Any
 from aerophysics.gui.units import UnitPreferences
 
 CONFIG_SCHEMA_VERSION = 1
-CALCULATORS = {"flight", "oblique_shock", "boundary_layer"}
+CALCULATORS = {
+    "boundary_layer",
+    "expansion",
+    "flight",
+    "isentropic",
+    "normal_shock",
+    "oblique_shock",
+}
 MODES = {"single", "sweep"}
 
 

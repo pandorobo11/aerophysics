@@ -75,6 +75,7 @@ source = ["aerophysics"]
 omit = [
   "src/aerophysics/gui/app.py",
   "src/aerophysics/gui/components.py",
+  "src/aerophysics/gui/flow_pages.py",
   "src/aerophysics/gui/launcher.py",
   "src/aerophysics/gui/pages.py",
 ]

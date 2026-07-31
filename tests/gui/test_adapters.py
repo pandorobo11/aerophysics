@@ -11,14 +11,21 @@ from aerophysics.boundary_layer import (
 )
 from aerophysics.gui.adapters import (
     FlightCase,
+    expansion_condition,
+    expansion_sweep,
     flat_plate,
     flat_plate_sweep,
     flight_condition,
     flight_sweep,
+    isentropic_condition,
+    isentropic_sweep,
+    normal_shock_condition,
+    normal_shock_sweep,
     oblique_shock_condition,
     oblique_shock_sweep,
     sweep_values,
 )
+from aerophysics.isentropic import MachBranch, isentropic_ratios
 from aerophysics.shocks import ShockBranch, oblique_shock
 
 
@@ -92,6 +99,98 @@ def test_flight_velocity_and_sweeps() -> None:
             motion=1.0,
             motion_basis="other",
             characteristic_length=None,
+        )
+
+
+def test_isentropic_adapter_forward_inverse_and_mass_flux() -> None:
+    forward = isentropic_condition(
+        input_value=2.0,
+        input_basis="mach",
+        total_pressure=101_325.0,
+        total_temperature=300.0,
+    )
+    direct = isentropic_ratios(2.0)
+    assert forward.rows[0]["total_pressure_ratio"] == pytest.approx(
+        direct.total_pressure_ratio
+    )
+    assert forward.rows[0]["mass_flux"] is not None
+    assert forward.rows[0]["choked_mass_flux"] is not None
+    area_inverse = isentropic_condition(
+        input_value=2.0,
+        input_basis="area_ratio",
+        branch=MachBranch.SUPERSONIC,
+    )
+    assert float(area_inverse.rows[0]["mach"]) > 1.0  # type: ignore[arg-type]
+    pressure_inverse = isentropic_condition(
+        input_value=float(direct.total_pressure_ratio),
+        input_basis="pressure_ratio",
+    )
+    assert pressure_inverse.rows[0]["mach"] == pytest.approx(2.0)
+    zero = isentropic_condition(input_value=0.0, input_basis="mach")
+    assert zero.rows[0]["area_ratio"] is None
+
+
+def test_isentropic_sweep_and_validation() -> None:
+    result = isentropic_sweep(
+        input_basis="temperature_ratio",
+        branch=MachBranch.SUBSONIC,
+        start=1.0,
+        stop=2.0,
+        points=3,
+    )
+    assert len(result.rows) == 3
+    with pytest.raises(ValueError, match="specified together"):
+        isentropic_condition(
+            input_value=1.0,
+            input_basis="mach",
+            total_pressure=101_325.0,
+        )
+    with pytest.raises(ValueError, match="unsupported"):
+        isentropic_condition(input_value=1.0, input_basis="other")
+
+
+def test_normal_shock_adapter_and_sweep() -> None:
+    single = normal_shock_condition(upstream_mach=2.0)
+    assert single.rows[0]["downstream_mach"] == pytest.approx(0.57735, rel=1e-5)
+    assert float(single.rows[0]["pitot_pressure_ratio"]) > 1.0  # type: ignore[arg-type]
+    sweep = normal_shock_sweep(start=1.0, stop=3.0, points=3)
+    assert len(sweep.rows) == 3
+    first_ratio = sweep.rows[0]["total_pressure_ratio"]
+    last_ratio = sweep.rows[-1]["total_pressure_ratio"]
+    assert isinstance(first_ratio, float)
+    assert isinstance(last_ratio, float)
+    assert last_ratio < first_ratio
+
+
+def test_expansion_adapter_and_limit_rows() -> None:
+    single = expansion_condition(upstream_mach=2.0, turn_angle=float(np.deg2rad(10.0)))
+    assert float(single.rows[0]["downstream_mach"]) > 2.0  # type: ignore[arg-type]
+    sweep = expansion_sweep(
+        fixed_mach=2.0,
+        fixed_turn_angle=0.1,
+        sweep_field="turn_angle",
+        start=0.0,
+        stop=float(np.deg2rad(130.0)),
+        points=3,
+    )
+    assert sweep.rows[-1]["status"] == "limit_exceeded"
+    mach_sweep = expansion_sweep(
+        fixed_mach=2.0,
+        fixed_turn_angle=0.01,
+        sweep_field="mach",
+        start=1.0,
+        stop=3.0,
+        points=3,
+    )
+    assert len(mach_sweep.rows) == 3
+    with pytest.raises(ValueError, match="sweep_field"):
+        expansion_sweep(
+            fixed_mach=2.0,
+            fixed_turn_angle=0.1,
+            sweep_field="other",
+            start=1.0,
+            stop=2.0,
+            points=2,
         )
     with pytest.raises(ValueError, match="sweep_field"):
         flight_sweep(

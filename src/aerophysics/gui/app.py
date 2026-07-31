@@ -5,6 +5,11 @@ from __future__ import annotations
 import streamlit as st
 
 from aerophysics.gui.components import render_unit_sidebar
+from aerophysics.gui.flow_pages import (
+    render_expansion,
+    render_isentropic,
+    render_normal_shock,
+)
 from aerophysics.gui.pages import (
     render_boundary_layer,
     render_flight,
@@ -32,13 +37,37 @@ def boundary_layer_page() -> None:
     render_boundary_layer(preferences)
 
 
+def isentropic_page() -> None:
+    render_isentropic(preferences)
+
+
+def normal_shock_page() -> None:
+    render_normal_shock(preferences)
+
+
+def expansion_page() -> None:
+    render_expansion(preferences)
+
+
 pages = {
-    "計算": [
+    "飛行状態": [
         st.Page(
             flight_page,
             title="大気・飛行条件",
             icon="🌤️",
             default=True,
+        ),
+    ],
+    "圧縮性流れ": [
+        st.Page(
+            isentropic_page,
+            title="等エントロピー流れ",
+            icon="📊",
+        ),
+        st.Page(
+            normal_shock_page,
+            title="垂直衝撃波",
+            icon="↕️",
         ),
         st.Page(
             shock_page,
@@ -46,10 +75,17 @@ pages = {
             icon="〰️",
         ),
         st.Page(
+            expansion_page,
+            title="Prandtl–Meyer膨張",
+            icon="↗️",
+        ),
+    ],
+    "粘性流れ": [
+        st.Page(
             boundary_layer_page,
             title="平板境界層",
             icon="📐",
         ),
-    ]
+    ],
 }
 st.navigation(pages).run()

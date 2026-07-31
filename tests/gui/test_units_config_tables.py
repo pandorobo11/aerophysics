@@ -150,3 +150,16 @@ def test_display_table_and_csv() -> None:
         rows_to_csv([])
     with pytest.raises(ValueError, match="unsupported"):
         columns_for("missing")
+
+
+@pytest.mark.parametrize("calculator", ["isentropic", "normal_shock", "expansion"])
+def test_additional_calculator_tables_and_config(calculator: str) -> None:
+    assert columns_for(calculator)
+    configuration = make_configuration(
+        calculator=calculator,
+        mode="single",
+        inputs_si={},
+        models={},
+        units=UnitPreferences(),
+    )
+    assert configuration["calculator"] == calculator

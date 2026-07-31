@@ -67,6 +67,50 @@ SHOCK_COLUMNS = (
     Column("message", "message"),
 )
 
+ISENTROPIC_COLUMNS = (
+    Column("input_value", "入力値"),
+    Column("input_basis", "入力基準"),
+    Column("mach", "Mach M"),
+    Column("total_temperature_ratio", "T₀/T"),
+    Column("total_pressure_ratio", "p₀/p"),
+    Column("total_density_ratio", "ρ₀/ρ"),
+    Column("area_ratio", "A/A*"),
+    Column("mass_flow_parameter", "質量流量パラメータ"),
+    Column("mass_flux", "質量流束", fixed_unit="kg/(m²·s)"),
+    Column("choked_mass_flux", "チョーク質量流束", fixed_unit="kg/(m²·s)"),
+    Column("critical_temperature_ratio", "T₀/T*"),
+    Column("critical_pressure_ratio", "p₀/p*"),
+    Column("critical_density_ratio", "ρ₀/ρ*"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
+NORMAL_SHOCK_COLUMNS = (
+    Column("upstream_mach", "上流 Mach M₁"),
+    Column("downstream_mach", "下流 Mach M₂"),
+    Column("static_pressure_ratio", "p₂/p₁"),
+    Column("static_density_ratio", "ρ₂/ρ₁"),
+    Column("static_temperature_ratio", "T₂/T₁"),
+    Column("total_pressure_ratio", "p₀₂/p₀₁"),
+    Column("pitot_pressure_ratio", "p₀₂/p₁"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
+EXPANSION_COLUMNS = (
+    Column("upstream_mach", "上流 Mach M₁"),
+    Column("turn_angle", "膨張角 θ", "angle"),
+    Column("maximum_turn_angle", "最大膨張角", "angle"),
+    Column("downstream_mach", "下流 Mach M₂"),
+    Column("upstream_prandtl_meyer_angle", "ν₁", "angle"),
+    Column("downstream_prandtl_meyer_angle", "ν₂", "angle"),
+    Column("static_pressure_ratio", "p₂/p₁"),
+    Column("static_density_ratio", "ρ₂/ρ₁"),
+    Column("static_temperature_ratio", "T₂/T₁"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
 BOUNDARY_LAYER_COLUMNS = (
     Column("distance", "前縁からの距離 x", "length"),
     Column("reynolds_number", "Reynolds数 Re_x"),
@@ -89,7 +133,10 @@ def columns_for(calculator: str) -> tuple[Column, ...]:
     """Return ordered table columns for a calculator."""
     choices = {
         "flight": FLIGHT_COLUMNS,
+        "isentropic": ISENTROPIC_COLUMNS,
+        "normal_shock": NORMAL_SHOCK_COLUMNS,
         "oblique_shock": SHOCK_COLUMNS,
+        "expansion": EXPANSION_COLUMNS,
         "boundary_layer": BOUNDARY_LAYER_COLUMNS,
     }
     try:

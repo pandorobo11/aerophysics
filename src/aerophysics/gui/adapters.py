@@ -14,10 +14,30 @@ from aerophysics.boundary_layer import (
     TurbulentCorrelation,
     flat_plate_boundary_layer,
 )
+from aerophysics.expansion import (
+    maximum_prandtl_meyer_angle,
+    prandtl_meyer_angle,
+    prandtl_meyer_expansion,
+)
+from aerophysics.isentropic import (
+    MachBranch,
+    area_ratio,
+    choked_mass_flux,
+    critical_ratios,
+    isentropic_ratios,
+    mach_from_area_ratio,
+    mach_from_total_density_ratio,
+    mach_from_total_pressure_ratio,
+    mach_from_total_temperature_ratio,
+    mass_flow_parameter,
+    mass_flux,
+)
 from aerophysics.shocks import (
     ShockBranch,
     maximum_attached_deflection,
+    normal_shock,
     oblique_shock,
+    supersonic_pitot_pressure_ratio,
 )
 
 type CellValue = float | str | None
@@ -167,6 +187,207 @@ def flight_sweep(
         motion_basis=motion_basis,
         characteristic_length=characteristic_length,
     )
+
+
+def _mach_from_isentropic_input(value: float, basis: str, branch: MachBranch) -> float:
+    if basis == "mach":
+        if value < 0.0:
+            raise ValueError("mach must be non-negative")
+        return value
+    inverse_functions = {
+        "temperature_ratio": mach_from_total_temperature_ratio,
+        "pressure_ratio": mach_from_total_pressure_ratio,
+        "density_ratio": mach_from_total_density_ratio,
+    }
+    if basis == "area_ratio":
+        return float(mach_from_area_ratio(value, branch))
+    try:
+        inverse = inverse_functions[basis]
+    except KeyError as error:
+        raise ValueError("unsupported isentropic input basis") from error
+    return float(inverse(value))
+
+
+def isentropic_condition(
+    *,
+    input_value: float | np.ndarray,
+    input_basis: str,
+    branch: MachBranch = MachBranch.SUBSONIC,
+    total_pressure: float | None = None,
+    total_temperature: float | None = None,
+) -> CalculationResult:
+    """Calculate isentropic state, inverse, area, and mass-flow relations."""
+    if (total_pressure is None) != (total_temperature is None):
+        raise ValueError(
+            "total_pressure and total_temperature must be specified together"
+        )
+    critical = critical_ratios()
+    rows: list[Row] = []
+    for raw_value in _array(input_value):
+        value = float(raw_value)
+        mach = _mach_from_isentropic_input(value, input_basis, branch)
+        ratios = isentropic_ratios(mach)
+        flux = (
+            float(mass_flux(total_pressure, total_temperature, mach))
+            if total_pressure is not None and total_temperature is not None
+            else None
+        )
+        choked = (
+            float(choked_mass_flux(total_pressure, total_temperature))
+            if total_pressure is not None and total_temperature is not None
+            else None
+        )
+        rows.append(
+            {
+                "input_value": value,
+                "input_basis": input_basis,
+                "mach": mach,
+                "total_temperature_ratio": float(ratios.total_temperature_ratio),
+                "total_pressure_ratio": float(ratios.total_pressure_ratio),
+                "total_density_ratio": float(ratios.total_density_ratio),
+                "area_ratio": float(area_ratio(mach)) if mach > 0.0 else None,
+                "mass_flow_parameter": float(mass_flow_parameter(mach)),
+                "mass_flux": flux,
+                "choked_mass_flux": choked,
+                "critical_temperature_ratio": critical.total_temperature_ratio,
+                "critical_pressure_ratio": critical.total_pressure_ratio,
+                "critical_density_ratio": critical.total_density_ratio,
+                "status": "ok",
+                "message": "",
+            }
+        )
+    return CalculationResult(tuple(rows))
+
+
+def isentropic_sweep(
+    *,
+    input_basis: str,
+    branch: MachBranch,
+    start: float,
+    stop: float,
+    points: int,
+    total_pressure: float | None = None,
+    total_temperature: float | None = None,
+) -> CalculationResult:
+    """Sweep the selected isentropic input quantity."""
+    return isentropic_condition(
+        input_value=sweep_values(start, stop, points),
+        input_basis=input_basis,
+        branch=branch,
+        total_pressure=total_pressure,
+        total_temperature=total_temperature,
+    )
+
+
+def normal_shock_condition(*, upstream_mach: float | np.ndarray) -> CalculationResult:
+    """Calculate normal-shock ratios and the Rayleigh pitot relation."""
+    result = normal_shock(upstream_mach)
+    mach_values = _array(result.upstream_mach)
+    pitot_values = _array(supersonic_pitot_pressure_ratio(mach_values))
+    rows: list[Row] = []
+    for index, mach in enumerate(mach_values):
+        rows.append(
+            {
+                "upstream_mach": float(mach),
+                "downstream_mach": float(_array(result.downstream_mach)[index]),
+                "static_pressure_ratio": float(
+                    _array(result.static_pressure_ratio)[index]
+                ),
+                "static_density_ratio": float(
+                    _array(result.static_density_ratio)[index]
+                ),
+                "static_temperature_ratio": float(
+                    _array(result.static_temperature_ratio)[index]
+                ),
+                "total_pressure_ratio": float(
+                    _array(result.total_pressure_ratio)[index]
+                ),
+                "pitot_pressure_ratio": float(pitot_values[index]),
+                "status": "ok",
+                "message": "",
+            }
+        )
+    return CalculationResult(tuple(rows))
+
+
+def normal_shock_sweep(*, start: float, stop: float, points: int) -> CalculationResult:
+    """Sweep upstream Mach number through a normal shock."""
+    return normal_shock_condition(upstream_mach=sweep_values(start, stop, points))
+
+
+def expansion_condition(
+    *, upstream_mach: float, turn_angle: float
+) -> CalculationResult:
+    """Calculate one centered Prandtl-Meyer expansion."""
+    result = prandtl_meyer_expansion(upstream_mach, turn_angle)
+    maximum_turn = maximum_prandtl_meyer_angle() - float(
+        prandtl_meyer_angle(upstream_mach)
+    )
+    return CalculationResult(
+        (
+            {
+                "upstream_mach": float(result.upstream_mach),
+                "downstream_mach": float(result.downstream_mach),
+                "turn_angle": float(result.turn_angle),
+                "maximum_turn_angle": maximum_turn,
+                "upstream_prandtl_meyer_angle": float(
+                    result.upstream_prandtl_meyer_angle
+                ),
+                "downstream_prandtl_meyer_angle": float(
+                    result.downstream_prandtl_meyer_angle
+                ),
+                "static_temperature_ratio": float(result.static_temperature_ratio),
+                "static_pressure_ratio": float(result.static_pressure_ratio),
+                "static_density_ratio": float(result.static_density_ratio),
+                "status": "ok",
+                "message": "",
+            },
+        )
+    )
+
+
+def expansion_sweep(
+    *,
+    fixed_mach: float,
+    fixed_turn_angle: float,
+    sweep_field: str,
+    start: float,
+    stop: float,
+    points: int,
+) -> CalculationResult:
+    """Sweep expansion Mach or turn angle while retaining limit failures."""
+    if sweep_field not in {"mach", "turn_angle"}:
+        raise ValueError("sweep_field must be mach or turn_angle")
+    rows: list[Row] = []
+    for value in sweep_values(start, stop, points):
+        mach = float(value) if sweep_field == "mach" else fixed_mach
+        turn = float(value) if sweep_field == "turn_angle" else fixed_turn_angle
+        try:
+            rows.append(
+                expansion_condition(upstream_mach=mach, turn_angle=turn).rows[0]
+            )
+        except ValueError as error:
+            maximum_turn = (
+                maximum_prandtl_meyer_angle() - float(prandtl_meyer_angle(mach))
+                if mach >= 1.0
+                else None
+            )
+            rows.append(
+                {
+                    "upstream_mach": mach,
+                    "downstream_mach": None,
+                    "turn_angle": turn,
+                    "maximum_turn_angle": maximum_turn,
+                    "upstream_prandtl_meyer_angle": None,
+                    "downstream_prandtl_meyer_angle": None,
+                    "static_temperature_ratio": None,
+                    "static_pressure_ratio": None,
+                    "static_density_ratio": None,
+                    "status": "limit_exceeded",
+                    "message": str(error),
+                }
+            )
+    return CalculationResult(tuple(rows))
 
 
 def oblique_shock_condition(
