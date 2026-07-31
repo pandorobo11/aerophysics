@@ -30,11 +30,7 @@ def _profile(
     wall_distance: np.ndarray | None = None,
     wake_parameter: float | None = None,
 ) -> CompressibleBoundaryLayerProfileResult:
-    height = (
-        np.linspace(0.0, 0.05, 1001)
-        if wall_distance is None
-        else wall_distance
-    )
+    height = np.linspace(0.0, 0.05, 1001) if wall_distance is None else wall_distance
     return compressible_turbulent_boundary_layer_profile(
         height,
         300.0,
@@ -71,13 +67,9 @@ def test_forward_constant_properties_are_identity(
     assert isinstance(result, TransformedVelocityProfileResult)
     assert result.friction_velocity == pytest.approx(friction_velocity)
     assert_allclose(result.wall_distance_plus, expected_height_plus)
-    assert_allclose(
-        result.transformed_wall_coordinate, expected_height_plus
-    )
+    assert_allclose(result.transformed_wall_coordinate, expected_height_plus)
     assert_allclose(result.velocity_plus, velocity / friction_velocity)
-    assert_allclose(
-        result.transformed_velocity_plus, velocity / friction_velocity
-    )
+    assert_allclose(result.transformed_velocity_plus, velocity / friction_velocity)
     assert result.wall_distance.dtype == np.float64
 
 
@@ -106,12 +98,8 @@ def test_forward_nonuniform_properties_match_differential_mappings() -> None:
         4.0,
         transformation=CompressibleVelocityTransformation.VOLPIANI,
     )
-    coordinate_factor = np.array(
-        [1.0, 0.5 * 2.0**-1.5, 1.5 * 0.5**-1.5]
-    )
-    velocity_factor = np.array(
-        [1.0, 0.5 * 2.0**-0.5, 1.5 * 0.5**-0.5]
-    )
+    coordinate_factor = np.array([1.0, 0.5 * 2.0**-1.5, 1.5 * 0.5**-1.5])
+    velocity_factor = np.array([1.0, 0.5 * 2.0**-0.5, 1.5 * 0.5**-0.5])
     expected_coordinate = np.array(
         [
             0.0,
@@ -123,13 +111,10 @@ def test_forward_nonuniform_properties_match_differential_mappings() -> None:
         [
             0.0,
             velocity_factor[:2].sum(),
-            velocity_factor[:2].sum()
-            + 1.5 * velocity_factor[1:].sum(),
+            velocity_factor[:2].sum() + 1.5 * velocity_factor[1:].sum(),
         ]
     )
-    assert_allclose(
-        volpiani.transformed_wall_coordinate, expected_coordinate
-    )
+    assert_allclose(volpiani.transformed_wall_coordinate, expected_coordinate)
     assert_allclose(volpiani.transformed_velocity_plus, expected_velocity)
 
 
@@ -202,9 +187,7 @@ def test_inverse_profile_satisfies_edge_and_property_relations(
 
 
 def test_gra_and_walz_temperature_formulas() -> None:
-    gra = _profile(
-        relation=TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY
-    )
+    gra = _profile(relation=TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY)
     walz = _profile(relation=TemperatureVelocityRelation.WALZ)
     index = 400
 
@@ -302,9 +285,7 @@ def test_integral_quantities_match_sampled_profile() -> None:
     assert result.displacement_thickness == pytest.approx(
         expected_displacement, rel=2e-5
     )
-    assert result.momentum_thickness == pytest.approx(
-        expected_momentum, rel=2e-5
-    )
+    assert result.momentum_thickness == pytest.approx(expected_momentum, rel=2e-5)
 
 
 def test_integrals_cover_full_layer_when_output_grid_is_truncated() -> None:
@@ -355,9 +336,7 @@ def test_low_friction_reynolds_number_warns() -> None:
         ("von_karman_constant", 0.0),
     ],
 )
-def test_inverse_rejects_non_positive_inputs(
-    keyword: str, value: float
-) -> None:
+def test_inverse_rejects_non_positive_inputs(keyword: str, value: float) -> None:
     arguments: dict[str, object] = {
         "wall_distance": np.array([0.0, 0.05]),
         "edge_velocity": 300.0,

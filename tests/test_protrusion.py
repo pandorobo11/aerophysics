@@ -98,9 +98,7 @@ def test_provided_profile_uses_edge_conditions_above_boundary_layer() -> None:
 
 
 def test_walz_compressibility_changes_density_and_drag() -> None:
-    incompressible = protrusion_drag(
-        1.0, 0.05, 0.01, 500.0, 0.4, 0.1
-    )
+    incompressible = protrusion_drag(1.0, 0.05, 0.01, 500.0, 0.4, 0.1)
     compressible = protrusion_drag(
         1.0,
         0.05,
@@ -117,9 +115,7 @@ def test_walz_compressibility_changes_density_and_drag() -> None:
 
 
 def test_zero_mach_compressible_model_reduces_to_incompressible_model() -> None:
-    incompressible = protrusion_drag(
-        1.0, 0.05, 0.01, 100.0, 1.0, 0.1
-    )
+    incompressible = protrusion_drag(1.0, 0.05, 0.01, 100.0, 1.0, 0.1)
     compressible = protrusion_drag(
         1.0,
         0.05,
@@ -244,9 +240,7 @@ def test_thermal_inputs_are_exclusive_and_complete() -> None:
     with pytest.raises(ValueError, match="supplied together"):
         protrusion_drag(1.0, 0.1, 0.01, 10.0, 1.0, 0.2, mach=2.0)
     with pytest.raises(ValueError, match="wall_temperature requires"):
-        protrusion_drag(
-            1.0, 0.1, 0.01, 10.0, 1.0, 0.2, wall_temperature=300.0
-        )
+        protrusion_drag(1.0, 0.1, 0.01, 10.0, 1.0, 0.2, wall_temperature=300.0)
     with pytest.raises(ValueError, match="cannot be combined"):
         protrusion_drag(
             1.0,
