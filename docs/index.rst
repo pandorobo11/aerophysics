@@ -21,6 +21,7 @@ conditions, and explicit unit conversions.
    :caption: Thermodynamics and atmosphere
 
    gas_and_atmosphere
+   transport_properties
    thermochemistry
 
 .. toctree::

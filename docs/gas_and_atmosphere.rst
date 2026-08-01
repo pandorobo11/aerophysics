@@ -1,8 +1,8 @@
 Gas properties and standard atmosphere
 ======================================
 
-This page describes the constant-property gas and transport models and the
-U.S. Standard Atmosphere model that supplies their ambient state. Use
+This page describes the constant-property gas and U.S. Standard Atmosphere
+models. See :doc:`transport_properties` for viscosity and conductivity, or
 :doc:`thermochemistry` when temperature-dependent heat capacity is required.
 
 Calorically perfect gas
@@ -74,51 +74,6 @@ states, applicability, and examples.
 These frozen-composition models include species heat-capacity variation but
 not dissociation, chemical reactions, ionization, or thermodynamic
 nonequilibrium.
-
-Transport properties
---------------------
-
-:class:`~aerophysics.gas.SutherlandModel` evaluates dynamic viscosity as
-
-.. math::
-
-   \mu(T)=\mu_\mathrm{ref}
-   \left(\frac{T}{T_\mathrm{ref}}\right)^{3/2}
-   \frac{T_\mathrm{ref}+S}{T+S}.
-
-``AIR_VISCOSITY`` uses
-:math:`\mu_\mathrm{ref}=1.7894\times10^{-5}\ \mathrm{Pa\,s}`,
-:math:`T_\mathrm{ref}=288.15\ \mathrm{K}`, and :math:`S=110.4\ \mathrm{K}`.
-
-The U.S. Standard Atmosphere conductivity model is
-
-.. math::
-
-   k(T)=\frac{c_kT^{3/2}}{T+A_k10^{-B_k/T}},
-
-with :math:`c_k=2.64638\times10^{-3}`, :math:`A_k=245.4\ \mathrm{K}`,
-and :math:`B_k=12\ \mathrm{K}` for ``AIR_CONDUCTIVITY``.
-
-.. list-table:: Transport-property symbols
-   :header-rows: 1
-   :widths: 16 29 39 16
-
-   * - Symbol
-     - API name
-     - Meaning
-     - SI unit
-   * - :math:`\mu`
-     - ``dynamic_viscosity``
-     - Dynamic viscosity
-     - Pa s
-   * - :math:`k`
-     - ``thermal_conductivity``
-     - Thermal conductivity
-     - W/(m K)
-   * - :math:`Pr`
-     - ``prandtl_number``
-     - Prandtl number :math:`\mu c_p/k`
-     - dimensionless
 
 U.S. Standard Atmosphere 1976
 -----------------------------

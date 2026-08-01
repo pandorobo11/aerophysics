@@ -15,6 +15,7 @@ from aerophysics.boundary_layer import (
 )
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import AIR, AIR_VISCOSITY
+from aerophysics.transport import AIR_BLOTTNER_VISCOSITY
 
 
 def test_blasius_laminar_reference_values() -> None:
@@ -157,6 +158,26 @@ def test_eckert_laminar_adiabatic_wall() -> None:
     assert result.local_skin_friction_coefficient == pytest.approx(
         0.664 / np.sqrt(effective_reynolds)
     )
+
+
+def test_eckert_accepts_blottner_mixture_viscosity_model() -> None:
+    edge_temperature = 1000.0
+    edge_viscosity = float(
+        AIR_BLOTTNER_VISCOSITY.dynamic_viscosity(edge_temperature)
+    )
+    result = flat_plate_boundary_layer(
+        1.0,
+        1000.0,
+        0.1,
+        edge_viscosity,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressibility_correction=CompressibilityCorrection.ECKERT,
+        mach=1.0,
+        edge_temperature=edge_temperature,
+        wall_temperature=1000.0,
+        viscosity_model=AIR_BLOTTNER_VISCOSITY,
+    )
+    assert result.effective_reynolds_number > 0.0
 
 
 def test_eckert_turbulent_uses_specified_wall_temperature() -> None:

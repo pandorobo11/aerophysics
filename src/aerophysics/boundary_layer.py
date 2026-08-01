@@ -35,7 +35,8 @@ from scipy.optimize import brentq
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
-from aerophysics.gas import AIR, AIR_VISCOSITY, PerfectGas, SutherlandModel
+from aerophysics.gas import AIR, PerfectGas
+from aerophysics.transport import AIR_VISCOSITY, DynamicViscosityModel
 
 
 class BoundaryLayerRegime(StrEnum):
@@ -203,7 +204,7 @@ def _eckert_effective_reynolds(
     turbulent: bool,
     prandtl_number: float,
     gas: PerfectGas,
-    viscosity_model: SutherlandModel,
+    viscosity_model: DynamicViscosityModel,
 ) -> tuple[FloatArray, FloatArray, FloatArray]:
     recovery = _recovery_temperature(
         edge_temperature,
@@ -253,7 +254,7 @@ def _van_driest_ii_state(
     *,
     prandtl_number: float,
     gas: PerfectGas,
-    viscosity_model: SutherlandModel,
+    viscosity_model: DynamicViscosityModel,
 ) -> _VanDriestIIState:
     """Return the Hopkins--Inouye form of the Van Driest II factors."""
     recovery = _recovery_temperature(
@@ -418,7 +419,7 @@ def flat_plate_boundary_layer(
     wall_temperature: ArrayLike | None = None,
     prandtl_number: float = 0.72,
     gas: PerfectGas = AIR,
-    viscosity_model: SutherlandModel = AIR_VISCOSITY,
+    viscosity_model: DynamicViscosityModel = AIR_VISCOSITY,
 ) -> FlatPlateBoundaryLayerResult:
     """Return a smooth flat-plate boundary-layer estimate.
 
@@ -456,7 +457,8 @@ def flat_plate_boundary_layer(
     prandtl_number:
         Constant Prandtl number used for the recovery factors.
     gas, viscosity_model:
-        Perfect-gas and Sutherland models used by compressibility corrections.
+        Perfect-gas and dynamic-viscosity models used by compressibility
+        corrections.
 
     Notes
     -----

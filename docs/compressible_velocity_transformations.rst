@@ -452,7 +452,7 @@ is
 
 If :math:`T_w` is omitted, :math:`T_w=T_r`.  Density follows the constant
 pressure perfect-gas relation :math:`\rho=\rho_eT_e/T`, and viscosity follows
-the selected Sutherland model.  See
+the selected dynamic-viscosity model. See
 :ref:`Zhang et al. (2014) <ref-zhang-bi-hussain-she-2014>`.
 
 The profile API returns velocity, temperature, density, viscosity, local Mach
@@ -482,7 +482,7 @@ flat-plate correlation to the new, independent profile API:
 ...     compressible_turbulent_boundary_layer_profile,
 ...     flat_plate_boundary_layer,
 ... )
->>> from aerophysics.gas import AIR_VISCOSITY
+>>> from aerophysics.transport import AIR_VISCOSITY
 >>> mu_e = float(AIR_VISCOSITY.dynamic_viscosity(300.0))
 >>> layer = flat_plate_boundary_layer(
 ...     1.0,

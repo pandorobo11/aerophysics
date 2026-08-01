@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Separate transport properties into a dedicated module and add interchangeable
+  Keyes and Blottner/Wilke dry-air viscosity models while preserving the
+  Sutherland defaults and legacy imports.
 - Add an optional Streamlit and Plotly local GUI prototype for flight
   conditions, oblique shocks, and flat-plate boundary layers.
 - Add single-condition and parameter-sweep views, selectable display units,

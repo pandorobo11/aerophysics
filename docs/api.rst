@@ -13,6 +13,9 @@ Gas and transport properties
 .. automodule:: aerophysics.gas
    :members:
 
+.. automodule:: aerophysics.transport
+   :members:
+
 Thermochemistry
 ---------------
 

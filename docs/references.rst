@@ -9,6 +9,33 @@ NASA-TM-X-74335, 1976.
 
 https://ntrs.nasa.gov/citations/19770009539
 
+Transport properties
+--------------------
+
+Keyes, F. G. *A Summary of Viscosity and Heat-Conduction Data for He, A, H2,
+O2, CO, CO2, H2O, and Air*. Transactions of the ASME, 73, 589--596, 1951.
+
+The dry-air Keyes equation and SI coefficients used here are also reproduced
+in Sandia Report SAND2010-1168C.
+
+https://www.osti.gov/servlets/purl/1124439
+
+Blottner, F. G., Johnson, M., and Ellis, M. *Chemically Reacting Viscous Flow
+Program for Multi-Component Gas Mixtures*. Sandia Report SC-RR-70-754, 1971.
+
+https://digital.library.unt.edu/ark:/67531/metadc1030568/
+
+Doraiswamy, S. *Computational Study of Nonequilibrium Chemistry in Carbon
+Dioxide Flows*. University of Minnesota, 2010. Appendix A records the Ar and
+CO2 Blottner coefficients used by the frozen dry-air preset.
+
+https://conservancy.umn.edu/handle/11299/99626
+
+Wilke, C. R. *A Viscosity Equation for Gas Mixtures*. Journal of Chemical
+Physics, 18(4), 517--519, 1950.
+
+https://doi.org/10.1063/1.1747673
+
 Thermochemistry
 ---------------
 

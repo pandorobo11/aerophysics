@@ -1,8 +1,9 @@
-"""Perfect-gas thermodynamics and air transport-property models.
+"""Calorically perfect-gas thermodynamics.
 
-The default dry-air and transport constants follow the U.S. Standard
-Atmosphere 1976. All temperatures are in kelvin and all returned properties
-use SI units.
+The default dry-air constants follow the U.S. Standard Atmosphere 1976. All
+temperatures are in kelvin and all returned properties use SI units. Transport
+models remain re-exported here for compatibility; new code should import them
+from :mod:`aerophysics.transport`.
 """
 
 from dataclasses import dataclass
@@ -12,6 +13,12 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
+from aerophysics.transport import (
+    AIR_CONDUCTIVITY,
+    AIR_VISCOSITY,
+    SutherlandModel,
+    USSAConductivityModel,
+)
 
 
 def _require_finite_positive(value: float, *, name: str) -> None:
@@ -68,92 +75,11 @@ class PerfectGas:
         return return_float(result, scalar=scalar)
 
 
-@dataclass(frozen=True, slots=True)
-class SutherlandModel:
-    """Sutherland dynamic-viscosity model for a gas."""
-
-    reference_viscosity: float
-    reference_temperature: float
-    sutherland_temperature: float
-
-    def __post_init__(self) -> None:
-        _require_finite_positive(self.reference_viscosity, name="reference_viscosity")
-        _require_finite_positive(
-            self.reference_temperature, name="reference_temperature"
-        )
-        _require_finite_positive(
-            self.sutherland_temperature, name="sutherland_temperature"
-        )
-
-    @overload
-    def dynamic_viscosity(self, temperature: float) -> float: ...
-
-    @overload
-    def dynamic_viscosity(self, temperature: ArrayLike) -> FloatArray: ...
-
-    def dynamic_viscosity(self, temperature: ArrayLike) -> FloatResult:
-        """Return dynamic viscosity in Pa s."""
-        values, scalar = as_float_array(temperature, name="temperature")
-        if np.any(values <= 0.0):
-            raise ValueError("temperature must be greater than zero")
-        ratio = values / self.reference_temperature
-        result = (
-            self.reference_viscosity
-            * ratio**1.5
-            * (self.reference_temperature + self.sutherland_temperature)
-            / (values + self.sutherland_temperature)
-        )
-        return return_float(result, scalar=scalar)
-
-
-@dataclass(frozen=True, slots=True)
-class USSAConductivityModel:
-    """U.S. Standard Atmosphere 1976 air-conductivity correlation."""
-
-    coefficient: float = 2.64638e-3
-    additive_temperature: float = 245.4
-    exponential_temperature: float = 12.0
-
-    def __post_init__(self) -> None:
-        _require_finite_positive(self.coefficient, name="coefficient")
-        _require_finite_positive(self.additive_temperature, name="additive_temperature")
-        _require_finite_positive(
-            self.exponential_temperature, name="exponential_temperature"
-        )
-
-    @overload
-    def thermal_conductivity(self, temperature: float) -> float: ...
-
-    @overload
-    def thermal_conductivity(self, temperature: ArrayLike) -> FloatArray: ...
-
-    def thermal_conductivity(self, temperature: ArrayLike) -> FloatResult:
-        """Return thermal conductivity in W/(m K)."""
-        values, scalar = as_float_array(temperature, name="temperature")
-        if np.any(values <= 0.0):
-            raise ValueError("temperature must be greater than zero")
-        denominator = values + self.additive_temperature * 10.0 ** (
-            -self.exponential_temperature / values
-        )
-        result = self.coefficient * values**1.5 / denominator
-        return return_float(result, scalar=scalar)
-
-
 AIR = PerfectGas(
     specific_gas_constant=8_314.32 / 28.9644,
     heat_capacity_ratio=1.4,
 )
 """Calorically perfect dry air using U.S. Standard Atmosphere constants."""
-
-AIR_VISCOSITY = SutherlandModel(
-    reference_viscosity=1.7894e-5,
-    reference_temperature=288.15,
-    sutherland_temperature=110.4,
-)
-"""Default Sutherland viscosity model for dry air."""
-
-AIR_CONDUCTIVITY = USSAConductivityModel()
-"""Default U.S. Standard Atmosphere thermal-conductivity model."""
 
 __all__ = [
     "AIR",

@@ -35,7 +35,8 @@ from scipy.optimize import brentq
 
 from aerophysics._array import FloatArray, as_float_array
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
-from aerophysics.gas import AIR, AIR_VISCOSITY, PerfectGas, SutherlandModel
+from aerophysics.gas import AIR, PerfectGas
+from aerophysics.transport import AIR_VISCOSITY, DynamicViscosityModel
 
 
 class CompressibleVelocityTransformation(StrEnum):
@@ -117,7 +118,7 @@ class _InverseParameters:
     von_karman_constant: float
     log_law_intercept: float
     gas: PerfectGas
-    viscosity_model: SutherlandModel
+    viscosity_model: DynamicViscosityModel
 
 
 def _positive_scalar(value: float, *, name: str) -> float:
@@ -498,7 +499,7 @@ def compressible_turbulent_boundary_layer_profile(
     von_karman_constant: float = 0.41,
     log_law_intercept: float = 5.2,
     gas: PerfectGas = AIR,
-    viscosity_model: SutherlandModel = AIR_VISCOSITY,
+    viscosity_model: DynamicViscosityModel = AIR_VISCOSITY,
 ) -> CompressibleBoundaryLayerProfileResult:
     """Predict a compressible Spalding--Coles mean-property profile.
 
@@ -532,7 +533,8 @@ def compressible_turbulent_boundary_layer_profile(
     von_karman_constant, log_law_intercept:
         Constants in the Spalding law of the wall and Coles wake amplitude.
     gas, viscosity_model:
-        Perfect-gas and Sutherland models used for thermodynamic properties.
+        Perfect-gas and dynamic-viscosity models used for thermodynamic
+        properties.
 
     Notes
     -----

@@ -65,7 +65,8 @@ Calculation APIs use SI units. Use explicit functions from
 ## Models and references
 
 - Atmospheric state and transport properties: *U.S. Standard Atmosphere,
-  1976*, NOAA-S/T 76-1562 and NASA-TM-X-74335.
+  1976*, Sutherland, Keyes, and frozen-composition Blottner/Wilke viscosity
+  models.
 - Isentropic perfect-gas relations: NACA Report 1135, *Equations, Tables, and
   Charts for Compressible Flow*.
 - Normal and oblique shocks, supersonic Pitot pressure, and Prandtl–Meyer

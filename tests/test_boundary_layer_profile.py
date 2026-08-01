@@ -17,6 +17,7 @@ from aerophysics.boundary_layer_profile import (
 )
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import AIR, AIR_VISCOSITY
+from aerophysics.transport import AIR_KEYES_VISCOSITY
 
 
 def _profile(
@@ -184,6 +185,24 @@ def test_inverse_profile_satisfies_edge_and_property_relations(
     ):
         assert values.shape == (1001,)
         assert values.dtype == np.float64
+
+
+def test_inverse_profile_accepts_keyes_viscosity_model() -> None:
+    result = compressible_turbulent_boundary_layer_profile(
+        np.linspace(0.0, 0.05, 101),
+        300.0,
+        1.0,
+        300.0,
+        0.05,
+        85.0,
+        transformation=CompressibleVelocityTransformation.VAN_DRIEST,
+        wall_temperature=250.0,
+        viscosity_model=AIR_KEYES_VISCOSITY,
+    )
+    assert_allclose(
+        result.dynamic_viscosity,
+        AIR_KEYES_VISCOSITY.dynamic_viscosity(result.temperature),
+    )
 
 
 def test_gra_and_walz_temperature_formulas() -> None:

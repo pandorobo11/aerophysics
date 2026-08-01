@@ -238,7 +238,8 @@ For ``CompressibilityCorrection.ECKERT``,
    \qquad
    Re_x^*=Re_x\frac{T_e}{T^*}\frac{\mu_e}{\mu^*}.
 
-Here :math:`\mu^*=\mu(T^*)` is evaluated with the selected Sutherland model.
+Here :math:`\mu^*=\mu(T^*)` is evaluated with the selected dynamic-viscosity
+model.
 The incompressible thickness and friction correlations are evaluated at
 :math:`Re_x^*`.
 
@@ -503,6 +504,6 @@ Overall applicability
 The flat-plate model excludes surface roughness, streamwise pressure
 gradients, separation, suction, blowing, and natural-transition prediction.
 The gas remains calorically perfect and compressible transport properties use
-the supplied Sutherland model. The thickness correlations and protrusion
+the supplied dynamic-viscosity model. The thickness correlations and protrusion
 corrections are engineering estimates rather than resolved profile or
 three-dimensional flow solutions.

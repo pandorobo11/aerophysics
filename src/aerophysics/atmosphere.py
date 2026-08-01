@@ -17,7 +17,8 @@ from numpy.typing import ArrayLike
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
 from aerophysics.exceptions import ModelRangeError
-from aerophysics.gas import AIR, AIR_CONDUCTIVITY, AIR_VISCOSITY
+from aerophysics.gas import AIR
+from aerophysics.transport import AIR_CONDUCTIVITY, AIR_VISCOSITY
 
 EARTH_RADIUS: Final = 6_356_766.0
 """Effective Earth radius in metres used by U.S. Standard Atmosphere 1976."""
