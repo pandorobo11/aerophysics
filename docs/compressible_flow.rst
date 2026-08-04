@@ -1,16 +1,19 @@
 Compressible-flow relations
 ===========================
 
-This page groups the calorically perfect-gas relations used for isentropic
-flow, shock waves, and Prandtl--Meyer expansions. State-ratio directions and
-angle conventions are stated with each model so results can be compared
-without consulting a separate conventions page.
+This page groups the ideal-gas relations used for isentropic flow, shock
+waves, and Prandtl--Meyer expansions. Isentropic calculations support both
+calorically and thermally perfect gases; the shock and expansion models remain
+calorically perfect. State-ratio directions and angle conventions are stated
+with each model so results can be compared without consulting a separate
+conventions page.
 
 Common assumptions and conventions
 ----------------------------------
 
-The models assume steady flow of a calorically perfect gas. Isentropic
-relations additionally require adiabatic flow without entropy production.
+The models assume steady ideal-gas flow. Isentropic relations additionally
+require adiabatic flow without entropy production and may use either constant
+heat capacities or frozen-composition temperature-dependent heat capacities.
 Shock and expansion state ratios are downstream over upstream; isentropic
 state ratios are total over static. Angles are in radians. Convert explicitly
 with :func:`aerophysics.units.degrees_to_radians` and
@@ -18,6 +21,9 @@ with :func:`aerophysics.units.degrees_to_radians` and
 
 Isentropic flow
 ---------------
+
+Calorically perfect gas
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Define the temperature factor
 
@@ -65,6 +71,62 @@ The dimensionless mass-flow parameter and mass flux are
    =\frac{p_0}{\sqrt{RT_0}}\operatorname{MFP}(M).
 
 The choked mass flux is the value at :math:`M=1`.
+
+Thermally perfect gas
+^^^^^^^^^^^^^^^^^^^^^
+
+Passing a :class:`~aerophysics.thermochemistry.ThermallyPerfectGas` to the
+same API evaluates temperature-dependent enthalpy and entropy. The total
+temperature :math:`T_0` must then be supplied because the ratios are no longer
+functions of Mach number alone. Static temperature is the root of
+
+.. math::
+
+   h(T_0)-h(T)=\frac{M^2\gamma(T)RT}{2}.
+
+At fixed frozen composition, the entropy and ideal-gas relations give
+
+.. math::
+
+   \frac{p_0}{p}
+   =\exp\left[\frac{s^\circ(T_0)-s^\circ(T)}{R}\right],
+   \qquad
+   \frac{\rho_0}{\rho}=\frac{p_0}{p}\frac{T}{T_0}.
+
+The temperature-dependent mass-flow parameter is
+
+.. math::
+
+   \operatorname{MFP}(M,T_0)
+   =\frac{M\sqrt{\gamma(T)T_0/T}}{p_0/p}.
+
+The sonic state at the same :math:`T_0` defines
+:math:`\operatorname{MFP}^*`; consequently
+:math:`A/A^*=\operatorname{MFP}^*/\operatorname{MFP}` and the choked mass
+flux remains the value at :math:`M=1`. Ratio and area inverses use bounded
+numerical roots and retain the explicit subsonic/supersonic branch choice.
+
+>>> from aerophysics import AIR_NASA9
+>>> from aerophysics.isentropic import isentropic_ratios
+>>> thermal = isentropic_ratios(
+...     2.0,
+...     AIR_NASA9,
+...     total_temperature=1000.0,
+...     allow_extrapolation=False,
+... )
+>>> round(thermal.total_temperature_ratio, 6)
+1.72214
+>>> round(thermal.total_pressure_ratio, 6)
+7.894673
+
+``AIR_NASA7`` and ``AIR_NASA9`` have a fitted range of 200--6000 K. The
+isentropic API extrapolates the nearest polynomial region by default and emits
+one :class:`~aerophysics.exceptions.ApplicabilityWarning` per public call when
+the total, static, or critical temperature is outside that range. Pass
+``allow_extrapolation=False`` for strict range enforcement. Extrapolated
+values, especially far below 200 K, should be treated cautiously.
+The local GUI exposes ``AIR``, ``NASA7``, and ``NASA9`` as mutually exclusive
+gas-model choices and includes total and static temperature in exported rows.
 
 .. list-table:: Isentropic-flow symbols
    :header-rows: 1

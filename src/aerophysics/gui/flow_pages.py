@@ -102,6 +102,13 @@ def render_isentropic(preferences: UnitPreferences) -> None:
     default_mode = str(imported.get("mode", "single")) if imported else "single"
     default_basis = str(models.get("input_basis", "mach"))
     default_branch = str(models.get("branch", MachBranch.SUBSONIC.value))
+    default_gas_model = str(models.get("gas_model", "AIR"))
+    stored_total_temperature = inputs.get("total_temperature", 300.0)
+    default_total_temperature = (
+        float(stored_total_temperature)
+        if isinstance(stored_total_temperature, (int, float))
+        else 300.0
+    )
 
     with st.form("isentropic_form"):
         mode = st.radio(
@@ -112,6 +119,23 @@ def render_isentropic(preferences: UnitPreferences) -> None:
             horizontal=True,
             key="isentropic_mode",
         )
+        gas_models = ("AIR", "NASA7", "NASA9")
+        gas_model = st.selectbox(
+            "気体モデル",
+            gas_models,
+            index=(
+                gas_models.index(default_gas_model)
+                if default_gas_model in gas_models
+                else 0
+            ),
+            format_func=lambda value: {
+                "AIR": "定比熱 AIR",
+                "NASA7": "熱的完全気体 NASA7",
+                "NASA9": "熱的完全気体 NASA9",
+            }[value],
+            key="isentropic_gas_model",
+        )
+        assert gas_model is not None
         bases = tuple(_ISENTROPIC_LABELS)
         basis = st.selectbox(
             "入力基準",
@@ -141,38 +165,41 @@ def render_isentropic(preferences: UnitPreferences) -> None:
             )
             assert branch is not None
         with_mass_flux = st.checkbox(
-            "全圧・全温を指定して質量流束を計算",
+            "全圧を指定して質量流束を計算",
             value=bool(models.get("with_mass_flux", False)),
             key="isentropic_with_flux",
         )
-        total_pressure = total_temperature = None
+        total_temperature_display = finite_number(
+            f"全温 T₀ [{preferences.temperature}]",
+            _display(
+                default_total_temperature,
+                "temperature",
+                preferences.temperature,
+            ),
+            key="isentropic_total_temperature",
+        )
+        total_temperature = _si(
+            total_temperature_display, "temperature", preferences.temperature
+        )
+        allow_extrapolation = st.checkbox(
+            "NASA多項式の200–6000 K外への外挿を許可",
+            value=bool(models.get("allow_extrapolation", True)),
+            disabled=gas_model == "AIR",
+            key="isentropic_allow_extrapolation",
+        )
+        total_pressure = None
         if with_mass_flux:
-            left, right = st.columns(2)
-            with left:
-                pressure_display = finite_number(
-                    f"全圧 p₀ [{preferences.pressure}]",
-                    _display(
-                        float(inputs.get("total_pressure", 101_325.0)),
-                        "pressure",
-                        preferences.pressure,
-                    ),
-                    key="isentropic_total_pressure",
-                    min_value=1e-12,
-                )
-            with right:
-                temperature_display = finite_number(
-                    f"全温 T₀ [{preferences.temperature}]",
-                    _display(
-                        float(inputs.get("total_temperature", 300.0)),
-                        "temperature",
-                        preferences.temperature,
-                    ),
-                    key="isentropic_total_temperature",
-                )
-            total_pressure = _si(pressure_display, "pressure", preferences.pressure)
-            total_temperature = _si(
-                temperature_display, "temperature", preferences.temperature
+            pressure_display = finite_number(
+                f"全圧 p₀ [{preferences.pressure}]",
+                _display(
+                    float(inputs.get("total_pressure", 101_325.0)),
+                    "pressure",
+                    preferences.pressure,
+                ),
+                key="isentropic_total_pressure",
+                min_value=1e-12,
             )
+            total_pressure = _si(pressure_display, "pressure", preferences.pressure)
         start = stop = 0.0
         points = 101
         if mode == "sweep":
@@ -212,8 +239,10 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                     input_value=input_value,
                     input_basis=basis,
                     branch=branch,
+                    gas_model=gas_model,
                     total_pressure=total_pressure,
                     total_temperature=total_temperature,
+                    allow_extrapolation=allow_extrapolation,
                 )
             else:
                 result = isentropic_sweep(
@@ -222,8 +251,10 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                     start=start,
                     stop=stop,
                     points=points,
+                    gas_model=gas_model,
                     total_pressure=total_pressure,
                     total_temperature=total_temperature,
+                    allow_extrapolation=allow_extrapolation,
                 )
                 sweep_configuration = {
                     "field": "input_value",
@@ -242,7 +273,9 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                 models={
                     "input_basis": basis,
                     "branch": branch.value,
+                    "gas_model": gas_model,
                     "with_mass_flux": with_mass_flux,
+                    "allow_extrapolation": allow_extrapolation,
                 },
                 units=preferences,
                 sweep_si=sweep_configuration,
@@ -255,7 +288,10 @@ def render_isentropic(preferences: UnitPreferences) -> None:
     payload = _payload("isentropic_payload")
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
-            st.write("定常・断熱・可逆な熱量的完全気体AIRを仮定します。")
+            st.write(
+                "定常・断熱・可逆な理想気体流れを仮定します。NASA7/NASA9は"
+                "凍結組成で、範囲外では警告付き外挿です。"
+            )
         return
     result, configuration = payload
 
@@ -283,7 +319,8 @@ def render_isentropic(preferences: UnitPreferences) -> None:
     with st.expander("モデルの前提・適用範囲"):
         st.write(
             "状態量比は全量/静量です。A/A* > 1の逆計算では亜音速枝または"
-            "超音速枝を必ず選択します。"
+            "超音速枝を必ず選択します。NASA7/NASA9は凍結組成の熱的完全"
+            "気体で、解離・反応・電離は含みません。"
         )
 
 

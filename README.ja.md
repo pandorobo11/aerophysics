@@ -91,6 +91,17 @@ print(AIR_NASA9.sensible_enthalpy(
     1000.0,
     reference_temperature=298.15,
 ))
+
+# 熱的完全気体の等エントロピー流れには全温を指定します。
+from aerophysics.isentropic import isentropic_ratios
+
+ratios = isentropic_ratios(
+    2.0,
+    AIR_NASA9,
+    total_temperature=1000.0,
+    allow_extrapolation=False,
+)
+print(ratios.total_pressure_ratio)  # 7.89467...
 ```
 
 乾燥空気の計算例は次のとおりです。今回採用したNASA7/9データは、4成分
@@ -116,10 +127,12 @@ print(AIR_NASA9.sensible_enthalpy(
 `ApplicabilityWarning` が通知されます。
 
 6000 Kまで数値評価できても、ここでの組成は凍結されています。実際の高温
-空気で生じる解離・電離・化学平衡・熱的非平衡は扱いません。また、
-`AIR_NASA7`/`AIR_NASA9` の局所的な $\gamma(T)$ を、定数 $\gamma$ を仮定
-する既存の衝撃波・等エントロピー・Prandtl–Meyer解析式へ代入することは
-できません。
+空気で生じる解離・電離・化学平衡・熱的非平衡は扱いません。等エントロピー
+APIは、全温を指定してNASA多項式のエンタルピー・エントロピー変化を解く
+ことで熱的完全気体に対応します。公称範囲外は既定で警告付き外挿となり、
+`allow_extrapolation=False` で厳密に禁止できます。衝撃波と
+Prandtl–Meyer解析は引き続き定比熱モデル専用で、局所的な $\gamma(T)$ を
+定数 $\gamma$ の解析式へ代入することはできません。
 
 境界層内の単独突起について、自由流中の抗力係数と前面積上の有効動圧積分
 から直接抗力を推定できます。既定の乱流 1/7 乗速度分布、任意の速度・密度

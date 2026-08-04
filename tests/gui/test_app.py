@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from aerophysics.gui.adapters import FlightCase
@@ -143,6 +144,56 @@ from aerophysics.gui.units import UnitPreferences
         assert len(app.metric) == 4
         assert len(app.get("plotly_chart")) == plot_count
         assert len(app.download_button) == 2
+
+
+def test_isentropic_page_supports_thermally_perfect_air() -> None:
+    script = """
+from aerophysics.gui.flow_pages import render_isentropic
+from aerophysics.gui.units import UnitPreferences
+render_isentropic(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="isentropic_gas_model").set_value("NASA9").run()
+    app.number_input(key="isentropic_input").set_value(2.0).run()
+    app.number_input(key="isentropic_total_temperature").set_value(1000.0).run()
+    app.button(key="FormSubmitter:isentropic_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert app.dataframe[0].value["気体モデル"].tolist() == ["NASA9"]
+    assert app.dataframe[0].value["静温 T [K]"].iloc[0] == pytest.approx(
+        580.6729799
+    )
+
+
+def test_isentropic_page_loads_legacy_configuration_as_air() -> None:
+    script = """
+from aerophysics.gui.flow_pages import render_isentropic
+from aerophysics.gui.units import UnitPreferences
+render_isentropic(UnitPreferences())
+"""
+    configuration = make_configuration(
+        calculator="isentropic",
+        mode="single",
+        inputs_si={
+            "input_value": 2.0,
+            "total_pressure": None,
+            "total_temperature": None,
+        },
+        models={
+            "input_basis": "mach",
+            "branch": "subsonic",
+            "with_mass_flux": False,
+        },
+        units=UnitPreferences(),
+    )
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_isentropic_configuration"] = configuration
+    app.run()
+    assert app.selectbox(key="isentropic_gas_model").value == "AIR"
+    assert app.number_input(key="isentropic_total_temperature").value == 300.0
+    app.button(key="FormSubmitter:isentropic_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
 
 
 def test_expansion_sweep_marks_limit_rows() -> None:

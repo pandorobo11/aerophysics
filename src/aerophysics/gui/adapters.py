@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from aerophysics import FlightCondition
+from aerophysics import AIR_NASA7, AIR_NASA9, FlightCondition
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -19,6 +19,7 @@ from aerophysics.expansion import (
     prandtl_meyer_angle,
     prandtl_meyer_expansion,
 )
+from aerophysics.gas import AIR, PerfectGas
 from aerophysics.isentropic import (
     MachBranch,
     area_ratio,
@@ -41,6 +42,7 @@ from aerophysics.shocks import (
     oblique_shock,
     supersonic_pitot_pressure_ratio,
 )
+from aerophysics.thermochemistry import ThermallyPerfectGas
 
 type CellValue = float | str | None
 type Row = dict[str, CellValue]
@@ -191,7 +193,22 @@ def flight_sweep(
     )
 
 
-def _mach_from_isentropic_input(value: float, basis: str, branch: MachBranch) -> float:
+_ISENTROPIC_GASES: dict[str, PerfectGas | ThermallyPerfectGas] = {
+    "AIR": AIR,
+    "NASA7": AIR_NASA7,
+    "NASA9": AIR_NASA9,
+}
+
+
+def _mach_from_isentropic_input(
+    value: float,
+    basis: str,
+    branch: MachBranch,
+    gas: PerfectGas | ThermallyPerfectGas,
+    total_temperature: float | None,
+    *,
+    allow_extrapolation: bool,
+) -> float:
     if basis == "mach":
         if value < 0.0:
             raise ValueError("mach must be non-negative")
@@ -202,12 +219,27 @@ def _mach_from_isentropic_input(value: float, basis: str, branch: MachBranch) ->
         "density_ratio": mach_from_total_density_ratio,
     }
     if basis == "area_ratio":
-        return float(mach_from_area_ratio(value, branch))
+        return float(
+            mach_from_area_ratio(
+                value,
+                branch,
+                gas,
+                total_temperature=total_temperature,
+                allow_extrapolation=allow_extrapolation,
+            )
+        )
     try:
         inverse = inverse_functions[basis]
     except KeyError as error:
         raise ValueError("unsupported isentropic input basis") from error
-    return float(inverse(value))
+    return float(
+        inverse(
+            value,
+            gas,
+            total_temperature=total_temperature,
+            allow_extrapolation=allow_extrapolation,
+        )
+    )
 
 
 def isentropic_condition(
@@ -215,50 +247,124 @@ def isentropic_condition(
     input_value: float | np.ndarray,
     input_basis: str,
     branch: MachBranch = MachBranch.SUBSONIC,
+    gas_model: str = "AIR",
     total_pressure: float | None = None,
     total_temperature: float | None = None,
+    allow_extrapolation: bool = True,
 ) -> CalculationResult:
     """Calculate isentropic state, inverse, area, and mass-flow relations."""
-    if (total_pressure is None) != (total_temperature is None):
+    try:
+        gas = _ISENTROPIC_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("gas_model must be AIR, NASA7, or NASA9") from error
+    if isinstance(gas, ThermallyPerfectGas) and total_temperature is None:
         raise ValueError(
-            "total_pressure and total_temperature must be specified together"
+            "total_temperature is required for a thermally perfect gas"
         )
-    critical = critical_ratios()
+    if total_pressure is not None and total_temperature is None:
+        raise ValueError(
+            "total_temperature is required when total_pressure is specified"
+        )
+
     rows: list[Row] = []
-    for raw_value in _array(input_value):
-        value = float(raw_value)
-        mach = _mach_from_isentropic_input(value, input_basis, branch)
-        ratios = isentropic_ratios(mach)
-        flux = (
-            float(mass_flux(total_pressure, total_temperature, mach))
-            if total_pressure is not None and total_temperature is not None
-            else None
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        critical = critical_ratios(
+            gas,
+            total_temperature=total_temperature,
+            allow_extrapolation=allow_extrapolation,
         )
-        choked = (
-            float(choked_mass_flux(total_pressure, total_temperature))
-            if total_pressure is not None and total_temperature is not None
-            else None
-        )
-        rows.append(
-            {
-                "input_value": value,
-                "input_basis": input_basis,
-                "mach": mach,
-                "total_temperature_ratio": float(ratios.total_temperature_ratio),
-                "total_pressure_ratio": float(ratios.total_pressure_ratio),
-                "total_density_ratio": float(ratios.total_density_ratio),
-                "area_ratio": float(area_ratio(mach)) if mach > 0.0 else None,
-                "mass_flow_parameter": float(mass_flow_parameter(mach)),
-                "mass_flux": flux,
-                "choked_mass_flux": choked,
-                "critical_temperature_ratio": critical.total_temperature_ratio,
-                "critical_pressure_ratio": critical.total_pressure_ratio,
-                "critical_density_ratio": critical.total_density_ratio,
-                "status": "ok",
-                "message": "",
-            }
-        )
-    return CalculationResult(tuple(rows))
+        for raw_value in _array(input_value):
+            value = float(raw_value)
+            mach = _mach_from_isentropic_input(
+                value,
+                input_basis,
+                branch,
+                gas,
+                total_temperature,
+                allow_extrapolation=allow_extrapolation,
+            )
+            ratios = isentropic_ratios(
+                mach,
+                gas,
+                total_temperature=total_temperature,
+                allow_extrapolation=allow_extrapolation,
+            )
+            flux = (
+                float(
+                    mass_flux(
+                        total_pressure,
+                        total_temperature,
+                        mach,
+                        gas,
+                        allow_extrapolation=allow_extrapolation,
+                    )
+                )
+                if total_pressure is not None and total_temperature is not None
+                else None
+            )
+            choked = (
+                float(
+                    choked_mass_flux(
+                        total_pressure,
+                        total_temperature,
+                        gas,
+                        allow_extrapolation=allow_extrapolation,
+                    )
+                )
+                if total_pressure is not None and total_temperature is not None
+                else None
+            )
+            rows.append(
+                {
+                    "gas_model": gas_model,
+                    "input_value": value,
+                    "input_basis": input_basis,
+                    "mach": mach,
+                    "total_temperature": total_temperature,
+                    "static_temperature": (
+                        total_temperature / float(ratios.total_temperature_ratio)
+                        if total_temperature is not None
+                        else None
+                    ),
+                    "total_temperature_ratio": float(
+                        ratios.total_temperature_ratio
+                    ),
+                    "total_pressure_ratio": float(ratios.total_pressure_ratio),
+                    "total_density_ratio": float(ratios.total_density_ratio),
+                    "area_ratio": (
+                        float(
+                            area_ratio(
+                                mach,
+                                gas,
+                                total_temperature=total_temperature,
+                                allow_extrapolation=allow_extrapolation,
+                            )
+                        )
+                        if mach > 0.0
+                        else None
+                    ),
+                    "mass_flow_parameter": float(
+                        mass_flow_parameter(
+                            mach,
+                            gas,
+                            total_temperature=total_temperature,
+                            allow_extrapolation=allow_extrapolation,
+                        )
+                    ),
+                    "mass_flux": flux,
+                    "choked_mass_flux": choked,
+                    "critical_temperature_ratio": float(
+                        critical.total_temperature_ratio
+                    ),
+                    "critical_pressure_ratio": float(critical.total_pressure_ratio),
+                    "critical_density_ratio": float(critical.total_density_ratio),
+                    "status": "ok",
+                    "message": "",
+                }
+            )
+    messages = tuple(dict.fromkeys(str(item.message) for item in captured))
+    return CalculationResult(tuple(rows), messages)
 
 
 def isentropic_sweep(
@@ -268,16 +374,20 @@ def isentropic_sweep(
     start: float,
     stop: float,
     points: int,
+    gas_model: str = "AIR",
     total_pressure: float | None = None,
     total_temperature: float | None = None,
+    allow_extrapolation: bool = True,
 ) -> CalculationResult:
     """Sweep the selected isentropic input quantity."""
     return isentropic_condition(
         input_value=sweep_values(start, stop, points),
         input_basis=input_basis,
         branch=branch,
+        gas_model=gas_model,
         total_pressure=total_pressure,
         total_temperature=total_temperature,
+        allow_extrapolation=allow_extrapolation,
     )
 
 

@@ -117,6 +117,8 @@ def test_isentropic_adapter_forward_inverse_and_mass_flux() -> None:
     )
     assert forward.rows[0]["mass_flux"] is not None
     assert forward.rows[0]["choked_mass_flux"] is not None
+    assert forward.rows[0]["gas_model"] == "AIR"
+    assert forward.rows[0]["static_temperature"] == pytest.approx(300.0 / 1.8)
     area_inverse = isentropic_condition(
         input_value=2.0,
         input_basis="area_ratio",
@@ -141,7 +143,7 @@ def test_isentropic_sweep_and_validation() -> None:
         points=3,
     )
     assert len(result.rows) == 3
-    with pytest.raises(ValueError, match="specified together"):
+    with pytest.raises(ValueError, match="total_temperature is required"):
         isentropic_condition(
             input_value=1.0,
             input_basis="mach",
@@ -149,6 +151,58 @@ def test_isentropic_sweep_and_validation() -> None:
         )
     with pytest.raises(ValueError, match="unsupported"):
         isentropic_condition(input_value=1.0, input_basis="other")
+
+
+def test_thermally_perfect_isentropic_adapter_forward_inverse_and_warning() -> None:
+    forward = isentropic_condition(
+        input_value=2.0,
+        input_basis="mach",
+        gas_model="NASA9",
+        total_pressure=100_000.0,
+        total_temperature=1000.0,
+        allow_extrapolation=False,
+    )
+    row = forward.rows[0]
+    assert row["gas_model"] == "NASA9"
+    assert row["static_temperature"] == pytest.approx(580.6729799)
+    assert row["total_pressure_ratio"] == pytest.approx(7.8946725)
+    assert row["mass_flux"] is not None
+    assert row["choked_mass_flux"] is not None
+    assert not forward.warnings
+
+    inverse = isentropic_condition(
+        input_value=float(row["total_pressure_ratio"]),  # type: ignore[arg-type]
+        input_basis="pressure_ratio",
+        gas_model="NASA9",
+        total_temperature=1000.0,
+        allow_extrapolation=False,
+    )
+    assert inverse.rows[0]["mach"] == pytest.approx(2.0)
+
+    extrapolated = isentropic_condition(
+        input_value=np.asarray([2.0, 3.0]),
+        input_basis="mach",
+        gas_model="NASA9",
+        total_temperature=300.0,
+    )
+    assert len(extrapolated.warnings) == 1
+    assert "extrapolated" in extrapolated.warnings[0]
+
+
+def test_thermally_perfect_isentropic_adapter_validation() -> None:
+    with pytest.raises(ValueError, match="thermally perfect"):
+        isentropic_condition(
+            input_value=1.0,
+            input_basis="mach",
+            gas_model="NASA7",
+        )
+    with pytest.raises(ValueError, match="gas_model"):
+        isentropic_condition(
+            input_value=1.0,
+            input_basis="mach",
+            gas_model="equilibrium",
+            total_temperature=1000.0,
+        )
 
 
 def test_normal_shock_adapter_and_sweep() -> None:

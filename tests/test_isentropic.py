@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from aerophysics import AIR_NASA7, AIR_NASA9
+from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import PerfectGas
 from aerophysics.isentropic import (
     MachBranch,
@@ -18,6 +20,27 @@ from aerophysics.isentropic import (
     mass_flow_parameter,
     mass_flux,
 )
+from aerophysics.thermochemistry import (
+    UNIVERSAL_GAS_CONSTANT,
+    IdealGasSpecies,
+    NASA7Polynomial,
+    ThermallyPerfectGas,
+)
+
+
+def _constant_cp_gas() -> tuple[PerfectGas, ThermallyPerfectGas]:
+    gas_constant = 287.0
+    caloric = PerfectGas(gas_constant, 1.4)
+    polynomial = NASA7Polynomial(
+        (100.0, 10_000.0),
+        ((3.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),),
+    )
+    species = IdealGasSpecies(
+        "constant-cp",
+        UNIVERSAL_GAS_CONSTANT / gas_constant,
+        polynomial,
+    )
+    return caloric, ThermallyPerfectGas((species,), (1.0,))
 
 
 def test_isentropic_reference_values() -> None:
@@ -150,3 +173,302 @@ def test_mass_flux_rejects_invalid_or_incompatible_inputs() -> None:
         mass_flux(100_000.0, 0.0, 1.0)
     with pytest.raises(ValueError, match="broadcastable"):
         mass_flux([1.0, 2.0], [1.0, 2.0, 3.0], 1.0)
+
+
+def test_constant_cp_thermal_model_matches_closed_form_relations() -> None:
+    caloric, thermal = _constant_cp_gas()
+    total_temperature = 1000.0
+    mach = np.asarray([0.0, 0.5, 1.0, 2.0])
+
+    expected = isentropic_ratios(mach, caloric)
+    actual = isentropic_ratios(
+        mach,
+        thermal,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    )
+    assert_allclose(actual.total_temperature_ratio, expected.total_temperature_ratio)
+    assert_allclose(actual.total_pressure_ratio, expected.total_pressure_ratio)
+    assert_allclose(actual.total_density_ratio, expected.total_density_ratio)
+    assert_allclose(
+        mass_flow_parameter(
+            mach,
+            thermal,
+            total_temperature=total_temperature,
+            allow_extrapolation=False,
+        ),
+        mass_flow_parameter(mach, caloric),
+    )
+    assert_allclose(
+        area_ratio(
+            mach[1:],
+            thermal,
+            total_temperature=total_temperature,
+            allow_extrapolation=False,
+        ),
+        area_ratio(mach[1:], caloric),
+    )
+
+    expected_critical = critical_ratios(caloric)
+    actual_critical = critical_ratios(
+        thermal,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    )
+    assert actual_critical.total_temperature_ratio == pytest.approx(
+        expected_critical.total_temperature_ratio
+    )
+    assert actual_critical.total_pressure_ratio == pytest.approx(
+        expected_critical.total_pressure_ratio
+    )
+    assert actual_critical.total_density_ratio == pytest.approx(
+        expected_critical.total_density_ratio
+    )
+    assert mass_flux(
+        200_000.0,
+        total_temperature,
+        2.0,
+        thermal,
+        allow_extrapolation=False,
+    ) == pytest.approx(mass_flux(200_000.0, total_temperature, 2.0, caloric))
+
+
+def test_nasa9_forward_relations_conserve_energy_and_entropy() -> None:
+    total_temperature = 1000.0
+    total_pressure = 100_000.0
+    mach = 2.0
+    result = isentropic_ratios(
+        mach,
+        AIR_NASA9,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    )
+    static_temperature = total_temperature / result.total_temperature_ratio
+    static_pressure = total_pressure / result.total_pressure_ratio
+    velocity = mach * AIR_NASA9.speed_of_sound(static_temperature)
+
+    assert result.total_temperature_ratio == pytest.approx(1.7221397147)
+    assert result.total_pressure_ratio == pytest.approx(7.8946725067)
+    assert result.total_density_ratio == pytest.approx(4.5842230101)
+    assert AIR_NASA9.standard_enthalpy(total_temperature) == pytest.approx(
+        AIR_NASA9.standard_enthalpy(static_temperature) + 0.5 * velocity**2
+    )
+    assert AIR_NASA9.entropy(total_temperature, total_pressure) == pytest.approx(
+        AIR_NASA9.entropy(static_temperature, static_pressure)
+    )
+    assert result.total_density_ratio == pytest.approx(
+        result.total_pressure_ratio * static_temperature / total_temperature
+    )
+
+
+@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
+def test_thermal_relations_vectorize_and_all_inverses_round_trip(
+    gas: ThermallyPerfectGas,
+) -> None:
+    mach = np.asarray([[0.0], [0.5], [1.0], [2.0]])
+    total_temperature = np.asarray([[1000.0, 1500.0]])
+    ratios = isentropic_ratios(
+        mach,
+        gas,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    )
+    expected_mach = np.broadcast_to(mach, (4, 2))
+    assert np.asarray(ratios.total_pressure_ratio).shape == (4, 2)
+    assert_allclose(
+        mach_from_total_temperature_ratio(
+            ratios.total_temperature_ratio,
+            gas,
+            total_temperature=total_temperature,
+            allow_extrapolation=False,
+        ),
+        expected_mach,
+        atol=2e-12,
+    )
+    assert_allclose(
+        mach_from_total_pressure_ratio(
+            ratios.total_pressure_ratio,
+            gas,
+            total_temperature=total_temperature,
+            allow_extrapolation=False,
+        ),
+        expected_mach,
+        atol=2e-12,
+    )
+    assert_allclose(
+        mach_from_total_density_ratio(
+            ratios.total_density_ratio,
+            gas,
+            total_temperature=total_temperature,
+            allow_extrapolation=False,
+        ),
+        expected_mach,
+        atol=2e-12,
+    )
+
+
+@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
+def test_thermal_area_branches_critical_state_and_choking(
+    gas: ThermallyPerfectGas,
+) -> None:
+    total_temperature = 1000.0
+    subsonic_ratio = area_ratio(
+        0.4,
+        gas,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    )
+    supersonic_ratio = area_ratio(
+        2.0,
+        gas,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    )
+    assert mach_from_area_ratio(
+        subsonic_ratio,
+        MachBranch.SUBSONIC,
+        gas,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    ) == pytest.approx(0.4)
+    assert mach_from_area_ratio(
+        supersonic_ratio,
+        MachBranch.SUPERSONIC,
+        gas,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    ) == pytest.approx(2.0)
+
+    critical = critical_ratios(
+        gas,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    )
+    at_one = isentropic_ratios(
+        1.0,
+        gas,
+        total_temperature=total_temperature,
+        allow_extrapolation=False,
+    )
+    assert critical.total_temperature_ratio == at_one.total_temperature_ratio
+    assert critical.total_pressure_ratio == at_one.total_pressure_ratio
+    assert critical.total_density_ratio == at_one.total_density_ratio
+    choked = choked_mass_flux(
+        100_000.0,
+        total_temperature,
+        gas,
+        allow_extrapolation=False,
+    )
+    assert choked > mass_flux(
+        100_000.0,
+        total_temperature,
+        0.9,
+        gas,
+        allow_extrapolation=False,
+    )
+    assert choked > mass_flux(
+        100_000.0,
+        total_temperature,
+        1.1,
+        gas,
+        allow_extrapolation=False,
+    )
+
+
+def test_thermal_critical_ratios_and_mass_flux_broadcast() -> None:
+    temperatures = np.asarray([800.0, 1200.0])
+    critical = critical_ratios(
+        AIR_NASA9,
+        total_temperature=temperatures,
+        allow_extrapolation=False,
+    )
+    assert isinstance(critical.total_pressure_ratio, np.ndarray)
+    assert critical.total_pressure_ratio.shape == (2,)
+    flux = mass_flux(
+        [[100_000.0], [200_000.0]],
+        temperatures,
+        1.0,
+        AIR_NASA9,
+        allow_extrapolation=False,
+    )
+    assert isinstance(flux, np.ndarray)
+    assert flux.shape == (2, 2)
+    assert_allclose(flux[1], 2.0 * flux[0])
+
+
+def test_strict_supersonic_area_inverse_uses_available_temperature_range() -> None:
+    target = area_ratio(
+        1.2,
+        AIR_NASA9,
+        total_temperature=300.0,
+        allow_extrapolation=False,
+    )
+    assert mach_from_area_ratio(
+        target,
+        MachBranch.SUPERSONIC,
+        AIR_NASA9,
+        total_temperature=300.0,
+        allow_extrapolation=False,
+    ) == pytest.approx(1.2)
+
+
+def test_thermal_default_extrapolation_warns_once_and_strict_mode_rejects() -> None:
+    with pytest.warns(ApplicabilityWarning) as caught:
+        ratios = isentropic_ratios(
+            [2.0, 3.0],
+            AIR_NASA9,
+            total_temperature=300.0,
+        )
+    assert len(caught) == 1
+    assert np.all(np.isfinite(ratios.total_pressure_ratio))
+
+    with pytest.raises(ModelRangeError, match="below the fitted range"):
+        isentropic_ratios(
+            2.0,
+            AIR_NASA9,
+            total_temperature=300.0,
+            allow_extrapolation=False,
+        )
+
+
+@pytest.mark.parametrize(
+    "function,arguments",
+    [
+        (isentropic_ratios, (1.0, AIR_NASA9)),
+        (mach_from_total_temperature_ratio, (1.2, AIR_NASA9)),
+        (mach_from_total_pressure_ratio, (2.0, AIR_NASA9)),
+        (mach_from_total_density_ratio, (2.0, AIR_NASA9)),
+        (area_ratio, (1.0, AIR_NASA9)),
+        (mass_flow_parameter, (1.0, AIR_NASA9)),
+        (critical_ratios, (AIR_NASA9,)),
+    ],
+)
+def test_thermal_relations_require_total_temperature(
+    function: object, arguments: tuple[object, ...]
+) -> None:
+    assert callable(function)
+    with pytest.raises(ValueError, match="total_temperature is required"):
+        function(*arguments)
+
+
+def test_thermal_relations_reject_incompatible_and_nonphysical_models() -> None:
+    with pytest.raises(ValueError, match="broadcastable"):
+        isentropic_ratios(
+            [1.0, 2.0],
+            AIR_NASA9,
+            total_temperature=[500.0, 600.0, 700.0],
+        )
+
+    polynomial = NASA7Polynomial(
+        (100.0, 1000.0),
+        ((0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),),
+    )
+    species = IdealGasSpecies("invalid-cv", 0.03, polynomial)
+    nonphysical = ThermallyPerfectGas((species,), (1.0,))
+    with pytest.raises(ModelRangeError, match="heat capacity"):
+        isentropic_ratios(
+            1.0,
+            nonphysical,
+            total_temperature=500.0,
+            allow_extrapolation=False,
+        )

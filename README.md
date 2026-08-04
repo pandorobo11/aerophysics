@@ -62,13 +62,35 @@ print(condition.reynolds_number)
 Calculation APIs use SI units. Use explicit functions from
 `aerophysics.units` when converting aviation customary units.
 
+Temperature-dependent isentropic flow uses the same API with a thermally
+perfect gas and an explicit total temperature:
+
+```python
+from aerophysics import AIR_NASA9
+from aerophysics.isentropic import isentropic_ratios
+
+ratios = isentropic_ratios(
+    2.0,
+    AIR_NASA9,
+    total_temperature=1000.0,
+    allow_extrapolation=False,
+)
+print(ratios.total_pressure_ratio)  # 7.89467...
+```
+
+The full forward/inverse, area–Mach, critical-state, and choked-mass-flux
+relations support frozen-composition NASA7/NASA9 gases. Their fitted range is
+200–6000 K; isentropic calculations warn when their default extrapolation is
+used outside it.
+
 ## Models and references
 
 - Atmospheric state and transport properties: *U.S. Standard Atmosphere,
   1976*, Sutherland, Keyes, and frozen-composition Blottner/Wilke viscosity
   models.
-- Isentropic perfect-gas relations: NACA Report 1135, *Equations, Tables, and
-  Charts for Compressible Flow*.
+- Calorically and thermally perfect isentropic relations, including
+  NASA-polynomial enthalpy and entropy variation; constant-heat-capacity
+  relations follow NACA Report 1135.
 - Normal and oblique shocks, supersonic Pitot pressure, and Prandtl–Meyer
   expansion: NACA Report 1135. Axisymmetric sharp-cone shocks use the
   Taylor–Maccoll model and NASA SP-3004 reference tables.

@@ -83,9 +83,12 @@ CONICAL_SHOCK_COLUMNS = (
 )
 
 ISENTROPIC_COLUMNS = (
+    Column("gas_model", "気体モデル"),
     Column("input_value", "入力値"),
     Column("input_basis", "入力基準"),
     Column("mach", "Mach M"),
+    Column("total_temperature", "全温 T₀", "temperature"),
+    Column("static_temperature", "静温 T", "temperature"),
     Column("total_temperature_ratio", "T₀/T"),
     Column("total_pressure_ratio", "p₀/p"),
     Column("total_density_ratio", "ρ₀/ρ"),

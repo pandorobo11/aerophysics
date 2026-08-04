@@ -96,11 +96,12 @@ fitted range of 200--6000 K:
 >>> round(AIR_NASA9.sensible_enthalpy(1000.0), 1)
 747891.1
 
-The two models are useful for comparing polynomial parameterizations. They are
-not interchangeable with the calorically perfect ``AIR`` object in the
-closed-form isentropic, shock, or Prandtl--Meyer APIs. Substituting a local
-:math:`\gamma(T)` into a constant-:math:`\gamma` relation does not make that
-relation thermally perfect.
+The two models are useful for comparing polynomial parameterizations. The
+isentropic API accepts them together with total temperature and integrates
+their enthalpy and entropy variation. Shock and Prandtl--Meyer APIs remain
+calorically perfect. Substituting a local :math:`\gamma(T)` into a
+constant-:math:`\gamma` relation does not make that relation thermally
+perfect.
 
 At high temperature, real air dissociates and eventually ionizes. The built-in
 models deliberately keep N2, O2, Ar, and CO2 mole fractions fixed through

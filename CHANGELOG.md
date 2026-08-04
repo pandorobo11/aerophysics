@@ -4,6 +4,9 @@
 
 - Add Taylor–Maccoll axisymmetric attached conical shocks, cone-surface state
   ratios, attached limits, vectorized APIs, and a dedicated GUI calculator.
+- Extend all isentropic forward/inverse, area--Mach, critical-state, and mass
+  flux relations to frozen-composition thermally perfect gases, and add
+  NASA7/NASA9 selection to the local isentropic GUI.
 - Separate transport properties into a dedicated module and add interchangeable
   Keyes and Blottner/Wilke dry-air viscosity models while preserving the
   Sutherland defaults and legacy imports.
