@@ -31,6 +31,10 @@ Sutherland model
 It remains the model used by the standard atmosphere and flight-condition
 calculations.
 
+>>> from aerophysics.transport import AIR_VISCOSITY
+>>> f"{AIR_VISCOSITY.dynamic_viscosity(300.0):.7e}"
+'1.8460219e-05'
+
 Keyes model
 -----------
 
@@ -109,6 +113,43 @@ emit :class:`~aerophysics.exceptions.ApplicabilityWarning`. Non-positive or
 non-finite temperatures raise ``ValueError``. The Blottner dry-air preset has
 fixed composition: it does not model dissociation, reactions, ionization, or
 thermodynamic nonequilibrium.
+
+Model comparison
+----------------
+
+The following figure and tables compare the correlations with Sutherland as
+the baseline. They are a comparison between models, not a validation against
+experimental measurements. Each curve and table entry is restricted to the
+nominal range of the fitted model being compared: 79--1845 K for Keyes and
+1000--30000 K for Blottner. No Keyes or Blottner extrapolation is included.
+
+.. figure:: _static/viscosity_model_comparison.svg
+   :alt: Four-panel comparison of Sutherland, Keyes, and frozen-composition
+         Blottner/Wilke dry-air dynamic-viscosity models
+   :width: 100%
+
+   Dynamic-viscosity model comparison. Relative difference is
+   :math:`(\mu_\mathrm{model}/\mu_\mathrm{Sutherland}-1)\times100\%`.
+   The Blottner curve is the Wilke mixture of fixed N₂/O₂/Ar/CO₂ mole
+   fractions; it does not represent dissociating or reacting high-temperature
+   air.
+
+.. include:: _generated/viscosity_model_comparison.rst
+
+The interval 1000--1845 K is common to all three nominal ranges. Across its
+endpoints, Keyes is 1.118--1.489% above Sutherland. Blottner/Wilke changes
+from 0.353% below Sutherland at 1000 K to 5.835% above it at 1845 K. This
+shared interval permits a direct three-model comparison without evaluating a
+fitted model outside its stated range.
+
+The checked-in SVG and table fragment are generated from the public model API
+with NumPy and the standard library only. Regenerate them, or verify that they
+are current, with:
+
+.. code-block:: console
+
+   $ python docs/scripts/generate_viscosity_comparison.py
+   $ python docs/scripts/generate_viscosity_comparison.py --check
 
 Thermal conductivity
 --------------------

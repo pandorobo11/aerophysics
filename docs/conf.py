@@ -28,4 +28,4 @@ html_theme_options = {
     "github_url": "https://github.com/pandorobo11/aerophysics",
 }
 
-exclude_patterns = ["_build"]
+exclude_patterns = ["_build", "_generated/**"]

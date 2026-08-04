@@ -12,11 +12,20 @@ https://ntrs.nasa.gov/citations/19770009539
 Transport properties
 --------------------
 
+Sutherland, W. *LII. The Viscosity of Gases and Molecular Force*.
+Philosophical Magazine Series 5, 36(223), 507--531, 1893.
+
+https://doi.org/10.1080/14786449308620508
+
 Keyes, F. G. *A Summary of Viscosity and Heat-Conduction Data for He, A, H2,
 O2, CO, CO2, H2O, and Air*. Transactions of the ASME, 73, 589--596, 1951.
 
+https://doi.org/10.1115/1.4016339
+
 The dry-air Keyes equation and SI coefficients used here are also reproduced
-in Sandia Report SAND2010-1168C.
+by Bova, S. W., Bond, R. B., and Kirk, B. S. in *Stabilized Finite Element
+Scheme for High Speed Flows with Chemical Non-Equilibrium*, Sandia Report
+SAND2010-1168C, 2010.
 
 https://www.osti.gov/servlets/purl/1124439
 
@@ -25,9 +34,10 @@ Program for Multi-Component Gas Mixtures*. Sandia Report SC-RR-70-754, 1971.
 
 https://digital.library.unt.edu/ark:/67531/metadc1030568/
 
-Doraiswamy, S. *Computational Study of Nonequilibrium Chemistry in Carbon
-Dioxide Flows*. University of Minnesota, 2010. Appendix A records the Ar and
-CO2 Blottner coefficients used by the frozen dry-air preset.
+Doraiswamy, S. *Computational Study of Nonequilibrium Chemistry in High
+Temperature Flows*. Ph.D. dissertation, University of Minnesota, 2010.
+Appendix A records the Ar and CO2 Blottner coefficients used by the frozen
+dry-air preset.
 
 https://conservancy.umn.edu/handle/11299/99626
 
