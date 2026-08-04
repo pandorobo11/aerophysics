@@ -243,6 +243,127 @@ def shock_trends(
     }
 
 
+def conical_shock_geometry(row: Row, preferences: UnitPreferences) -> go.Figure:
+    """Create a meridional schematic of a cone and its attached shock."""
+    cone_angle = row.get("cone_half_angle")
+    shock_angle = row.get("shock_angle")
+    if not isinstance(cone_angle, float) or not isinstance(shock_angle, float):
+        raise ValueError("geometry requires a successful conical-shock result")
+    length = 1.0
+    cone_y = math.tan(cone_angle)
+    shock_y = math.tan(shock_angle)
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=[0.0, length],
+            y=[0.0, cone_y],
+            mode="lines",
+            line={"width": 8, "color": "#555"},
+            name="円錐面",
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=[0.0, length],
+            y=[0.0, shock_y],
+            mode="lines",
+            line={"width": 4, "color": "#d62728"},
+            name="円錐衝撃波",
+        )
+    )
+    figure.add_annotation(x=0.45, y=-0.08, text="M∞", showarrow=True, ax=-70, ay=0)
+    figure.add_annotation(
+        x=0.68,
+        y=0.68 * cone_y,
+        text="Mₛ",
+        showarrow=True,
+        ax=-45,
+        ay=30,
+    )
+    unit = preferences.angle
+    cone_display = float(from_si(cone_angle, "angle", unit))
+    shock_display = float(from_si(shock_angle, "angle", unit))
+    figure.update_layout(
+        title=(
+            f"円錐衝撃波模式図 — θc={cone_display:.3g} {unit}, "
+            f"β={shock_display:.3g} {unit}"
+        ),
+        template="plotly_white",
+        height=430,
+        xaxis={"visible": False, "range": [-0.15, 1.1]},
+        yaxis={
+            "visible": False,
+            "scaleanchor": "x",
+            "scaleratio": 1,
+            "range": [-0.15, min(max(shock_y * 1.1, 0.5), 5.0)],
+        },
+        margin={"l": 20, "r": 20, "t": 70, "b": 20},
+    )
+    return figure
+
+
+def conical_shock_trends(
+    rows: tuple[Row, ...], preferences: UnitPreferences
+) -> dict[str, go.Figure]:
+    """Create cone-shock angle, Mach, and surface-state trend figures."""
+    cone_angles = _numeric(rows, "cone_half_angle")
+    changing_angle = np.nanmax(cone_angles) != np.nanmin(cone_angles)
+    if changing_angle:
+        x = _converted(rows, "cone_half_angle", "angle", preferences)
+        x_title = f"円錐半頂角 θc [{preferences.angle}]"
+    else:
+        x = _numeric(rows, "upstream_mach")
+        x_title = "上流 Mach M∞"
+
+    state = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=(
+            "表面・衝撃波直後Mach",
+            "pₛ/p∞",
+            "ρₛ/ρ∞",
+            "Tₛ/T∞・p₀₂/p₀∞",
+        ),
+    )
+    for key, name in (
+        ("surface_mach", "表面 Mach Mₛ"),
+        ("post_shock_mach", "衝撃波直後 Mach M₂"),
+    ):
+        state.add_trace(go.Scatter(x=x, y=_numeric(rows, key), name=name), row=1, col=1)
+    for key, name, row, col in (
+        ("surface_pressure_ratio", "pₛ/p∞", 1, 2),
+        ("surface_density_ratio", "ρₛ/ρ∞", 2, 1),
+        ("surface_temperature_ratio", "Tₛ/T∞", 2, 2),
+        ("total_pressure_ratio", "p₀₂/p₀∞", 2, 2),
+    ):
+        state.add_trace(
+            go.Scatter(x=x, y=_numeric(rows, key), name=name), row=row, col=col
+        )
+    state.update_xaxes(title_text=x_title)
+
+    angles = go.Figure()
+    for key, name, dash in (
+        ("shock_angle", "衝撃波角 β", None),
+        ("cone_half_angle", "円錐半頂角 θc", "dot"),
+        ("maximum_cone_half_angle", "最大付着半頂角 θc,max", "dash"),
+    ):
+        line = {} if dash is None else {"dash": dash}
+        angles.add_trace(
+            go.Scatter(
+                x=x,
+                y=_converted(rows, key, "angle", preferences),
+                name=name,
+                line=line,
+            )
+        )
+    angles.update_xaxes(title_text=x_title)
+    angles.update_yaxes(title_text=f"角度 [{preferences.angle}]")
+    return {
+        "状態量": _style(state, "円錐表面の状態量"),
+        "角度": _style(angles, "円錐衝撃波の角度"),
+    }
+
+
 def isentropic_figures(
     rows: tuple[Row, ...], *, input_label: str
 ) -> dict[str, go.Figure]:

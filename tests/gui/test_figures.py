@@ -13,6 +13,8 @@ from aerophysics.boundary_layer_profile import (
     TemperatureVelocityRelation,
 )
 from aerophysics.gui.adapters import (
+    conical_shock_condition,
+    conical_shock_sweep,
     expansion_sweep,
     flat_plate_sweep,
     flight_sweep,
@@ -29,6 +31,8 @@ from aerophysics.gui.advanced_adapters import (
 from aerophysics.gui.figures import (
     boundary_layer_figures,
     boundary_layer_profile_figures,
+    conical_shock_geometry,
+    conical_shock_trends,
     expansion_figures,
     flight_figures,
     isentropic_figures,
@@ -103,6 +107,38 @@ def test_shock_geometry_and_both_sweep_axes() -> None:
     )
     mach_figures = shock_trends(mach.rows, UnitPreferences())
     assert "Mach" in str(mach_figures["状態量"].layout.xaxis.title.text)
+
+
+def test_conical_shock_geometry_and_sweep_axes() -> None:
+    single = conical_shock_condition(
+        upstream_mach=2.0, cone_half_angle=np.deg2rad(10.0)
+    )
+    geometry = conical_shock_geometry(single.rows[0], UnitPreferences())
+    assert len(geometry.data) == 2
+    assert "deg" in str(geometry.layout.title.text)
+    with pytest.raises(ValueError, match="successful"):
+        conical_shock_geometry(
+            {**single.rows[0], "shock_angle": None}, UnitPreferences()
+        )
+    angles = conical_shock_sweep(
+        fixed_mach=2.0,
+        fixed_cone_half_angle=np.deg2rad(10.0),
+        sweep_field="cone_half_angle",
+        start=0.0,
+        stop=np.deg2rad(20.0),
+        points=3,
+    )
+    assert len(conical_shock_trends(angles.rows, UnitPreferences())["角度"].data) == 3
+    mach = conical_shock_sweep(
+        fixed_mach=2.0,
+        fixed_cone_half_angle=np.deg2rad(10.0),
+        sweep_field="mach",
+        start=2.0,
+        stop=3.0,
+        points=3,
+    )
+    figures = conical_shock_trends(mach.rows, UnitPreferences())
+    assert "Mach" in str(figures["状態量"].layout.xaxis.title.text)
 
 
 def test_boundary_layer_figures_include_transition_and_thermal() -> None:

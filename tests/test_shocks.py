@@ -5,8 +5,11 @@ import pytest
 from numpy.testing import assert_allclose
 
 from aerophysics.exceptions import NoAttachedShockError
+from aerophysics.gas import PerfectGas
 from aerophysics.shocks import (
     ShockBranch,
+    conical_shock,
+    maximum_attached_cone_angle,
     maximum_attached_deflection,
     normal_shock,
     oblique_shock,
@@ -142,3 +145,89 @@ def test_theta_beta_mach_rejects_invalid_inputs() -> None:
 def test_detached_shock_raises_dedicated_error() -> None:
     with pytest.raises(NoAttachedShockError):
         oblique_shock(2.0, float(degrees_to_radians(30.0)))
+
+
+def test_conical_shock_matches_nasa_sp_3004() -> None:
+    result = conical_shock(2.0, float(degrees_to_radians(10.0)))
+    assert result.shock_angle == pytest.approx(0.54464827, rel=2e-6)
+    # NASA SP-3004 tabulates critical Mach numbers M*=V/a*.  Converting its
+    # surface and post-shock values gives the ordinary local Mach numbers.
+    assert result.surface_mach == pytest.approx(1.83403, rel=2e-5)
+    assert result.post_shock_mach == pytest.approx(1.94679, rel=2e-5)
+    assert result.surface_pressure_ratio == pytest.approx(1.2924832, rel=3e-5)
+    assert result.surface_density_ratio == pytest.approx(1.2011081, rel=3e-5)
+    assert result.surface_temperature_ratio == pytest.approx(1.0760757, rel=3e-5)
+
+
+def test_zero_angle_conical_shock_is_a_mach_wave() -> None:
+    result = conical_shock(2.0, 0.0)
+    assert result.shock_angle == pytest.approx(np.arcsin(0.5))
+    assert result.post_shock_mach == 2.0
+    assert result.surface_mach == 2.0
+    assert result.surface_pressure_ratio == 1.0
+    assert result.surface_density_ratio == 1.0
+    assert result.surface_temperature_ratio == 1.0
+    assert result.total_pressure_ratio == 1.0
+
+
+def test_conical_shock_vectorizes_and_broadcasts() -> None:
+    result = conical_shock([[2.0], [3.0]], degrees_to_radians([0.0, 5.0]))
+    for value in (
+        result.upstream_mach,
+        result.cone_half_angle,
+        result.shock_angle,
+        result.post_shock_mach,
+        result.surface_mach,
+        result.surface_pressure_ratio,
+        result.surface_density_ratio,
+        result.surface_temperature_ratio,
+        result.total_pressure_ratio,
+    ):
+        assert isinstance(value, np.ndarray)
+        assert value.shape == (2, 2)
+        assert value.dtype == np.float64
+    assert_allclose(
+        np.asarray(result.surface_pressure_ratio)
+        / np.asarray(result.surface_density_ratio),
+        result.surface_temperature_ratio,
+    )
+    limit = maximum_attached_cone_angle([2.0, 3.0])
+    assert isinstance(limit.cone_half_angle, np.ndarray)
+    assert np.asarray(limit.cone_half_angle).shape == (2,)
+
+
+def test_conical_shock_accepts_custom_perfect_gas() -> None:
+    helium = PerfectGas(specific_gas_constant=2077.1, heat_capacity_ratio=5.0 / 3.0)
+    air = conical_shock(3.0, float(degrees_to_radians(10.0)))
+    result = conical_shock(3.0, float(degrees_to_radians(10.0)), helium)
+    assert result.shock_angle != pytest.approx(air.shock_angle)
+    assert result.surface_pressure_ratio == pytest.approx(
+        result.surface_density_ratio * result.surface_temperature_ratio
+    )
+
+
+def test_conical_attached_limit_and_detached_error() -> None:
+    limit = maximum_attached_cone_angle(2.0)
+    attached = conical_shock(2.0, limit.cone_half_angle)
+    assert attached.shock_angle == pytest.approx(limit.shock_angle)
+    with pytest.raises(NoAttachedShockError):
+        conical_shock(2.0, float(limit.cone_half_angle) + 1e-6)
+
+
+@pytest.mark.parametrize("mach", [1.0, 0.9, np.nan, np.inf])
+def test_conical_shock_rejects_invalid_mach(mach: float) -> None:
+    with pytest.raises(ValueError):
+        conical_shock(mach, 0.1)
+    with pytest.raises(ValueError):
+        maximum_attached_cone_angle(mach)
+
+
+@pytest.mark.parametrize("angle", [-0.1, 0.5 * np.pi, np.nan, np.inf])
+def test_conical_shock_rejects_invalid_angle(angle: float) -> None:
+    with pytest.raises(ValueError):
+        conical_shock(2.0, angle)
+
+
+def test_conical_shock_rejects_nonbroadcastable_inputs() -> None:
+    with pytest.raises(ValueError, match="broadcastable"):
+        conical_shock([2.0, 3.0], [0.1, 0.2, 0.3])

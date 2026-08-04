@@ -167,6 +167,28 @@ def test_display_table_and_csv() -> None:
         columns_for("missing")
 
 
+def test_conical_shock_table_converts_angles() -> None:
+    rows = (
+        {
+            "upstream_mach": 2.0,
+            "cone_half_angle": np.deg2rad(10.0),
+            "maximum_cone_half_angle": np.deg2rad(40.0),
+            "shock_angle": np.deg2rad(31.0),
+            "post_shock_mach": 1.95,
+            "surface_mach": 1.83,
+            "surface_pressure_ratio": 1.29,
+            "surface_density_ratio": 1.20,
+            "surface_temperature_ratio": 1.08,
+            "total_pressure_ratio": 0.999,
+            "status": "ok",
+            "message": "",
+        },
+    )
+    table = display_rows("conical_shock", rows, UnitPreferences())
+    assert table[0]["円錐半頂角 θc [deg]"] == pytest.approx(10.0)
+    assert table[0]["衝撃波角 β [deg]"] == pytest.approx(31.0)
+
+
 @pytest.mark.parametrize(
     "calculator",
     [
@@ -174,6 +196,7 @@ def test_display_table_and_csv() -> None:
         "normal_shock",
         "expansion",
         "boundary_layer_profile",
+        "conical_shock",
         "protrusion_drag",
         "thermochemistry",
     ],

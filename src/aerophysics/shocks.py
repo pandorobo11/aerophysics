@@ -1,20 +1,26 @@
-"""Normal and oblique shocks for a calorically perfect gas.
+"""Normal, oblique, and conical shocks for a calorically perfect gas.
 
-Angles are expressed in radians. State ratios use downstream over upstream
-static quantities, while ``total_pressure_ratio`` is ``p02/p01``.
+Angles are expressed in radians. Normal- and oblique-shock state ratios use
+downstream over upstream static quantities. Conical-shock static ratios use
+cone surface over free stream. ``total_pressure_ratio`` is always post-shock
+over upstream total pressure.
 
 References
 ----------
 Ames Research Staff, *Equations, Tables, and Charts for Compressible Flow*,
 NACA Report 1135, 1953.
+Sims, *Tables for Supersonic Flow Around Right Circular Cones at Zero Angle
+of Attack*, NASA SP-3004, 1964.
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import lru_cache
 from typing import Final
 
 import numpy as np
 from numpy.typing import ArrayLike
+from scipy.integrate import solve_ivp
 from scipy.optimize import brentq, minimize_scalar
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
@@ -24,6 +30,10 @@ from aerophysics.gas import AIR, PerfectGas
 _ROOT_XTOL: Final = 1e-12
 _ROOT_RTOL: Final = 4.0 * np.finfo(np.float64).eps
 _ROOT_MAXITER: Final = 100
+_ODE_RTOL: Final = 1e-10
+_ODE_ATOL: Final = 1e-12
+_CONE_ANGLE_TOLERANCE: Final = 1e-10
+_CONE_AXIS_FLOOR: Final = 1e-8
 
 
 class ShockBranch(StrEnum):
@@ -68,6 +78,51 @@ class ObliqueShockResult:
     static_density_ratio: FloatResult
     static_temperature_ratio: FloatResult
     total_pressure_ratio: FloatResult
+
+
+@dataclass(frozen=True, slots=True)
+class AttachedConicalShockLimit:
+    """Maximum cone half-angle permitting an attached conical shock."""
+
+    upstream_mach: FloatResult
+    cone_half_angle: FloatResult
+    shock_angle: FloatResult
+
+
+@dataclass(frozen=True, slots=True)
+class ConicalShockResult:
+    """Surface state behind an attached axisymmetric conical shock."""
+
+    upstream_mach: FloatResult
+    cone_half_angle: FloatResult
+    shock_angle: FloatResult
+    post_shock_mach: FloatResult
+    surface_mach: FloatResult
+    surface_pressure_ratio: FloatResult
+    surface_density_ratio: FloatResult
+    surface_temperature_ratio: FloatResult
+    total_pressure_ratio: FloatResult
+
+
+@dataclass(frozen=True, slots=True)
+class _ConicalSurfaceState:
+    cone_half_angle: float
+    surface_mach: float
+    post_shock_mach: float
+    total_pressure_ratio: float
+
+
+class _ConeSurfaceEvent:
+    """Locate the ray where the polar velocity becomes tangent to the cone."""
+
+    terminal: bool = True
+    direction: float = 0.0
+
+    def __call__(self, _angle: float, velocity: FloatArray) -> float:
+        return float(velocity[1])
+
+
+_CONE_SURFACE_EVENT = _ConeSurfaceEvent()
 
 
 def _validate_supersonic_mach(mach: ArrayLike) -> tuple[FloatArray, bool]:
@@ -298,6 +353,253 @@ def oblique_shock(
     )
 
 
+def _mach_from_limiting_velocity(speed_squared: float, gas: PerfectGas) -> float:
+    gamma = gas.heat_capacity_ratio
+    sound_speed_squared = 0.5 * (gamma - 1.0) * (1.0 - speed_squared)
+    if sound_speed_squared <= 0.0:
+        raise RuntimeError("Taylor-Maccoll integration left the physical state space")
+    return float(np.sqrt(speed_squared / sound_speed_squared))
+
+
+def _taylor_maccoll_rhs(
+    angle: float, velocity: FloatArray, gas: PerfectGas
+) -> FloatArray:
+    radial, polar = velocity
+    gamma = gas.heat_capacity_ratio
+    sound_speed_squared = 0.5 * (gamma - 1.0) * (1.0 - radial**2 - polar**2)
+    denominator = sound_speed_squared - polar**2
+    polar_derivative = (
+        radial * polar**2 - sound_speed_squared * (2.0 * radial + polar / np.tan(angle))
+    ) / denominator
+    return np.asarray([polar, polar_derivative], dtype=np.float64)
+
+
+def _conical_surface_state_scalar(
+    mach: float, shock_angle_value: float, gas: PerfectGas
+) -> _ConicalSurfaceState | None:
+    mach_angle = float(np.arcsin(1.0 / mach))
+    if shock_angle_value <= mach_angle + np.finfo(np.float64).eps:
+        return _ConicalSurfaceState(0.0, mach, mach, 1.0)
+
+    gamma = gas.heat_capacity_ratio
+    limiting_velocity = mach / np.sqrt(mach**2 + 2.0 / (gamma - 1.0))
+    upstream_normal_mach = mach * np.sin(shock_angle_value)
+    _, _, density_ratio, _, total_pressure_ratio = _normal_shock_arrays(
+        np.asarray(upstream_normal_mach, dtype=np.float64), gas
+    )
+    radial = limiting_velocity * np.cos(shock_angle_value)
+    polar = -limiting_velocity * np.sin(shock_angle_value) / float(density_ratio)
+    initial = np.asarray([radial, polar], dtype=np.float64)
+    post_shock_mach = _mach_from_limiting_velocity(float(initial @ initial), gas)
+
+    solution = solve_ivp(
+        lambda angle, velocity: _taylor_maccoll_rhs(angle, velocity, gas),
+        (shock_angle_value, _CONE_AXIS_FLOOR),
+        initial,
+        method="DOP853",
+        events=_CONE_SURFACE_EVENT,
+        rtol=_ODE_RTOL,
+        atol=_ODE_ATOL,
+    )
+    event_times = solution.t_events
+    event_states = solution.y_events
+    if (
+        not solution.success
+        or event_times is None
+        or event_states is None
+        or not event_times[0].size
+    ):
+        return None
+    cone_half_angle = float(event_times[0][0])
+    surface_velocity = event_states[0][0]
+    surface_mach = _mach_from_limiting_velocity(
+        float(surface_velocity @ surface_velocity), gas
+    )
+    return _ConicalSurfaceState(
+        cone_half_angle=cone_half_angle,
+        surface_mach=surface_mach,
+        post_shock_mach=post_shock_mach,
+        total_pressure_ratio=float(total_pressure_ratio),
+    )
+
+
+@lru_cache(maxsize=512)
+def _attached_conical_limit_scalar(mach: float, gas: PerfectGas) -> tuple[float, float]:
+    mach_angle = float(np.arcsin(1.0 / mach))
+    beta_values = np.linspace(
+        mach_angle + 1e-7,
+        0.5 * np.pi - 1e-7,
+        33,
+        dtype=np.float64,
+    )
+    cone_angles = np.asarray(
+        [
+            -np.inf if state is None else state.cone_half_angle
+            for state in (
+                _conical_surface_state_scalar(mach, float(beta), gas)
+                for beta in beta_values
+            )
+        ],
+        dtype=np.float64,
+    )
+    peak_index = int(np.argmax(cone_angles))
+    if not np.isfinite(cone_angles[peak_index]):
+        raise RuntimeError(
+            "Taylor-Maccoll integration could not find an attached shock"
+        )
+    lower = float(beta_values[max(peak_index - 1, 0)])
+    upper = float(beta_values[min(peak_index + 1, beta_values.size - 1)])
+
+    def objective(beta: float) -> float:
+        state = _conical_surface_state_scalar(mach, beta, gas)
+        return 1.0 if state is None else -state.cone_half_angle
+
+    optimum = minimize_scalar(
+        objective,
+        bounds=(lower, upper),
+        method="bounded",
+        options={"xatol": _ROOT_XTOL, "maxiter": _ROOT_MAXITER},
+    )
+    beta_peak = float(optimum.x)
+    peak_state = _conical_surface_state_scalar(mach, beta_peak, gas)
+    if peak_state is None:
+        raise RuntimeError("Taylor-Maccoll integration failed at the attached limit")
+    return peak_state.cone_half_angle, beta_peak
+
+
+def _validate_conical_mach(upstream_mach: ArrayLike) -> tuple[FloatArray, bool]:
+    mach, scalar = _validate_supersonic_mach(upstream_mach)
+    if np.any(mach <= 1.0):
+        raise ValueError("upstream_mach must be greater than one")
+    return mach, scalar
+
+
+def maximum_attached_cone_angle(
+    upstream_mach: ArrayLike, gas: PerfectGas = AIR
+) -> AttachedConicalShockLimit:
+    """Return the largest half-angle permitting an attached conical shock."""
+    mach, scalar = _validate_conical_mach(upstream_mach)
+    cone_angle = np.empty_like(mach)
+    beta = np.empty_like(mach)
+    for index, value in np.ndenumerate(mach):
+        cone_angle[index], beta[index] = _attached_conical_limit_scalar(
+            float(value), gas
+        )
+
+    def output(values: FloatArray) -> FloatResult:
+        return return_float(values, scalar=scalar)
+
+    return AttachedConicalShockLimit(
+        upstream_mach=output(mach),
+        cone_half_angle=output(cone_angle),
+        shock_angle=output(beta),
+    )
+
+
+def _conical_shock_scalar(
+    mach: float, cone_half_angle: float, gas: PerfectGas
+) -> tuple[float, _ConicalSurfaceState]:
+    mach_angle = float(np.arcsin(1.0 / mach))
+    if cone_half_angle == 0.0:
+        return mach_angle, _ConicalSurfaceState(0.0, mach, mach, 1.0)
+
+    maximum_angle, beta_peak = _attached_conical_limit_scalar(mach, gas)
+    if cone_half_angle > maximum_angle + _CONE_ANGLE_TOLERANCE:
+        raise NoAttachedShockError(
+            f"no attached conical shock for Mach {mach:g} and cone half-angle "
+            f"{cone_half_angle:g} rad"
+        )
+    if abs(cone_half_angle - maximum_angle) <= _CONE_ANGLE_TOLERANCE:
+        state = _conical_surface_state_scalar(mach, beta_peak, gas)
+        if state is None:
+            raise RuntimeError(
+                "Taylor-Maccoll integration failed at the attached limit"
+            )
+        return beta_peak, state
+
+    def residual(beta: float) -> float:
+        state = _conical_surface_state_scalar(mach, beta, gas)
+        if state is None:
+            raise RuntimeError("Taylor-Maccoll integration failed during root solving")
+        return state.cone_half_angle - cone_half_angle
+
+    beta = float(
+        brentq(
+            residual,
+            mach_angle,
+            beta_peak,
+            xtol=_ROOT_XTOL,
+            rtol=_ROOT_RTOL,
+            maxiter=_ROOT_MAXITER,
+        )
+    )
+    state = _conical_surface_state_scalar(mach, beta, gas)
+    if state is None:
+        raise RuntimeError("Taylor-Maccoll integration failed for the conical shock")
+    return beta, state
+
+
+def conical_shock(
+    upstream_mach: ArrayLike,
+    cone_half_angle: ArrayLike,
+    gas: PerfectGas = AIR,
+) -> ConicalShockResult:
+    """Return the cone-surface state behind an attached Taylor-Maccoll shock."""
+    mach, mach_scalar = _validate_conical_mach(upstream_mach)
+    angle, angle_scalar = as_float_array(cone_half_angle, name="cone_half_angle")
+    try:
+        mach, angle = np.broadcast_arrays(mach, angle)
+    except ValueError as error:
+        raise ValueError(
+            "upstream_mach and cone_half_angle must be broadcastable"
+        ) from error
+    if np.any((angle < 0.0) | (angle >= 0.5 * np.pi)):
+        raise ValueError("cone_half_angle must be between zero and pi/2")
+    scalar = mach_scalar and angle_scalar
+
+    beta = np.empty_like(mach)
+    post_shock_mach = np.empty_like(mach)
+    surface_mach = np.empty_like(mach)
+    surface_pressure = np.empty_like(mach)
+    surface_density = np.empty_like(mach)
+    surface_temperature = np.empty_like(mach)
+    total_pressure = np.empty_like(mach)
+    gamma = gas.heat_capacity_ratio
+
+    for index, value in np.ndenumerate(mach):
+        beta_value, state = _conical_shock_scalar(
+            float(value), float(angle[index]), gas
+        )
+        beta[index] = beta_value
+        post_shock_mach[index] = state.post_shock_mach
+        surface_mach[index] = state.surface_mach
+        total_pressure[index] = state.total_pressure_ratio
+        upstream_factor = 1.0 + 0.5 * (gamma - 1.0) * float(value) ** 2
+        surface_factor = 1.0 + 0.5 * (gamma - 1.0) * state.surface_mach**2
+        temperature_ratio = upstream_factor / surface_factor
+        pressure_ratio = state.total_pressure_ratio * temperature_ratio ** (
+            gamma / (gamma - 1.0)
+        )
+        surface_temperature[index] = temperature_ratio
+        surface_pressure[index] = pressure_ratio
+        surface_density[index] = pressure_ratio / temperature_ratio
+
+    def output(values: FloatArray) -> FloatResult:
+        return return_float(np.asarray(values, dtype=np.float64), scalar=scalar)
+
+    return ConicalShockResult(
+        upstream_mach=output(mach),
+        cone_half_angle=output(angle),
+        shock_angle=output(beta),
+        post_shock_mach=output(post_shock_mach),
+        surface_mach=output(surface_mach),
+        surface_pressure_ratio=output(surface_pressure),
+        surface_density_ratio=output(surface_density),
+        surface_temperature_ratio=output(surface_temperature),
+        total_pressure_ratio=output(total_pressure),
+    )
+
+
 def supersonic_pitot_pressure_ratio(
     upstream_mach: ArrayLike, gas: PerfectGas = AIR
 ) -> FloatResult:
@@ -312,10 +614,14 @@ def supersonic_pitot_pressure_ratio(
 
 
 __all__ = [
+    "AttachedConicalShockLimit",
     "AttachedShockLimit",
+    "ConicalShockResult",
     "NormalShockResult",
     "ObliqueShockResult",
     "ShockBranch",
+    "conical_shock",
+    "maximum_attached_cone_angle",
     "maximum_attached_deflection",
     "normal_shock",
     "oblique_shock",

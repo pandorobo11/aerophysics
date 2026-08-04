@@ -25,7 +25,7 @@ from aerophysics.protrusion import (
     ProtrusionProfile,
     protrusion_drag,
 )
-from aerophysics.shocks import ShockBranch, normal_shock, oblique_shock
+from aerophysics.shocks import ShockBranch, conical_shock, normal_shock, oblique_shock
 from aerophysics.thermochemistry import (
     AIR_NASA7,
     AIR_NASA9,
@@ -60,6 +60,7 @@ __all__ = [
     "TurbulentCorrelation",
     "__version__",
     "compressible_turbulent_boundary_layer_profile",
+    "conical_shock",
     "flat_plate_boundary_layer",
     "normal_shock",
     "oblique_shock",

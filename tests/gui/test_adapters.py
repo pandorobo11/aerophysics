@@ -11,6 +11,8 @@ from aerophysics.boundary_layer import (
 )
 from aerophysics.gui.adapters import (
     FlightCase,
+    conical_shock_condition,
+    conical_shock_sweep,
     expansion_condition,
     expansion_sweep,
     flat_plate,
@@ -26,7 +28,7 @@ from aerophysics.gui.adapters import (
     sweep_values,
 )
 from aerophysics.isentropic import MachBranch, isentropic_ratios
-from aerophysics.shocks import ShockBranch, oblique_shock
+from aerophysics.shocks import ShockBranch, conical_shock, oblique_shock
 
 
 def test_sweep_values_validation_and_spacing() -> None:
@@ -248,6 +250,47 @@ def test_shock_sweep_preserves_non_attached_points() -> None:
             start=0.0,
             stop=1.0,
             points=2,
+        )
+
+
+def test_conical_shock_adapter_matches_core() -> None:
+    angle = np.deg2rad(10.0)
+    adapted = conical_shock_condition(upstream_mach=2.0, cone_half_angle=angle)
+    direct = conical_shock(2.0, angle)
+    row = adapted.rows[0]
+    assert row["shock_angle"] == pytest.approx(direct.shock_angle)
+    assert row["surface_mach"] == pytest.approx(direct.surface_mach)
+    assert row["maximum_cone_half_angle"] > angle
+
+
+def test_conical_shock_sweeps_preserve_non_attached_points() -> None:
+    angles = conical_shock_sweep(
+        fixed_mach=2.0,
+        fixed_cone_half_angle=np.deg2rad(10.0),
+        sweep_field="cone_half_angle",
+        start=0.0,
+        stop=np.deg2rad(50.0),
+        points=3,
+    )
+    assert angles.rows[0]["status"] == "ok"
+    assert angles.rows[-1]["status"] == "no_attached_shock"
+    mach = conical_shock_sweep(
+        fixed_mach=2.0,
+        fixed_cone_half_angle=np.deg2rad(10.0),
+        sweep_field="mach",
+        start=1.1,
+        stop=3.0,
+        points=3,
+    )
+    assert mach.rows[-1]["status"] == "ok"
+    with pytest.raises(ValueError, match="sweep_field"):
+        conical_shock_sweep(
+            fixed_mach=2.0,
+            fixed_cone_half_angle=0.1,
+            sweep_field="other",
+            start=0.0,
+            stop=1.0,
+            points=3,
         )
 
 

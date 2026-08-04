@@ -20,9 +20,7 @@ SVG_PATH = PROJECT_ROOT / "docs/_static/viscosity_model_comparison.svg"
 TABLE_PATH = PROJECT_ROOT / "docs/_generated/viscosity_model_comparison.rst"
 
 LOW_TABLE_TEMPERATURES = np.array([79.0, 100.0, 300.0, 1000.0, 1845.0])
-HIGH_TABLE_TEMPERATURES = np.array(
-    [1000.0, 1845.0, 5000.0, 10000.0, 30000.0]
-)
+HIGH_TABLE_TEMPERATURES = np.array([1000.0, 1845.0, 5000.0, 10000.0, 30000.0])
 
 
 @dataclass(frozen=True)

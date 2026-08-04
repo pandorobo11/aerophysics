@@ -14,6 +14,7 @@ from aerophysics import (
     TurbulentCorrelation,
     __version__,
     compressible_turbulent_boundary_layer_profile,
+    conical_shock,
     flat_plate_boundary_layer,
     normal_shock,
     oblique_shock,
@@ -42,6 +43,7 @@ def test_primary_compressible_flow_api_is_exported() -> None:
     assert ShockBranch.WEAK.value == "weak"
     assert normal_shock(2.0).downstream_mach < 1.0
     assert oblique_shock(2.0, 0.1).downstream_mach > 1.0
+    assert conical_shock(2.0, 0.1).surface_mach > 1.0
     assert prandtl_meyer_expansion(2.0, 0.1).downstream_mach > 2.0
 
 

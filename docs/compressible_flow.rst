@@ -214,6 +214,55 @@ solution is not silently replaced by a detached normal shock.
 >>> round(radians_to_degrees(shock.shock_angle), 3)
 39.314
 
+Conical shocks
+--------------
+
+For inviscid axisymmetric flow over a sharp circular cone at zero angle of
+attack, the velocity between the shock and cone surface varies with polar
+angle.  With radial and polar velocity components nondimensionalized by the
+limiting velocity available from adiabatic expansion into a vacuum, the
+Taylor--Maccoll equations are
+
+.. math::
+
+   \frac{dV_r}{d\theta}=V_\theta,
+
+.. math::
+
+   \frac{dV_\theta}{d\theta}
+   =\frac{V_rV_\theta^2-a^2(2V_r+V_\theta\cot\theta)}
+          {a^2-V_\theta^2},
+   \qquad
+   a^2=\frac{\gamma-1}{2}(1-V_r^2-V_\theta^2).
+
+The Rankine--Hugoniot relations supply the velocity immediately behind a
+trial shock angle :math:`\beta`.  Integration toward the axis locates the
+cone surface where :math:`V_\theta=0`.  The weak attached solution is the
+first shock angle above the Mach angle that produces the requested cone
+half-angle :math:`\theta_c`.
+
+:func:`aerophysics.shocks.conical_shock` returns the shock angle, Mach numbers
+immediately behind the shock and at the cone surface, surface static-state
+ratios over the free stream, and the post-shock/free-stream total-pressure
+ratio.  :func:`aerophysics.shocks.maximum_attached_cone_angle` returns the
+attached-shock limit.  A larger cone half-angle raises
+:class:`~aerophysics.exceptions.NoAttachedShockError` rather than substituting
+a detached-shock approximation.
+
+The model assumes a calorically perfect gas, a sharp circular cone, zero angle
+of attack, steady inviscid adiabatic flow, and an attached axisymmetric shock.
+It does not model bluntness, viscosity, real-gas effects, or asymmetric cone
+flow.
+
+>>> from aerophysics import conical_shock
+>>> cone = conical_shock(2.0, degrees_to_radians(10.0))
+>>> round(radians_to_degrees(cone.shock_angle), 3)
+31.206
+>>> round(cone.surface_mach, 3)
+1.834
+>>> round(cone.surface_pressure_ratio, 3)
+1.293
+
 Prandtl--Meyer expansions
 -------------------------
 

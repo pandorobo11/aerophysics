@@ -16,6 +16,8 @@ from aerophysics.boundary_layer import (
 from aerophysics.gui.adapters import (
     CalculationResult,
     FlightCase,
+    conical_shock_condition,
+    conical_shock_sweep,
     flat_plate,
     flat_plate_sweep,
     flight_condition,
@@ -34,12 +36,18 @@ from aerophysics.gui.components import (
 from aerophysics.gui.config import make_configuration
 from aerophysics.gui.figures import (
     boundary_layer_figures,
+    conical_shock_geometry,
+    conical_shock_trends,
     flight_figures,
     shock_geometry,
     shock_trends,
 )
 from aerophysics.gui.units import UnitPreferences, from_si, to_si
-from aerophysics.shocks import ShockBranch, maximum_attached_deflection
+from aerophysics.shocks import (
+    ShockBranch,
+    maximum_attached_cone_angle,
+    maximum_attached_deflection,
+)
 
 
 def _configuration_defaults(
@@ -535,6 +543,181 @@ def render_shock(preferences: UnitPreferences) -> None:
     with st.expander("モデルの前提・適用範囲"):
         st.write(
             "角度はGUI境界でradianへ変換し、NACA Report 1135の関係式を使用します。"
+        )
+
+
+def render_conical_shock(preferences: UnitPreferences) -> None:
+    """Render axisymmetric attached conical-shock calculations."""
+    st.title("円錐衝撃波")
+    st.caption("Taylor–Maccoll理論による軸対称・付着弱解を計算します。")
+    imported = pop_pending_configuration("conical_shock")
+    inputs, _, sweep = _configuration_defaults(imported)
+    render_configuration_import("conical_shock", "cone_shock")
+    render_reset_button("cone_shock", "cone_shock_payload")
+    default_mode = str(imported.get("mode", "single")) if imported else "single"
+
+    with st.form("cone_shock_form"):
+        mode = st.radio(
+            "計算モード",
+            ("single", "sweep"),
+            index=0 if default_mode == "single" else 1,
+            format_func=lambda value: "単点" if value == "single" else "1変数スイープ",
+            horizontal=True,
+            key="cone_shock_mode",
+        )
+        mach = finite_number(
+            "上流 Mach M∞",
+            float(inputs.get("upstream_mach", 2.0)),
+            key="cone_shock_mach",
+            min_value=1.0000001,
+        )
+        angle_default = inputs.get("cone_half_angle", np.deg2rad(10.0))
+        if not isinstance(angle_default, (int, float)):
+            raise ValueError("cone_half_angle must be numeric")
+        cone_half_angle = finite_number(
+            f"円錐半頂角 θc [{preferences.angle}]",
+            _display(float(angle_default), "angle", preferences.angle),
+            key="cone_shock_angle",
+            min_value=0.0,
+        )
+        sweep_field = "cone_half_angle"
+        sweep_start = sweep_stop = 0.0
+        points = 31
+        if mode == "sweep":
+            sweep_field = st.selectbox(
+                "スイープ変数",
+                ("cone_half_angle", "mach"),
+                index=(
+                    0
+                    if sweep.get("field", "cone_half_angle") == "cone_half_angle"
+                    else 1
+                ),
+                format_func=lambda value: (
+                    "円錐半頂角 θc" if value == "cone_half_angle" else "Mach M∞"
+                ),
+                key="cone_shock_sweep_field",
+            )
+            if sweep_field == "cone_half_angle":
+                default_limit = float(maximum_attached_cone_angle(mach).cone_half_angle)
+                start_si = float(sweep.get("start", 0.0))
+                stop_si = float(sweep.get("stop", default_limit * 1.05))
+                start_default = _display(start_si, "angle", preferences.angle)
+                stop_default = _display(stop_si, "angle", preferences.angle)
+                unit = preferences.angle
+            else:
+                start_default = float(sweep.get("start", 1.1))
+                stop_default = float(sweep.get("stop", 5.0))
+                unit = "–"
+            left, right, count = st.columns(3)
+            with left:
+                sweep_start = finite_number(
+                    f"開始 [{unit}]", start_default, key="cone_shock_sweep_start"
+                )
+            with right:
+                sweep_stop = finite_number(
+                    f"終了 [{unit}]", stop_default, key="cone_shock_sweep_stop"
+                )
+            with count:
+                points = int(
+                    st.number_input(
+                        "点数",
+                        2,
+                        201,
+                        int(sweep.get("points", 31)),
+                        1,
+                        key="cone_shock_sweep_points",
+                    )
+                )
+        submitted = st.form_submit_button("計算", type="primary")
+
+    if submitted:
+        st.session_state.pop("cone_shock_payload", None)
+        try:
+            angle_si = _si(cone_half_angle, "angle", preferences.angle)
+            sweep_config: dict[str, object] | None = None
+            if mode == "single":
+                result = conical_shock_condition(
+                    upstream_mach=mach, cone_half_angle=angle_si
+                )
+            else:
+                start_si = (
+                    _si(sweep_start, "angle", preferences.angle)
+                    if sweep_field == "cone_half_angle"
+                    else sweep_start
+                )
+                stop_si = (
+                    _si(sweep_stop, "angle", preferences.angle)
+                    if sweep_field == "cone_half_angle"
+                    else sweep_stop
+                )
+                result = conical_shock_sweep(
+                    fixed_mach=mach,
+                    fixed_cone_half_angle=angle_si,
+                    sweep_field=sweep_field,
+                    start=start_si,
+                    stop=stop_si,
+                    points=points,
+                )
+                sweep_config = {
+                    "field": sweep_field,
+                    "start": start_si,
+                    "stop": stop_si,
+                    "points": points,
+                }
+            configuration = make_configuration(
+                calculator="conical_shock",
+                mode=mode,
+                inputs_si={
+                    "upstream_mach": mach,
+                    "cone_half_angle": angle_si,
+                },
+                models={},
+                units=preferences,
+                sweep_si=sweep_config,
+            )
+        except ValueError as error:
+            st.error(str(error), icon="🚫")
+        else:
+            st.session_state["cone_shock_payload"] = (result, configuration)
+
+    payload = _result_payload("cone_shock_payload")
+    if payload is None:
+        with st.expander("モデルの前提・適用範囲"):
+            st.write(
+                "迎角0°の鋭い円錐、完全気体、軸対称・非粘性の付着弱解を仮定します。"
+            )
+        return
+    result, configuration = payload
+
+    def metrics(row: Mapping[str, object]) -> None:
+        headings = list(row)
+        columns = st.columns(4)
+        wanted = ("衝撃波角 β", "表面 Mach Mₛ", "pₛ/p∞", "p₀₂/p₀∞")
+        for column, label in zip(columns, wanted, strict=True):
+            with column:
+                _metric(label, row, next(x for x in headings if label in x))
+
+    figures = conical_shock_trends(result.rows, preferences)
+    if configuration["mode"] == "single":
+        figures = {
+            "模式図": conical_shock_geometry(result.rows[0], preferences),
+            **figures,
+        }
+    render_result_bundle(
+        calculator="conical_shock",
+        result=result,
+        configuration=configuration,
+        preferences=preferences,
+        figures=figures,
+        filename_prefix="aerophysics-conical-shock",
+        metrics=metrics,
+    )
+    invalid = sum(row["status"] != "ok" for row in result.rows)
+    if invalid:
+        st.warning(f"{invalid}点は付着弱解がないため欠損値としました。")
+    with st.expander("モデルの前提・適用範囲"):
+        st.write(
+            "角度はGUI境界でradianへ変換し、Taylor–Maccoll方程式を数値積分します。"
         )
 
 

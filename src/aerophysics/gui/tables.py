@@ -67,6 +67,21 @@ SHOCK_COLUMNS = (
     Column("message", "message"),
 )
 
+CONICAL_SHOCK_COLUMNS = (
+    Column("upstream_mach", "上流 Mach M∞"),
+    Column("cone_half_angle", "円錐半頂角 θc", "angle"),
+    Column("maximum_cone_half_angle", "最大付着半頂角 θc,max", "angle"),
+    Column("shock_angle", "衝撃波角 β", "angle"),
+    Column("post_shock_mach", "衝撃波直後 Mach M₂"),
+    Column("surface_mach", "表面 Mach Mₛ"),
+    Column("surface_pressure_ratio", "pₛ/p∞"),
+    Column("surface_density_ratio", "ρₛ/ρ∞"),
+    Column("surface_temperature_ratio", "Tₛ/T∞"),
+    Column("total_pressure_ratio", "p₀₂/p₀∞"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
 ISENTROPIC_COLUMNS = (
     Column("input_value", "入力値"),
     Column("input_basis", "入力基準"),
@@ -199,6 +214,7 @@ THERMOCHEMISTRY_COLUMNS = (
 def columns_for(calculator: str) -> tuple[Column, ...]:
     """Return ordered table columns for a calculator."""
     choices = {
+        "conical_shock": CONICAL_SHOCK_COLUMNS,
         "flight": FLIGHT_COLUMNS,
         "isentropic": ISENTROPIC_COLUMNS,
         "normal_shock": NORMAL_SHOCK_COLUMNS,

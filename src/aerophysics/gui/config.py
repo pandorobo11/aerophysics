@@ -12,6 +12,7 @@ CONFIG_SCHEMA_VERSION = 1
 CALCULATORS = {
     "boundary_layer",
     "boundary_layer_profile",
+    "conical_shock",
     "expansion",
     "flight",
     "isentropic",

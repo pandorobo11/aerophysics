@@ -17,6 +17,7 @@ from aerophysics.gui.flow_pages import (
 )
 from aerophysics.gui.pages import (
     render_boundary_layer,
+    render_conical_shock,
     render_flight,
     render_shock,
 )
@@ -40,6 +41,10 @@ def shock_page() -> None:
 
 def boundary_layer_page() -> None:
     render_boundary_layer(preferences)
+
+
+def conical_shock_page() -> None:
+    render_conical_shock(preferences)
 
 
 def isentropic_page() -> None:
@@ -90,6 +95,11 @@ pages = {
             shock_page,
             title="斜め衝撃波",
             icon="〰️",
+        ),
+        st.Page(
+            conical_shock_page,
+            title="円錐衝撃波",
+            icon="🔺",
         ),
         st.Page(
             expansion_page,

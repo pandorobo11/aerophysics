@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add Taylor–Maccoll axisymmetric attached conical shocks, cone-surface state
+  ratios, attached limits, vectorized APIs, and a dedicated GUI calculator.
 - Separate transport properties into a dedicated module and add interchangeable
   Keyes and Blottner/Wilke dry-air viscosity models while preserving the
   Sutherland defaults and legacy imports.

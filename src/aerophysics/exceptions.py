@@ -10,7 +10,7 @@ class ApplicabilityWarning(UserWarning):
 
 
 class NoAttachedShockError(ValueError):
-    """Raised when no attached oblique-shock solution exists."""
+    """Raised when no attached oblique- or conical-shock solution exists."""
 
 
 __all__ = ["ApplicabilityWarning", "ModelRangeError", "NoAttachedShockError"]

@@ -64,9 +64,7 @@ def test_keyes_reference_value_and_array_shape() -> None:
         * temperature**1.5
         / (temperature + 122.1 * 10.0 ** (-5.0 / temperature))
     )
-    assert AIR_KEYES_VISCOSITY.dynamic_viscosity(temperature) == pytest.approx(
-        expected
-    )
+    assert AIR_KEYES_VISCOSITY.dynamic_viscosity(temperature) == pytest.approx(expected)
     result = AIR_KEYES_VISCOSITY.dynamic_viscosity([[100.0, 300.0], [500.0, 1000.0]])
     assert isinstance(result, np.ndarray)
     assert result.shape == (2, 2)
@@ -117,13 +115,9 @@ def test_wilke_permutation_invariance_and_dry_air_reference() -> None:
     models = AIR_BLOTTNER_VISCOSITY.component_models
     masses = AIR_BLOTTNER_VISCOSITY.molar_masses
     fractions = AIR_BLOTTNER_VISCOSITY.mole_fractions
-    viscosities = tuple(
-        float(model.dynamic_viscosity(1000.0)) for model in models
-    )
+    viscosities = tuple(float(model.dynamic_viscosity(1000.0)) for model in models)
     expected = _wilke_value(viscosities, masses, fractions)
-    assert AIR_BLOTTNER_VISCOSITY.dynamic_viscosity(1000.0) == pytest.approx(
-        expected
-    )
+    assert AIR_BLOTTNER_VISCOSITY.dynamic_viscosity(1000.0) == pytest.approx(expected)
     assert expected == pytest.approx(4.137574698616173e-5)
 
     reversed_model = WilkeMixtureViscosityModel(
@@ -213,9 +207,7 @@ def test_wilke_rejects_invalid_component_and_non_numeric_data() -> None:
 
     invalid_masses = cast(tuple[float, ...], ("heavy",))
     with pytest.raises(ValueError, match="real numeric values"):
-        WilkeMixtureViscosityModel(
-            (AIR_VISCOSITY,), invalid_masses, (1.0,)
-        )
+        WilkeMixtureViscosityModel((AIR_VISCOSITY,), invalid_masses, (1.0,))
 
 
 @pytest.mark.parametrize("temperature", [0.0, -1.0, np.nan, np.inf])

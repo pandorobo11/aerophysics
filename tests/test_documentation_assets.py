@@ -17,9 +17,7 @@ TABLE_FRAGMENT = PROJECT_ROOT / "docs/_generated/viscosity_model_comparison.rst"
 SVG = PROJECT_ROOT / "docs/_static/viscosity_model_comparison.svg"
 
 
-def _expected_row(
-    temperature: float, candidate: DynamicViscosityModel
-) -> str:
+def _expected_row(temperature: float, candidate: DynamicViscosityModel) -> str:
     baseline_value = AIR_VISCOSITY.dynamic_viscosity(temperature)
     candidate_value = candidate.dynamic_viscosity(temperature)
     relative_difference = (candidate_value / baseline_value - 1.0) * 100.0
@@ -53,8 +51,8 @@ def test_viscosity_comparison_tables_match_public_models() -> None:
 
 def test_viscosity_comparison_svg_has_accessible_labels() -> None:
     svg = SVG.read_text(encoding="utf-8")
-    assert "<title id=\"svg-title\">" in svg
-    assert "<desc id=\"svg-desc\">" in svg
+    assert '<title id="svg-title">' in svg
+    assert '<desc id="svg-desc">' in svg
     assert "Temperature (K)" in svg
     assert "Dynamic viscosity (Pa·s)" in svg
     assert "Relative difference (%)" in svg

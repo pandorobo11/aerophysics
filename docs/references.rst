@@ -82,6 +82,12 @@ NACA Report 1135, 1953.
 
 https://www.nasa.gov/wp-content/uploads/2023/03/equations-tables-charts-compressibleflow-report-1135.pdf
 
+Sims, J. L. *Tables for Supersonic Flow Around Right Circular Cones at Zero
+Angle of Attack*. NASA SP-3004, 1964. The Taylor--Maccoll reference values use
+an ideal-gas heat-capacity ratio of 1.4.
+
+https://ntrs.nasa.gov/citations/19640009035
+
 Boundary layers
 ---------------
 

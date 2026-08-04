@@ -34,6 +34,8 @@ from aerophysics.isentropic import (
 )
 from aerophysics.shocks import (
     ShockBranch,
+    conical_shock,
+    maximum_attached_cone_angle,
     maximum_attached_deflection,
     normal_shock,
     oblique_shock,
@@ -464,6 +466,75 @@ def oblique_shock_sweep(
             rows.append(result.rows[0])
     if sweep_field not in {"mach", "deflection"}:
         raise ValueError("sweep_field must be mach or deflection")
+    return CalculationResult(tuple(rows))
+
+
+def conical_shock_condition(
+    *, upstream_mach: float, cone_half_angle: float
+) -> CalculationResult:
+    """Calculate one axisymmetric Taylor-Maccoll conical-shock state."""
+    result = conical_shock(upstream_mach, cone_half_angle)
+    limit = maximum_attached_cone_angle(upstream_mach)
+    row: Row = {
+        "upstream_mach": float(result.upstream_mach),
+        "cone_half_angle": float(result.cone_half_angle),
+        "maximum_cone_half_angle": float(limit.cone_half_angle),
+        "shock_angle": float(result.shock_angle),
+        "post_shock_mach": float(result.post_shock_mach),
+        "surface_mach": float(result.surface_mach),
+        "surface_pressure_ratio": float(result.surface_pressure_ratio),
+        "surface_density_ratio": float(result.surface_density_ratio),
+        "surface_temperature_ratio": float(result.surface_temperature_ratio),
+        "total_pressure_ratio": float(result.total_pressure_ratio),
+        "status": "ok",
+        "message": "",
+    }
+    return CalculationResult((row,))
+
+
+def conical_shock_sweep(
+    *,
+    fixed_mach: float,
+    fixed_cone_half_angle: float,
+    sweep_field: str,
+    start: float,
+    stop: float,
+    points: int,
+) -> CalculationResult:
+    """Sweep Mach or cone half-angle while retaining non-attached rows."""
+    if sweep_field not in {"mach", "cone_half_angle"}:
+        raise ValueError("sweep_field must be mach or cone_half_angle")
+    values = sweep_values(start, stop, points)
+    rows: list[Row] = []
+    for value in values:
+        mach = float(value) if sweep_field == "mach" else fixed_mach
+        angle = (
+            float(value) if sweep_field == "cone_half_angle" else fixed_cone_half_angle
+        )
+        try:
+            result = conical_shock_condition(upstream_mach=mach, cone_half_angle=angle)
+        except ValueError as error:
+            maximum: float | None = None
+            if mach > 1.0:
+                maximum = float(maximum_attached_cone_angle(mach).cone_half_angle)
+            rows.append(
+                {
+                    "upstream_mach": mach,
+                    "cone_half_angle": angle,
+                    "maximum_cone_half_angle": maximum,
+                    "shock_angle": None,
+                    "post_shock_mach": None,
+                    "surface_mach": None,
+                    "surface_pressure_ratio": None,
+                    "surface_density_ratio": None,
+                    "surface_temperature_ratio": None,
+                    "total_pressure_ratio": None,
+                    "status": "no_attached_shock",
+                    "message": str(error),
+                }
+            )
+        else:
+            rows.append(result.rows[0])
     return CalculationResult(tuple(rows))
 
 

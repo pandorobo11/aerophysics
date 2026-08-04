@@ -48,9 +48,7 @@ def _normalise_temperature_range(
     if not np.isfinite(minimum) or not np.isfinite(maximum):
         raise ValueError("temperature_range must contain only finite values")
     if minimum <= 0.0 or maximum <= minimum:
-        raise ValueError(
-            "temperature_range must be positive and strictly increasing"
-        )
+        raise ValueError("temperature_range must be positive and strictly increasing")
     return minimum, maximum
 
 
@@ -123,9 +121,7 @@ class KeyesModel:
 
     def __post_init__(self) -> None:
         _require_finite_positive(self.coefficient, name="coefficient")
-        _require_finite_positive(
-            self.additive_temperature, name="additive_temperature"
-        )
+        _require_finite_positive(self.additive_temperature, name="additive_temperature")
         _require_finite_positive(
             self.exponential_temperature, name="exponential_temperature"
         )
@@ -208,9 +204,7 @@ class WilkeMixtureViscosityModel:
             not callable(getattr(model, "dynamic_viscosity", None))
             for model in self.component_models
         ):
-            raise TypeError(
-                "component_models must contain dynamic-viscosity models"
-            )
+            raise TypeError("component_models must contain dynamic-viscosity models")
         try:
             masses = tuple(float(value) for value in self.molar_masses)
             fractions = tuple(float(value) for value in self.mole_fractions)
@@ -313,15 +307,12 @@ _DRY_AIR_BLOTTNER_COEFFICIENTS = (
     (-0.02201, 1.010, -13.42),
     (-0.041372, 1.3293, -15.016),
 )
-_raw_air_fractions = tuple(
-    DRY_AIR_MOLE_FRACTIONS[name] for name in _DRY_AIR_SPECIES
-)
+_raw_air_fractions = tuple(DRY_AIR_MOLE_FRACTIONS[name] for name in _DRY_AIR_SPECIES)
 _air_fraction_total = sum(_raw_air_fractions)
 
 AIR_BLOTTNER_VISCOSITY = WilkeMixtureViscosityModel(
     component_models=tuple(
-        BlottnerModel(*coefficients)
-        for coefficients in _DRY_AIR_BLOTTNER_COEFFICIENTS
+        BlottnerModel(*coefficients) for coefficients in _DRY_AIR_BLOTTNER_COEFFICIENTS
     ),
     molar_masses=tuple(NASA9_DATA[name][0] for name in _DRY_AIR_SPECIES),
     mole_fractions=tuple(value / _air_fraction_total for value in _raw_air_fractions),

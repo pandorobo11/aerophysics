@@ -70,6 +70,30 @@ render_shock(UnitPreferences())
     assert app.warning
 
 
+def test_conical_shock_page_calculation_and_sweep() -> None:
+    script = """
+from aerophysics.gui.pages import render_conical_shock
+from aerophysics.gui.units import UnitPreferences
+render_conical_shock(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert app.metric[0].label == "衝撃波角 β"
+    assert len(app.get("plotly_chart")) == 3
+
+    app.radio(key="cone_shock_mode").set_value("1変数スイープ").run()
+    app.number_input(key="cone_shock_sweep_points").set_value(3).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception
+    assert any(
+        status == "no_attached_shock"
+        for status in app.dataframe[0].value["status"].tolist()
+    )
+    assert app.warning
+
+
 def test_boundary_layer_page_calculation_and_case_source() -> None:
     script = """
 from aerophysics.gui.pages import render_boundary_layer
