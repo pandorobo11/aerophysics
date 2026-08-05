@@ -1,4 +1,4 @@
-"""Streamlit pages for advanced viscous-flow and thermochemistry analyses."""
+"""Streamlit pages for advanced viscous-flow and property analyses."""
 
 from __future__ import annotations
 
@@ -22,6 +22,8 @@ from aerophysics.gui.advanced_adapters import (
     protrusion_sweep,
     thermochemistry_condition,
     thermochemistry_sweep,
+    viscosity_condition,
+    viscosity_sweep,
 )
 from aerophysics.gui.components import (
     finite_number,
@@ -44,6 +46,7 @@ from aerophysics.gui.figures import (
     protrusion_figures,
     protrusion_shape_figure,
     thermochemistry_figures,
+    viscosity_figures,
 )
 from aerophysics.gui.units import UnitPreferences, from_si, to_si
 
@@ -1088,4 +1091,200 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
         st.write(
             "N₂/O₂/Ar/CO₂のモル分率を固定した理想混合気体です。NASA標準"
             "エンタルピーと基準温度差の顕熱は異なる量として表示します。"
+        )
+
+
+def render_viscosity(preferences: UnitPreferences) -> None:
+    """Render dry-air dynamic-viscosity model calculations."""
+    st.title("粘性係数")
+    st.caption("Sutherland／Keyes／Blottner-Wilkeによる乾燥空気の動的粘性係数です。")
+    imported = pop_pending_configuration("viscosity")
+    inputs, models, sweep = _defaults(imported)
+    render_configuration_import("viscosity", "viscosity")
+    render_reset_button("viscosity", "viscosity_payload")
+
+    selections = ("Sutherland", "Keyes", "Blottner/Wilke", "compare")
+    selected_default = str(models.get("selection", "compare"))
+    if selected_default not in selections:
+        selected_default = "compare"
+    scale_default = str(sweep.get("scale", "log"))
+    if scale_default not in {"linear", "log"}:
+        scale_default = "log"
+
+    with st.form("viscosity_form"):
+        mode = st.radio(
+            "計算モード",
+            ("single", "sweep"),
+            index=0 if (imported or {}).get("mode", "sweep") == "single" else 1,
+            format_func=lambda value: "単点" if value == "single" else "温度スイープ",
+            horizontal=True,
+            key="viscosity_mode",
+        )
+        selection = st.selectbox(
+            "粘性モデル",
+            selections,
+            index=selections.index(selected_default),
+            format_func=lambda value: (
+                "3モデルを比較" if value == "compare" else value
+            ),
+            key="viscosity_selection",
+        )
+        temperature = finite_number(
+            f"温度 T [{preferences.temperature}]",
+            _display(
+                _number(inputs, "temperature", 1000.0),
+                "temperature",
+                preferences.temperature,
+            ),
+            key="viscosity_temperature",
+        )
+        allow_extrapolation = st.checkbox(
+            "公称範囲外への外挿を許可",
+            value=bool(models.get("allow_extrapolation", False)),
+            key="viscosity_extrapolate",
+        )
+        start = stop = 0.0
+        points = 201
+        scale = "log"
+        if mode == "sweep":
+            left, right, count = st.columns(3)
+            with left:
+                start = finite_number(
+                    f"開始温度 [{preferences.temperature}]",
+                    _display(
+                        _number(sweep, "start", 79.0),
+                        "temperature",
+                        preferences.temperature,
+                    ),
+                    key="viscosity_sweep_start",
+                )
+            with right:
+                stop = finite_number(
+                    f"終了温度 [{preferences.temperature}]",
+                    _display(
+                        _number(sweep, "stop", 30_000.0),
+                        "temperature",
+                        preferences.temperature,
+                    ),
+                    key="viscosity_sweep_stop",
+                )
+            with count:
+                points = int(
+                    st.number_input(
+                        "点数",
+                        2,
+                        501,
+                        int(sweep.get("points", 201)),
+                        1,
+                        key="viscosity_sweep_points",
+                    )
+                )
+            scale = st.radio(
+                "温度点の配置",
+                ("log", "linear"),
+                index=0 if scale_default == "log" else 1,
+                format_func=lambda value: "対数" if value == "log" else "線形",
+                horizontal=True,
+                key="viscosity_sweep_scale",
+            )
+        submitted = st.form_submit_button("計算", type="primary")
+
+    if submitted:
+        st.session_state.pop("viscosity_payload", None)
+        try:
+            temperature_si = _si(temperature, "temperature", preferences.temperature)
+            selected_models = (
+                ("Sutherland", "Keyes", "Blottner/Wilke")
+                if selection == "compare"
+                else (selection,)
+            )
+            sweep_configuration = None
+            if mode == "single":
+                result = viscosity_condition(
+                    temperature=temperature_si,
+                    models=selected_models,
+                    allow_extrapolation=allow_extrapolation,
+                )
+            else:
+                start_si = _si(start, "temperature", preferences.temperature)
+                stop_si = _si(stop, "temperature", preferences.temperature)
+                result = viscosity_sweep(
+                    start=start_si,
+                    stop=stop_si,
+                    points=points,
+                    models=selected_models,
+                    allow_extrapolation=allow_extrapolation,
+                    log_temperature=scale == "log",
+                )
+                sweep_configuration = {
+                    "field": "temperature",
+                    "start": start_si,
+                    "stop": stop_si,
+                    "points": points,
+                    "scale": scale,
+                }
+            configuration = make_configuration(
+                calculator="viscosity",
+                mode=mode,
+                inputs_si={"temperature": temperature_si},
+                models={
+                    "selection": selection,
+                    "allow_extrapolation": allow_extrapolation,
+                },
+                units=preferences,
+                sweep_si=sweep_configuration,
+            )
+        except ValueError as error:
+            st.error(str(error), icon="🚫")
+        else:
+            st.session_state["viscosity_payload"] = (result, configuration)
+
+    payload = _result_payload("viscosity_payload")
+    if payload is None:
+        with st.expander("モデルの前提・適用範囲"):
+            st.write(
+                "Keyesは79–1845 K、Blottner/Wilkeは1000–30000 Kが公称範囲です。"
+                "Sutherlandは標準大気と飛行条件の既定モデルです。"
+            )
+        return
+    result, configuration = payload
+
+    def metrics(_: Mapping[str, object]) -> None:
+        columns = st.columns(len(result.rows))
+        for column, row in zip(columns, result.rows, strict=True):
+            viscosity = row.get("dynamic_viscosity")
+            difference = row.get("relative_difference")
+            value = f"{viscosity:.7g} Pa·s" if isinstance(viscosity, float) else "—"
+            delta = (
+                f"{difference:+.3f}% vs Sutherland"
+                if isinstance(difference, float)
+                else None
+            )
+            with column:
+                st.metric(str(row.get("model", "")), value, delta=delta)
+
+    figures: dict[str, Any] = {}
+    configured_sweep = configuration.get("sweep_si")
+    if configuration["mode"] == "sweep" and isinstance(configured_sweep, dict):
+        figures = viscosity_figures(
+            result.rows,
+            preferences,
+            log_temperature=configured_sweep.get("scale") == "log",
+        )
+
+    render_result_bundle(
+        calculator="viscosity",
+        result=result,
+        configuration=configuration,
+        preferences=preferences,
+        figures=figures,
+        filename_prefix="aerophysics-viscosity",
+        metrics=metrics if configuration["mode"] == "single" else None,
+    )
+    with st.expander("モデルの前提・適用範囲"):
+        st.write(
+            "Keyesは79–1845 K、Blottner/Wilkeは1000–30000 Kが公称範囲です。"
+            "Sutherlandは標準大気と飛行条件の既定モデルです。Blottner/Wilkeは"
+            "N₂/O₂/Ar/CO₂固定組成で、解離・反応・電離を含みません。対数温度軸は"
+            "表示温度単位にかかわらず絶対温度Kで表示します。"
         )

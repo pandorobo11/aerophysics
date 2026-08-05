@@ -20,6 +20,7 @@ CALCULATORS = {
     "oblique_shock",
     "protrusion_drag",
     "thermochemistry",
+    "viscosity",
 }
 MODES = {"single", "sweep"}
 

@@ -1,4 +1,4 @@
-"""Pure GUI adapters for viscous-profile, protrusion, and thermo models."""
+"""Pure GUI adapters for viscous-profile, protrusion, and property models."""
 
 from __future__ import annotations
 
@@ -16,6 +16,12 @@ from aerophysics.boundary_layer_profile import (
 )
 from aerophysics.gui.adapters import CalculationResult, Row, sweep_values
 from aerophysics.protrusion import protrusion_drag
+from aerophysics.transport import (
+    AIR_BLOTTNER_VISCOSITY,
+    AIR_KEYES_VISCOSITY,
+    AIR_VISCOSITY,
+    DynamicViscosityModel,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -452,6 +458,133 @@ def thermochemistry_sweep(
         temperature=sweep_values(start, stop, points),
         pressure=pressure,
         reference_temperature=reference_temperature,
+        models=models,
+        allow_extrapolation=allow_extrapolation,
+    )
+
+
+_VISCOSITY_MODELS: dict[str, DynamicViscosityModel] = {
+    "Sutherland": AIR_VISCOSITY,
+    "Keyes": AIR_KEYES_VISCOSITY,
+    "Blottner/Wilke": AIR_BLOTTNER_VISCOSITY,
+}
+_VISCOSITY_RANGES: dict[str, tuple[float, float] | None] = {
+    "Sutherland": None,
+    "Keyes": (79.0, 1845.0),
+    "Blottner/Wilke": (1000.0, 30_000.0),
+}
+
+
+def viscosity_condition(
+    *,
+    temperature: float | np.ndarray,
+    models: Sequence[str],
+    allow_extrapolation: bool,
+) -> CalculationResult:
+    """Calculate dry-air dynamic viscosity with one or more models."""
+    selected = tuple(models)
+    if not selected or len(set(selected)) != len(selected):
+        raise ValueError("models must contain unique viscosity model choices")
+    unknown = tuple(name for name in selected if name not in _VISCOSITY_MODELS)
+    if unknown:
+        raise ValueError(
+            "model must be Sutherland, Keyes, or Blottner/Wilke"
+        )
+
+    temperatures = np.atleast_1d(
+        np.asarray(temperature, dtype=np.float64)
+    ).reshape(-1)
+    if not np.all(np.isfinite(temperatures)) or np.any(temperatures <= 0.0):
+        raise ValueError("temperature must be finite and greater than zero")
+    baseline = np.atleast_1d(
+        np.asarray(AIR_VISCOSITY.dynamic_viscosity(temperatures), dtype=np.float64)
+    )
+    rows: list[Row] = []
+    messages: list[str] = []
+
+    for name in selected:
+        model = _VISCOSITY_MODELS[name]
+        nominal_range = _VISCOSITY_RANGES[name]
+        valid = np.ones(temperatures.shape, dtype=np.bool_)
+        if nominal_range is not None:
+            minimum, maximum = nominal_range
+            valid = (temperatures >= minimum) & (temperatures <= maximum)
+
+        values = np.full(temperatures.shape, np.nan, dtype=np.float64)
+        if allow_extrapolation:
+            with warnings.catch_warnings(record=True) as captured:
+                warnings.simplefilter("always")
+                values = np.atleast_1d(
+                    np.asarray(
+                        model.dynamic_viscosity(temperatures), dtype=np.float64
+                    )
+                )
+            messages.extend(str(item.message) for item in captured)
+        elif np.any(valid):
+            values[valid] = np.atleast_1d(
+                np.asarray(
+                    model.dynamic_viscosity(temperatures[valid]), dtype=np.float64
+                )
+            )
+
+        omitted = int(np.count_nonzero(~valid))
+        if omitted and not allow_extrapolation and nominal_range is not None:
+            minimum, maximum = nominal_range
+            messages.append(
+                f"{name}: {omitted} temperature value(s) outside the nominal "
+                f"range {minimum:g}--{maximum:g} K were omitted"
+            )
+
+        for index, value in enumerate(temperatures):
+            if valid[index]:
+                viscosity = float(values[index])
+                relative = float((viscosity / baseline[index] - 1.0) * 100.0)
+                status = "ok"
+                message = ""
+            elif allow_extrapolation and nominal_range is not None:
+                minimum, maximum = nominal_range
+                viscosity = float(values[index])
+                relative = float((viscosity / baseline[index] - 1.0) * 100.0)
+                status = "extrapolated"
+                message = (
+                    f"temperature is outside the nominal range "
+                    f"{minimum:g}--{maximum:g} K"
+                )
+            else:
+                minimum, maximum = nominal_range or (0.0, 0.0)
+                viscosity = None
+                relative = None
+                status = "out_of_range"
+                message = (
+                    f"temperature is outside the nominal range "
+                    f"{minimum:g}--{maximum:g} K"
+                )
+            rows.append(
+                {
+                    "model": name,
+                    "temperature": float(value),
+                    "dynamic_viscosity": viscosity,
+                    "relative_difference": relative,
+                    "status": status,
+                    "message": message,
+                }
+            )
+
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
+
+
+def viscosity_sweep(
+    *,
+    start: float,
+    stop: float,
+    points: int,
+    models: Sequence[str],
+    allow_extrapolation: bool,
+    log_temperature: bool,
+) -> CalculationResult:
+    """Calculate a linear or logarithmic dry-air viscosity sweep."""
+    return viscosity_condition(
+        temperature=sweep_values(start, stop, points, log=log_temperature),
         models=models,
         allow_extrapolation=allow_extrapolation,
     )

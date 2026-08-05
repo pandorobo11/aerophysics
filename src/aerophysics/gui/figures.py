@@ -864,3 +864,58 @@ def thermochemistry_figures(
                 annotation_text=label,
             )
     return figures
+
+
+def viscosity_figures(
+    rows: tuple[Row, ...],
+    preferences: UnitPreferences,
+    *,
+    log_temperature: bool,
+) -> dict[str, go.Figure]:
+    """Create dynamic-viscosity and Sutherland-relative comparison figures."""
+    absolute = go.Figure()
+    relative = go.Figure()
+    model_names = tuple(
+        dict.fromkeys(
+            str(row["model"])
+            for row in rows
+            if isinstance(row.get("model"), str)
+        )
+    )
+    for model in model_names:
+        selected = tuple(row for row in rows if row.get("model") == model)
+        temperature = (
+            _numeric(selected, "temperature")
+            if log_temperature
+            else _converted(selected, "temperature", "temperature", preferences)
+        )
+        absolute.add_trace(
+            go.Scatter(
+                x=temperature,
+                y=_numeric(selected, "dynamic_viscosity"),
+                name=model,
+                connectgaps=False,
+            )
+        )
+        relative.add_trace(
+            go.Scatter(
+                x=temperature,
+                y=_numeric(selected, "relative_difference"),
+                name=model,
+                connectgaps=False,
+            )
+        )
+
+    x_title = "温度 [K]" if log_temperature else f"温度 [{preferences.temperature}]"
+    axis_type = "log" if log_temperature else "linear"
+    for figure in (absolute, relative):
+        figure.update_xaxes(title_text=x_title, type=axis_type)
+    absolute.update_yaxes(title_text="Pa·s")
+    relative.update_yaxes(title_text="%")
+    relative.add_hline(line_dash="dot", line_color="#777777", y=0.0)
+    return {
+        "粘性係数": _style(absolute, "乾燥空気の動的粘性係数"),
+        "Sutherland基準相対差": _style(
+            relative, "Sutherland基準の相対差"
+        ),
+    }

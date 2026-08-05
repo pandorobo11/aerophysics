@@ -27,6 +27,7 @@ from aerophysics.gui.advanced_adapters import (
     boundary_layer_profiles,
     protrusion_sweep,
     thermochemistry_sweep,
+    viscosity_sweep,
 )
 from aerophysics.gui.figures import (
     boundary_layer_figures,
@@ -42,6 +43,7 @@ from aerophysics.gui.figures import (
     shock_geometry,
     shock_trends,
     thermochemistry_figures,
+    viscosity_figures,
 )
 from aerophysics.gui.units import UnitPreferences
 from aerophysics.isentropic import MachBranch
@@ -283,3 +285,32 @@ def test_csv_shape_and_thermochemistry_figures() -> None:
     assert set(figures) == {"比熱", "比熱比・音速", "エネルギー", "エントロピー"}
     assert len(figures["比熱"].data) == 4
     assert len(figures["比熱"].layout.shapes) == 2
+
+
+def test_viscosity_figures_show_gaps_relative_difference_and_axis_scale() -> None:
+    result = viscosity_sweep(
+        start=79.0,
+        stop=30_000.0,
+        points=5,
+        models=("Sutherland", "Keyes", "Blottner/Wilke"),
+        allow_extrapolation=False,
+        log_temperature=True,
+    )
+    figures = viscosity_figures(
+        result.rows, UnitPreferences(temperature="°F"), log_temperature=True
+    )
+    assert set(figures) == {"粘性係数", "Sutherland基準相対差"}
+    assert len(figures["粘性係数"].data) == 3
+    assert figures["粘性係数"].layout.xaxis.type == "log"
+    assert "K" in str(figures["粘性係数"].layout.xaxis.title.text)
+    assert np.isnan(np.asarray(figures["粘性係数"].data[1].y, dtype=float)).any()
+    assert np.isnan(np.asarray(figures["粘性係数"].data[2].y, dtype=float)).any()
+    assert np.asarray(
+        figures["Sutherland基準相対差"].data[0].y, dtype=float
+    ) == pytest.approx(np.zeros(5))
+
+    linear = viscosity_figures(
+        result.rows, UnitPreferences(temperature="°F"), log_temperature=False
+    )
+    assert linear["粘性係数"].layout.xaxis.type == "linear"
+    assert "°F" in str(linear["粘性係数"].layout.xaxis.title.text)

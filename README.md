@@ -28,7 +28,8 @@ Install the optional GUI dependencies to calculate and plot standard-atmosphere,
 flight-condition, isentropic-flow, normal-, oblique-, and conical-shock,
 Prandtl-Meyer-expansion, and flat-plate boundary-layer results in a local
 browser. Compressible boundary-layer profiles, boundary-layer-immersed
-protrusion drag, and NASA7/NASA9 frozen-air thermochemistry are also available:
+protrusion drag, Sutherland/Keyes/Blottner-Wilke viscosity comparisons, and
+NASA7/NASA9 frozen-air thermochemistry are also available:
 
 ```console
 python -m pip install "aerophysics[gui]"

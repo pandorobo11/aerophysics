@@ -26,7 +26,8 @@ python -m pip install aerophysics
 GUI用の追加依存関係を含めてインストールすると、ブラウザ上で標準大気、
 飛行条件、等エントロピー流れ、垂直・斜め・円錐衝撃波、Prandtl–Meyer膨張、
 平板境界層、圧縮性境界層プロファイル、境界層内の突起抗力、NASA7/9
-乾燥空気熱化学を計算・プロットできます。
+乾燥空気熱化学に加え、Sutherland／Keyes／Blottner-Wilkeによる粘性係数を
+計算・比較できます。
 
 ```console
 python -m pip install "aerophysics[gui]"

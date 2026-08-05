@@ -213,6 +213,15 @@ THERMOCHEMISTRY_COLUMNS = (
     Column("message", "message"),
 )
 
+VISCOSITY_COLUMNS = (
+    Column("model", "モデル"),
+    Column("temperature", "温度 T", "temperature"),
+    Column("dynamic_viscosity", "粘性係数 μ", fixed_unit="Pa·s"),
+    Column("relative_difference", "Sutherland基準相対差", fixed_unit="%"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
 
 def columns_for(calculator: str) -> tuple[Column, ...]:
     """Return ordered table columns for a calculator."""
@@ -227,6 +236,7 @@ def columns_for(calculator: str) -> tuple[Column, ...]:
         "boundary_layer_profile": BOUNDARY_LAYER_PROFILE_COLUMNS,
         "protrusion_drag": PROTRUSION_COLUMNS,
         "thermochemistry": THERMOCHEMISTRY_COLUMNS,
+        "viscosity": VISCOSITY_COLUMNS,
     }
     try:
         return choices[calculator]

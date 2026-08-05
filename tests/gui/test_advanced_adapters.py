@@ -15,7 +15,14 @@ from aerophysics.gui.advanced_adapters import (
     protrusion_sweep,
     thermochemistry_condition,
     thermochemistry_sweep,
+    viscosity_condition,
+    viscosity_sweep,
     wall_normal_grid,
+)
+from aerophysics.transport import (
+    AIR_BLOTTNER_VISCOSITY,
+    AIR_KEYES_VISCOSITY,
+    AIR_VISCOSITY,
 )
 
 
@@ -231,4 +238,147 @@ def test_thermochemistry_adapter_matches_core_and_extrapolates() -> None:
             reference_temperature=298.15,
             models=("other",),
             allow_extrapolation=False,
+        )
+
+
+def test_viscosity_adapter_matches_public_models_and_order() -> None:
+    result = viscosity_condition(
+        temperature=1000.0,
+        models=("Sutherland", "Keyes", "Blottner/Wilke"),
+        allow_extrapolation=False,
+    )
+    assert [row["model"] for row in result.rows] == [
+        "Sutherland",
+        "Keyes",
+        "Blottner/Wilke",
+    ]
+    assert result.rows[0]["dynamic_viscosity"] == pytest.approx(
+        AIR_VISCOSITY.dynamic_viscosity(1000.0)
+    )
+    assert result.rows[1]["dynamic_viscosity"] == pytest.approx(
+        AIR_KEYES_VISCOSITY.dynamic_viscosity(1000.0)
+    )
+    assert result.rows[2]["dynamic_viscosity"] == pytest.approx(
+        AIR_BLOTTNER_VISCOSITY.dynamic_viscosity(1000.0)
+    )
+    assert result.rows[0]["relative_difference"] == pytest.approx(0.0)
+    multidimensional = viscosity_condition(
+        temperature=np.array([[300.0, 1000.0], [1500.0, 1845.0]]),
+        models=("Keyes",),
+        allow_extrapolation=False,
+    )
+    assert [row["temperature"] for row in multidimensional.rows] == pytest.approx(
+        [300.0, 1000.0, 1500.0, 1845.0]
+    )
+
+
+def test_viscosity_adapter_ranges_and_explicit_extrapolation() -> None:
+    bounded = viscosity_condition(
+        temperature=np.array([78.0, 79.0, 1845.0, 1846.0]),
+        models=("Keyes",),
+        allow_extrapolation=False,
+    )
+    assert [row["status"] for row in bounded.rows] == [
+        "out_of_range",
+        "ok",
+        "ok",
+        "out_of_range",
+    ]
+    assert bounded.rows[0]["dynamic_viscosity"] is None
+    assert len(bounded.warnings) == 1
+
+    blottner = viscosity_condition(
+        temperature=np.array([999.0, 1000.0, 30_000.0, 30_001.0]),
+        models=("Blottner/Wilke",),
+        allow_extrapolation=False,
+    )
+    assert [row["status"] for row in blottner.rows] == [
+        "out_of_range",
+        "ok",
+        "ok",
+        "out_of_range",
+    ]
+
+    extrapolated = viscosity_condition(
+        temperature=50.0,
+        models=("Keyes", "Blottner/Wilke"),
+        allow_extrapolation=True,
+    )
+    assert all(row["status"] == "extrapolated" for row in extrapolated.rows)
+    assert all(
+        isinstance(row["dynamic_viscosity"], float) for row in extrapolated.rows
+    )
+    assert len(extrapolated.warnings) == 2
+
+
+def test_viscosity_adapter_validation_and_sweep_spacing() -> None:
+    for models in ((), ("Keyes", "Keyes")):
+        with pytest.raises(ValueError, match="unique"):
+            viscosity_condition(
+                temperature=300.0,
+                models=models,
+                allow_extrapolation=False,
+            )
+    with pytest.raises(ValueError, match="model must be"):
+        viscosity_condition(
+            temperature=300.0,
+            models=("other",),
+            allow_extrapolation=False,
+        )
+    for temperature in (0.0, -1.0, np.nan, np.inf):
+        with pytest.raises(ValueError, match="greater than zero"):
+            viscosity_condition(
+                temperature=temperature,
+                models=("Sutherland",),
+                allow_extrapolation=False,
+            )
+
+    logarithmic = viscosity_sweep(
+        start=100.0,
+        stop=10_000.0,
+        points=3,
+        models=("Sutherland",),
+        allow_extrapolation=False,
+        log_temperature=True,
+    )
+    assert [row["temperature"] for row in logarithmic.rows] == pytest.approx(
+        [100.0, 1000.0, 10_000.0]
+    )
+    linear = viscosity_sweep(
+        start=100.0,
+        stop=300.0,
+        points=3,
+        models=("Sutherland",),
+        allow_extrapolation=False,
+        log_temperature=False,
+    )
+    assert [row["temperature"] for row in linear.rows] == pytest.approx(
+        [100.0, 200.0, 300.0]
+    )
+    with pytest.raises(ValueError, match="positive"):
+        viscosity_sweep(
+            start=0.0,
+            stop=300.0,
+            points=3,
+            models=("Sutherland",),
+            allow_extrapolation=False,
+            log_temperature=True,
+        )
+    with pytest.raises(ValueError, match="less than"):
+        viscosity_sweep(
+            start=300.0,
+            stop=100.0,
+            points=3,
+            models=("Sutherland",),
+            allow_extrapolation=False,
+            log_temperature=False,
+        )
+    with pytest.raises(ValueError, match="between"):
+        viscosity_sweep(
+            start=100.0,
+            stop=300.0,
+            points=1,
+            models=("Sutherland",),
+            allow_extrapolation=False,
+            log_temperature=False,
         )

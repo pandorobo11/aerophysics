@@ -5,6 +5,7 @@ import json
 import numpy as np
 import pytest
 
+from aerophysics.gui.adapters import Row
 from aerophysics.gui.config import (
     CONFIG_SCHEMA_VERSION,
     ConfigurationError,
@@ -199,6 +200,7 @@ def test_conical_shock_table_converts_angles() -> None:
         "conical_shock",
         "protrusion_drag",
         "thermochemistry",
+        "viscosity",
     ],
 )
 def test_additional_calculator_tables_and_config(calculator: str) -> None:
@@ -211,3 +213,20 @@ def test_additional_calculator_tables_and_config(calculator: str) -> None:
         units=UnitPreferences(),
     )
     assert configuration["calculator"] == calculator
+
+
+def test_viscosity_table_converts_temperature_and_preserves_fixed_units() -> None:
+    rows: tuple[Row, ...] = (
+        {
+            "model": "Keyes",
+            "temperature": 300.0,
+            "dynamic_viscosity": 1.8519327e-5,
+            "relative_difference": 0.320,
+            "status": "ok",
+            "message": "",
+        },
+    )
+    table = display_rows("viscosity", rows, UnitPreferences(temperature="°F"))
+    assert table[0]["温度 T [°F]"] == pytest.approx(80.33)
+    assert table[0]["粘性係数 μ [Pa·s]"] == pytest.approx(1.8519327e-5)
+    assert table[0]["Sutherland基準相対差 [%]"] == pytest.approx(0.320)

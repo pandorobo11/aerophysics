@@ -235,6 +235,76 @@ from aerophysics.gui.units import UnitPreferences
         assert len(app.get("plotly_chart")) == plot_count
 
 
+def test_viscosity_page_sweep_single_and_extrapolation() -> None:
+    script = """
+from aerophysics.gui.analysis_pages import render_viscosity
+from aerophysics.gui.units import UnitPreferences
+render_viscosity(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    assert app.title[0].value == "粘性係数"
+    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.dataframe[0].value) == 603
+    assert len(app.get("plotly_chart")) == 2
+    assert len(app.download_button) == 2
+    assert app.warning
+
+    app.radio(key="viscosity_mode").set_value("single").run()
+    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.metric) == 3
+    assert len(app.dataframe[0].value) == 3
+    assert not app.get("plotly_chart")
+
+    app.selectbox(key="viscosity_selection").set_value("Keyes").run()
+    app.number_input(key="viscosity_temperature").set_value(50.0).run()
+    app.checkbox(key="viscosity_extrapolate").check().run()
+    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.metric) == 1
+    assert app.dataframe[0].value["status"].tolist() == ["extrapolated"]
+    assert app.warning
+
+
+def test_viscosity_page_loads_configuration() -> None:
+    script = """
+from aerophysics.gui.analysis_pages import render_viscosity
+from aerophysics.gui.units import UnitPreferences
+render_viscosity(UnitPreferences())
+"""
+    configuration = make_configuration(
+        calculator="viscosity",
+        mode="sweep",
+        inputs_si={"temperature": 1200.0},
+        models={"selection": "Keyes", "allow_extrapolation": True},
+        units=UnitPreferences(),
+        sweep_si={
+            "field": "temperature",
+            "start": 100.0,
+            "stop": 1000.0,
+            "points": 5,
+            "scale": "linear",
+        },
+    )
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_viscosity_configuration"] = configuration
+    app.run()
+    assert app.selectbox(key="viscosity_selection").value == "Keyes"
+    assert app.checkbox(key="viscosity_extrapolate").value
+    assert app.number_input(key="viscosity_temperature").value == pytest.approx(1200.0)
+    assert app.number_input(key="viscosity_sweep_start").value == pytest.approx(100.0)
+    assert app.number_input(key="viscosity_sweep_stop").value == pytest.approx(1000.0)
+    assert app.number_input(key="viscosity_sweep_points").value == 5
+    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.dataframe[0].value) == 5
+
+
 def test_profile_to_protrusion_session_transfer() -> None:
     profile_script = """
 from aerophysics.gui.analysis_pages import render_boundary_layer_profile

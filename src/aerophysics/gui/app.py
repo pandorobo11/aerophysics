@@ -8,6 +8,7 @@ from aerophysics.gui.analysis_pages import (
     render_boundary_layer_profile,
     render_protrusion_drag,
     render_thermochemistry,
+    render_viscosity,
 )
 from aerophysics.gui.components import render_unit_sidebar
 from aerophysics.gui.flow_pages import (
@@ -71,6 +72,10 @@ def thermochemistry_page() -> None:
     render_thermochemistry(preferences)
 
 
+def viscosity_page() -> None:
+    render_viscosity(preferences)
+
+
 pages = {
     "飛行状態": [
         st.Page(
@@ -125,6 +130,11 @@ pages = {
         ),
     ],
     "熱物性": [
+        st.Page(
+            viscosity_page,
+            title="粘性係数",
+            icon="💧",
+        ),
         st.Page(
             thermochemistry_page,
             title="熱化学",
