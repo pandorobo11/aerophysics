@@ -1,12 +1,13 @@
-"""Isentropic relations for calorically and thermally perfect gases.
+"""Isentropic relations for perfect and Beattie--Bridgeman gases.
 
 State ratios use the total-to-static convention: ``T0/T``, ``p0/p``, and
 ``rho0/rho``. All inputs and outputs are dimensionless except mass flux,
 pressure, and temperature arguments explicitly documented in SI units.
 
 Calorically perfect gases use the closed-form constant-``gamma`` relations.
-Thermally perfect gases use temperature-dependent NASA-polynomial enthalpy and
-entropy and therefore require total temperature.
+Thermally perfect gases use temperature-dependent enthalpy and entropy and
+therefore require total temperature. Beattie--Bridgeman gases additionally
+require total pressure because their properties depend on density.
 
 References
 ----------
@@ -27,6 +28,11 @@ from scipy.optimize import brentq
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import AIR, PerfectGas
+from aerophysics.real_gas import (
+    BeattieBridgemanGas,
+    HarmonicOscillatorGas,
+    _ScalarThermodynamicState,
+)
 from aerophysics.thermochemistry import ThermallyPerfectGas
 
 _ROOT_XTOL: Final = 1e-12
@@ -34,6 +40,9 @@ _ROOT_RTOL: Final = 4.0 * np.finfo(np.float64).eps
 _ROOT_MAXITER: Final = 100
 _MAX_SUPERSONIC_BRACKET: Final = 1e6
 _MAX_TEMPERATURE_BRACKET_STEPS: Final = 80
+
+type _IdealThermalGas = ThermallyPerfectGas | HarmonicOscillatorGas
+type IsentropicGasModel = PerfectGas | _IdealThermalGas | BeattieBridgemanGas
 
 class MachBranch(StrEnum):
     """Branch of the area-Mach relation."""
@@ -62,6 +71,23 @@ class CriticalRatios:
 
 
 @dataclass(frozen=True, slots=True)
+class IsentropicFlowState:
+    """Absolute total and static properties for isentropic flow."""
+
+    mach: FloatResult
+    total_temperature: FloatResult
+    total_pressure: FloatResult
+    total_density: FloatResult
+    static_temperature: FloatResult
+    static_pressure: FloatResult
+    static_density: FloatResult
+    velocity: FloatResult
+    speed_of_sound: FloatResult
+    dynamic_pressure: FloatResult
+    mass_flux: FloatResult
+
+
+@dataclass(frozen=True, slots=True)
 class _ThermalProperties:
     enthalpy: float
     entropy: float
@@ -78,6 +104,18 @@ class _ThermalFlowState:
     total_density_ratio: float
     mass_flow_parameter: float
     extrapolated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _RealFlowState:
+    total: _ScalarThermodynamicState
+    static: _ScalarThermodynamicState
+    mach: float
+    velocity: float
+    total_temperature_ratio: float
+    total_pressure_ratio: float
+    total_density_ratio: float
+    mass_flow_parameter: float
 
 
 def _validate_mach(
@@ -104,24 +142,37 @@ def _temperature_factor(mach: FloatArray, gas: PerfectGas) -> FloatArray:
 
 def _thermal_properties(
     temperature: float,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     allow_extrapolation: bool,
 ) -> _ThermalProperties:
     value = np.asarray(temperature, dtype=np.float64)
-    validated, _ = gas._validated_temperature(
-        value,
-        allow_extrapolation=allow_extrapolation,
-        warn=False,
-    )
-    molar_cp, molar_enthalpy, molar_entropy = (
-        gas._standard_molar_properties_from_values(validated)
-    )
-    cp = float(molar_cp) / gas.molar_mass
-    enthalpy = float(molar_enthalpy) / gas.molar_mass
-    entropy = float(molar_entropy) / gas.molar_mass
+    if isinstance(gas, ThermallyPerfectGas):
+        validated, _ = gas._validated_temperature(
+            value,
+            allow_extrapolation=allow_extrapolation,
+            warn=False,
+        )
+        molar_cp, molar_enthalpy, molar_entropy = (
+            gas._standard_molar_properties_from_values(validated)
+        )
+        cp = float(molar_cp) / gas.molar_mass
+        enthalpy = float(molar_enthalpy) / gas.molar_mass
+        entropy = float(molar_entropy) / gas.molar_mass
+        minimum, maximum = gas.temperature_range
+        extrapolated = temperature < minimum or temperature > maximum
+    else:
+        cp_values, cv_values, _, enthalpy_values, entropy_values = (
+            gas._properties_from_values(value)
+        )
+        cp = float(cp_values)
+        enthalpy = float(enthalpy_values)
+        entropy = float(entropy_values)
+        cv = float(cv_values)
+        extrapolated = False
     gas_constant = gas.specific_gas_constant
-    cv = cp - gas_constant
+    if isinstance(gas, ThermallyPerfectGas):
+        cv = cp - gas_constant
     if not np.isfinite(cp) or not np.isfinite(cv) or cv <= 0.0:
         raise ModelRangeError(
             "thermally perfect gas has non-physical heat capacity at the "
@@ -139,29 +190,56 @@ def _thermal_properties(
             "thermally perfect gas has non-physical sound speed at the "
             f"required temperature {temperature:g} K"
         )
-    minimum, maximum = gas.temperature_range
     return _ThermalProperties(
         enthalpy=enthalpy,
         entropy=entropy,
         heat_capacity_ratio=gamma,
         sound_speed_squared=sound_speed_squared,
-        extrapolated=temperature < minimum or temperature > maximum,
+        extrapolated=extrapolated,
     )
 
 
-def _warn_if_extrapolated(gas: ThermallyPerfectGas, extrapolated: bool) -> None:
+def _warn_if_extrapolated(gas: _IdealThermalGas, extrapolated: bool) -> None:
     if not extrapolated:
         return
     minimum, maximum = gas.temperature_range
+    detail = (
+        "; the nearest polynomial region was extrapolated"
+        if isinstance(gas, ThermallyPerfectGas)
+        else ""
+    )
     warnings.warn(
-        (
-            "isentropic solution uses temperature outside the fitted range "
-            f"{minimum:g}--{maximum:g} K; the nearest polynomial region was "
-            "extrapolated"
-        ),
+        "isentropic solution uses temperature outside the documented range "
+        f"{minimum:g}--{maximum:g} K{detail}",
         ApplicabilityWarning,
         stacklevel=3,
     )
+
+
+def _check_harmonic_total_temperature(
+    gas: HarmonicOscillatorGas,
+    total_temperature: FloatArray,
+    *,
+    allow_extrapolation: bool,
+) -> None:
+    applicable_range = gas.applicable_temperature_range
+    if applicable_range is None:
+        return
+    minimum, maximum = applicable_range
+    outside = bool(
+        np.any((total_temperature < minimum) | (total_temperature > maximum))
+    )
+    if outside and not allow_extrapolation:
+        raise ModelRangeError(
+            f"total_temperature must be within {minimum:g}--{maximum:g} K"
+        )
+    if outside:
+        warnings.warn(
+            "total_temperature is outside the documented harmonic-oscillator "
+            f"air range {minimum:g}--{maximum:g} K",
+            ApplicabilityWarning,
+            stacklevel=3,
+        )
 
 
 def _broadcast_thermal_inputs(
@@ -195,15 +273,77 @@ def _broadcast_thermal_inputs(
     )
 
 
+def _broadcast_real_inputs(
+    values: FloatArray,
+    values_scalar: bool,
+    total_temperature: ArrayLike | None,
+    total_pressure: ArrayLike | None,
+    *,
+    value_name: str,
+) -> tuple[FloatArray, FloatArray, FloatArray, bool]:
+    if total_temperature is None:
+        raise ValueError(
+            "total_temperature is required for a Beattie--Bridgeman gas"
+        )
+    if total_pressure is None:
+        raise ValueError("total_pressure is required for a Beattie--Bridgeman gas")
+    temperatures, temperature_scalar = as_float_array(
+        total_temperature, name="total_temperature"
+    )
+    pressures, pressure_scalar = as_float_array(
+        total_pressure, name="total_pressure"
+    )
+    if np.any(temperatures <= 0.0):
+        raise ValueError("total_temperature must be greater than zero")
+    if np.any(pressures <= 0.0):
+        raise ValueError("total_pressure must be greater than zero")
+    try:
+        broadcast_values, broadcast_temperatures, broadcast_pressures = (
+            np.broadcast_arrays(values, temperatures, pressures)
+        )
+    except ValueError as error:
+        raise ValueError(
+            f"{value_name}, total_temperature, and total_pressure must be "
+            "broadcastable"
+        ) from error
+    return (
+        np.asarray(broadcast_values, dtype=np.float64),
+        np.asarray(broadcast_temperatures, dtype=np.float64),
+        np.asarray(broadcast_pressures, dtype=np.float64),
+        values_scalar and temperature_scalar and pressure_scalar,
+    )
+
+
+def _check_real_total_conditions(
+    gas: BeattieBridgemanGas,
+    total_temperature: FloatArray,
+    total_pressure: FloatArray,
+    *,
+    allow_extrapolation: bool,
+) -> None:
+    outside = gas._check_applicability(
+        total_temperature,
+        total_pressure,
+        allow_extrapolation=allow_extrapolation,
+        warn=False,
+    )
+    if outside:
+        warnings.warn(
+            "total state is outside the documented Beattie--Bridgeman air range",
+            ApplicabilityWarning,
+            stacklevel=3,
+        )
+
+
 def _find_lower_temperature(
     residual: Callable[[float], float],
     total_temperature: float,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     allow_extrapolation: bool,
 ) -> float:
     minimum = gas.temperature_range[0]
-    if not allow_extrapolation:
+    if not allow_extrapolation and isinstance(gas, ThermallyPerfectGas):
         lower = minimum
         lower_residual = float(residual(lower))
         if lower >= total_temperature or (
@@ -233,7 +373,7 @@ def _find_lower_temperature(
 def _thermal_flow_state(
     mach: float,
     total_temperature: float,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     allow_extrapolation: bool,
 ) -> _ThermalFlowState:
@@ -307,7 +447,7 @@ def _thermal_flow_state(
 def _thermal_flow_states(
     mach: FloatArray,
     total_temperature: FloatArray,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     allow_extrapolation: bool,
 ) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, bool]:
@@ -331,25 +471,193 @@ def _thermal_flow_states(
     return temperature_ratio, pressure_ratio, density_ratio, parameter, extrapolated
 
 
+def _real_isentropic_state_at_temperature(
+    temperature: float,
+    total: _ScalarThermodynamicState,
+    gas: BeattieBridgemanGas,
+) -> _ScalarThermodynamicState:
+    density_floor = max(
+        np.finfo(np.float64).tiny,
+        total.density * 1e-14,
+    )
+
+    def entropy_residual(density: float) -> float:
+        state = gas._scalar_state_from_density(temperature, density)
+        return state.entropy - total.entropy
+
+    lower_residual = entropy_residual(density_floor)
+    upper_residual = entropy_residual(total.density)
+    if lower_residual < 0.0 or upper_residual > 0.0:
+        raise ModelRangeError(
+            "could not bracket the Beattie--Bridgeman isentropic gas branch"
+        )
+    density = float(
+        brentq(
+            entropy_residual,
+            density_floor,
+            total.density,
+            xtol=_ROOT_XTOL,
+            rtol=_ROOT_RTOL,
+            maxiter=_ROOT_MAXITER,
+        )
+    )
+    return gas._scalar_state_from_density(temperature, density)
+
+
+def _real_flow_state(
+    mach: float,
+    total_temperature: float,
+    total_pressure: float,
+    gas: BeattieBridgemanGas,
+) -> _RealFlowState:
+    total = gas._scalar_state(total_temperature, total_pressure)
+    if mach == 0.0:
+        return _RealFlowState(
+            total=total,
+            static=total,
+            mach=0.0,
+            velocity=0.0,
+            total_temperature_ratio=1.0,
+            total_pressure_ratio=1.0,
+            total_density_ratio=1.0,
+            mass_flow_parameter=0.0,
+        )
+
+    def state_and_residual(
+        temperature: float,
+    ) -> tuple[_ScalarThermodynamicState, float]:
+        static = _real_isentropic_state_at_temperature(temperature, total, gas)
+        residual = (
+            total.enthalpy
+            - static.enthalpy
+            - 0.5 * mach**2 * static.speed_of_sound**2
+        )
+        return static, residual
+
+    lower = 0.5 * total_temperature
+    floor = max(np.finfo(np.float64).tiny, total_temperature * 1e-12)
+    static, lower_residual = state_and_residual(lower)
+    for _ in range(_MAX_TEMPERATURE_BRACKET_STEPS):
+        if lower_residual >= 0.0:
+            break
+        if lower <= floor:
+            raise ModelRangeError(
+                "could not bracket a positive-temperature "
+                "Beattie--Bridgeman isentropic solution"
+            )
+        lower = max(0.5 * lower, floor)
+        static, lower_residual = state_and_residual(lower)
+    else:
+        raise ModelRangeError(
+            "could not bracket the Beattie--Bridgeman isentropic solution"
+        )
+
+    static_temperature = float(
+        brentq(
+            lambda temperature: state_and_residual(temperature)[1],
+            lower,
+            total_temperature,
+            xtol=_ROOT_XTOL,
+            rtol=_ROOT_RTOL,
+            maxiter=_ROOT_MAXITER,
+        )
+    )
+    static = _real_isentropic_state_at_temperature(
+        static_temperature, total, gas
+    )
+    velocity = mach * static.speed_of_sound
+    parameter = (
+        static.density
+        * velocity
+        * np.sqrt(gas.specific_gas_constant * total_temperature)
+        / total_pressure
+    )
+    values = (
+        total_temperature / static.temperature,
+        total_pressure / static.pressure,
+        total.density / static.density,
+        parameter,
+    )
+    if not np.all(np.isfinite(values)) or any(value <= 0.0 for value in values):
+        raise ModelRangeError("Beattie--Bridgeman isentropic state is non-physical")
+    return _RealFlowState(
+        total=total,
+        static=static,
+        mach=mach,
+        velocity=velocity,
+        total_temperature_ratio=float(values[0]),
+        total_pressure_ratio=float(values[1]),
+        total_density_ratio=float(values[2]),
+        mass_flow_parameter=float(parameter),
+    )
+
+
+def _real_flow_states(
+    mach: FloatArray,
+    total_temperature: FloatArray,
+    total_pressure: FloatArray,
+    gas: BeattieBridgemanGas,
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
+    temperature_ratio = np.empty_like(mach)
+    pressure_ratio = np.empty_like(mach)
+    density_ratio = np.empty_like(mach)
+    parameter = np.empty_like(mach)
+    for index in np.ndindex(mach.shape):
+        state = _real_flow_state(
+            float(mach[index]),
+            float(total_temperature[index]),
+            float(total_pressure[index]),
+            gas,
+        )
+        temperature_ratio[index] = state.total_temperature_ratio
+        pressure_ratio[index] = state.total_pressure_ratio
+        density_ratio[index] = state.total_density_ratio
+        parameter[index] = state.mass_flow_parameter
+    return temperature_ratio, pressure_ratio, density_ratio, parameter
+
+
 def isentropic_ratios(
     mach: ArrayLike,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
     allow_extrapolation: bool = True,
 ) -> IsentropicRatios:
     """Return total-to-static temperature, pressure, and density ratios.
 
-    ``total_temperature`` is required when ``gas`` is thermally perfect. NASA
-    polynomial temperatures are extrapolated by default with an
-    :class:`~aerophysics.exceptions.ApplicabilityWarning`; pass
-    ``allow_extrapolation=False`` to enforce the fitted range.
+    ``total_temperature`` is required for thermally perfect gases. A
+    Beattie--Bridgeman gas also requires ``total_pressure``.
     """
     values, scalar = _validate_mach(mach)
-    if isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, BeattieBridgemanGas):
+        values, temperatures, pressures, scalar = _broadcast_real_inputs(
+            values,
+            scalar,
+            total_temperature,
+            total_pressure,
+            value_name="mach",
+        )
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        temperature_ratio, pressure_ratio, density_ratio, _ = _real_flow_states(
+            values, temperatures, pressures, gas
+        )
+    elif isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
+        assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
         values, temperatures, scalar = _broadcast_thermal_inputs(
             values, scalar, total_temperature, value_name="mach"
         )
+        if isinstance(gas, HarmonicOscillatorGas):
+            _check_harmonic_total_temperature(
+                gas,
+                temperatures,
+                allow_extrapolation=allow_extrapolation,
+            )
         temperature_ratio, pressure_ratio, density_ratio, _, extrapolated = (
             _thermal_flow_states(
                 values,
@@ -379,7 +687,7 @@ def isentropic_ratios(
 def _thermal_mach_from_static_temperature(
     static_temperature: float,
     total_temperature: float,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     allow_extrapolation: bool,
 ) -> tuple[float, bool]:
@@ -406,20 +714,51 @@ def _thermal_mach_from_static_temperature(
 
 def mach_from_total_temperature_ratio(
     ratio: ArrayLike,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
     allow_extrapolation: bool = True,
 ) -> FloatResult:
     """Return Mach number from ``T0/T``."""
     values, scalar = _validate_ratio(ratio, name="total_temperature_ratio")
-    if not isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, PerfectGas):
         result = np.sqrt(2.0 * (values - 1.0) / (gas.heat_capacity_ratio - 1.0))
         return return_float(result, scalar=scalar)
 
+    if isinstance(gas, BeattieBridgemanGas):
+        values, temperatures, pressures, scalar = _broadcast_real_inputs(
+            values,
+            scalar,
+            total_temperature,
+            total_pressure,
+            value_name="total_temperature_ratio",
+        )
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        result = np.empty_like(values)
+        for index in np.ndindex(values.shape):
+            result[index] = _real_mach_from_ratio_scalar(
+                float(values[index]),
+                float(temperatures[index]),
+                float(pressures[index]),
+                gas,
+                basis="temperature",
+            )
+        return return_float(result, scalar=scalar)
+
+    assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
     values, temperatures, scalar = _broadcast_thermal_inputs(
         values, scalar, total_temperature, value_name="total_temperature_ratio"
     )
+    if isinstance(gas, HarmonicOscillatorGas):
+        _check_harmonic_total_temperature(
+            gas, temperatures, allow_extrapolation=allow_extrapolation
+        )
     result = np.empty_like(values)
     extrapolated = False
     for index in np.ndindex(values.shape):
@@ -438,7 +777,7 @@ def mach_from_total_temperature_ratio(
 def _thermal_static_temperature_from_ratio(
     ratio: float,
     total_temperature: float,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     basis: Literal["pressure", "density"],
     allow_extrapolation: bool,
@@ -487,7 +826,7 @@ def _thermal_static_temperature_from_ratio(
 def _thermal_mach_from_state_ratio(
     ratio: FloatArray,
     total_temperature: FloatArray,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     basis: Literal["pressure", "density"],
     allow_extrapolation: bool,
@@ -513,24 +852,95 @@ def _thermal_mach_from_state_ratio(
     return result, extrapolated
 
 
+def _real_mach_from_ratio_scalar(
+    target: float,
+    total_temperature: float,
+    total_pressure: float,
+    gas: BeattieBridgemanGas,
+    *,
+    basis: Literal["temperature", "pressure", "density"],
+) -> float:
+    if target == 1.0:
+        return 0.0
+
+    attribute = {
+        "temperature": "total_temperature_ratio",
+        "pressure": "total_pressure_ratio",
+        "density": "total_density_ratio",
+    }[basis]
+
+    def residual(mach: float) -> float:
+        state = _real_flow_state(mach, total_temperature, total_pressure, gas)
+        return float(getattr(state, attribute)) - target
+
+    upper = 1.0
+    for _ in range(_MAX_TEMPERATURE_BRACKET_STEPS):
+        if residual(upper) >= 0.0:
+            return float(
+                brentq(
+                    residual,
+                    0.0,
+                    upper,
+                    xtol=_ROOT_XTOL,
+                    rtol=_ROOT_RTOL,
+                    maxiter=_ROOT_MAXITER,
+                )
+            )
+        upper *= 2.0
+    raise ModelRangeError(
+        f"could not bracket Mach from Beattie--Bridgeman {basis} ratio"
+    )
+
+
 def mach_from_total_pressure_ratio(
     ratio: ArrayLike,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
     allow_extrapolation: bool = True,
 ) -> FloatResult:
     """Return Mach number from ``p0/p``."""
     values, scalar = _validate_ratio(ratio, name="total_pressure_ratio")
-    if not isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, PerfectGas):
         gamma = gas.heat_capacity_ratio
         temperature_ratio = values ** ((gamma - 1.0) / gamma)
         result = np.sqrt(2.0 * (temperature_ratio - 1.0) / (gamma - 1.0))
         return return_float(result, scalar=scalar)
 
+    if isinstance(gas, BeattieBridgemanGas):
+        values, temperatures, pressures, scalar = _broadcast_real_inputs(
+            values,
+            scalar,
+            total_temperature,
+            total_pressure,
+            value_name="total_pressure_ratio",
+        )
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        result = np.empty_like(values)
+        for index in np.ndindex(values.shape):
+            result[index] = _real_mach_from_ratio_scalar(
+                float(values[index]),
+                float(temperatures[index]),
+                float(pressures[index]),
+                gas,
+                basis="pressure",
+            )
+        return return_float(result, scalar=scalar)
+
+    assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
     values, temperatures, scalar = _broadcast_thermal_inputs(
         values, scalar, total_temperature, value_name="total_pressure_ratio"
     )
+    if isinstance(gas, HarmonicOscillatorGas):
+        _check_harmonic_total_temperature(
+            gas, temperatures, allow_extrapolation=allow_extrapolation
+        )
     result, extrapolated = _thermal_mach_from_state_ratio(
         values,
         temperatures,
@@ -544,22 +954,53 @@ def mach_from_total_pressure_ratio(
 
 def mach_from_total_density_ratio(
     ratio: ArrayLike,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
     allow_extrapolation: bool = True,
 ) -> FloatResult:
     """Return Mach number from ``rho0/rho``."""
     values, scalar = _validate_ratio(ratio, name="total_density_ratio")
-    if not isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, PerfectGas):
         gamma = gas.heat_capacity_ratio
         temperature_ratio = values ** (gamma - 1.0)
         result = np.sqrt(2.0 * (temperature_ratio - 1.0) / (gamma - 1.0))
         return return_float(result, scalar=scalar)
 
+    if isinstance(gas, BeattieBridgemanGas):
+        values, temperatures, pressures, scalar = _broadcast_real_inputs(
+            values,
+            scalar,
+            total_temperature,
+            total_pressure,
+            value_name="total_density_ratio",
+        )
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        result = np.empty_like(values)
+        for index in np.ndindex(values.shape):
+            result[index] = _real_mach_from_ratio_scalar(
+                float(values[index]),
+                float(temperatures[index]),
+                float(pressures[index]),
+                gas,
+                basis="density",
+            )
+        return return_float(result, scalar=scalar)
+
+    assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
     values, temperatures, scalar = _broadcast_thermal_inputs(
         values, scalar, total_temperature, value_name="total_density_ratio"
     )
+    if isinstance(gas, HarmonicOscillatorGas):
+        _check_harmonic_total_temperature(
+            gas, temperatures, allow_extrapolation=allow_extrapolation
+        )
     result, extrapolated = _thermal_mach_from_state_ratio(
         values,
         temperatures,
@@ -581,7 +1022,7 @@ def _area_ratio_formula(mach: FloatArray, gas: PerfectGas) -> FloatArray:
 def _thermal_area_ratio_scalar(
     mach: float,
     total_temperature: float,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     allow_extrapolation: bool,
 ) -> tuple[float, bool]:
@@ -603,21 +1044,62 @@ def _thermal_area_ratio_scalar(
     )
 
 
+def _real_area_ratio_scalar(
+    mach: float,
+    total_temperature: float,
+    total_pressure: float,
+    gas: BeattieBridgemanGas,
+) -> float:
+    state = _real_flow_state(mach, total_temperature, total_pressure, gas)
+    critical = _real_flow_state(1.0, total_temperature, total_pressure, gas)
+    return critical.mass_flow_parameter / state.mass_flow_parameter
+
+
 def area_ratio(
     mach: ArrayLike,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
     allow_extrapolation: bool = True,
 ) -> FloatResult:
     """Return the isentropic area ratio ``A/A*``."""
     values, scalar = _validate_mach(mach, positive=True)
-    if not isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, PerfectGas):
         return return_float(_area_ratio_formula(values, gas), scalar=scalar)
 
+    if isinstance(gas, BeattieBridgemanGas):
+        values, temperatures, pressures, scalar = _broadcast_real_inputs(
+            values,
+            scalar,
+            total_temperature,
+            total_pressure,
+            value_name="mach",
+        )
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        result = np.empty_like(values)
+        for index in np.ndindex(values.shape):
+            result[index] = _real_area_ratio_scalar(
+                float(values[index]),
+                float(temperatures[index]),
+                float(pressures[index]),
+                gas,
+            )
+        return return_float(result, scalar=scalar)
+
+    assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
     values, temperatures, scalar = _broadcast_thermal_inputs(
         values, scalar, total_temperature, value_name="mach"
     )
+    if isinstance(gas, HarmonicOscillatorGas):
+        _check_harmonic_total_temperature(
+            gas, temperatures, allow_extrapolation=allow_extrapolation
+        )
     result = np.empty_like(values)
     extrapolated = False
     for index in np.ndindex(values.shape):
@@ -667,7 +1149,7 @@ def _thermal_mach_from_area_scalar(
     target: float,
     branch: MachBranch,
     total_temperature: float,
-    gas: ThermallyPerfectGas,
+    gas: _IdealThermalGas,
     *,
     allow_extrapolation: bool,
 ) -> tuple[float, bool]:
@@ -696,7 +1178,7 @@ def _thermal_mach_from_area_scalar(
     if branch is MachBranch.SUBSONIC:
         lower = float(np.finfo(np.float64).tiny)
         upper = 1.0
-    elif not allow_extrapolation:
+    elif not allow_extrapolation and isinstance(gas, ThermallyPerfectGas):
         lower = 1.0
         upper, outside = _thermal_mach_from_static_temperature(
             gas.temperature_range[0],
@@ -730,27 +1212,98 @@ def _thermal_mach_from_area_scalar(
     return result, extrapolated
 
 
+def _real_mach_from_area_scalar(
+    target: float,
+    branch: MachBranch,
+    total_temperature: float,
+    total_pressure: float,
+    gas: BeattieBridgemanGas,
+) -> float:
+    if target == 1.0:
+        return 1.0
+
+    def residual(mach: float) -> float:
+        return (
+            _real_area_ratio_scalar(
+                mach, total_temperature, total_pressure, gas
+            )
+            - target
+        )
+
+    if branch is MachBranch.SUBSONIC:
+        lower = float(np.finfo(np.float64).tiny)
+        upper = 1.0
+    else:
+        lower = 1.0
+        upper = 2.0
+        while residual(upper) < 0.0 and upper < _MAX_SUPERSONIC_BRACKET:
+            upper *= 2.0
+        if residual(upper) < 0.0:
+            raise ValueError("area_ratio is too large for the supersonic solver")
+    return float(
+        brentq(
+            residual,
+            lower,
+            upper,
+            xtol=_ROOT_XTOL,
+            rtol=_ROOT_RTOL,
+            maxiter=_ROOT_MAXITER,
+        )
+    )
+
+
 def mach_from_area_ratio(
     ratio: ArrayLike,
     branch: MachBranch,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
     allow_extrapolation: bool = True,
 ) -> FloatResult:
     """Invert ``A/A*`` on an explicitly selected Mach branch."""
     if not isinstance(branch, MachBranch):
         raise ValueError("branch must be a MachBranch value")
     values, scalar = _validate_ratio(ratio, name="area_ratio")
-    if not isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, PerfectGas):
         result = np.empty_like(values)
         for index, target in np.ndenumerate(values):
             result[index] = _mach_from_area_scalar(float(target), branch, gas)
         return return_float(result, scalar=scalar)
 
+    if isinstance(gas, BeattieBridgemanGas):
+        values, temperatures, pressures, scalar = _broadcast_real_inputs(
+            values,
+            scalar,
+            total_temperature,
+            total_pressure,
+            value_name="area_ratio",
+        )
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        result = np.empty_like(values)
+        for index in np.ndindex(values.shape):
+            result[index] = _real_mach_from_area_scalar(
+                float(values[index]),
+                branch,
+                float(temperatures[index]),
+                float(pressures[index]),
+                gas,
+            )
+        return return_float(result, scalar=scalar)
+
+    assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
     values, temperatures, scalar = _broadcast_thermal_inputs(
         values, scalar, total_temperature, value_name="area_ratio"
     )
+    if isinstance(gas, HarmonicOscillatorGas):
+        _check_harmonic_total_temperature(
+            gas, temperatures, allow_extrapolation=allow_extrapolation
+        )
     result = np.empty_like(values)
     extrapolated = False
     for index in np.ndindex(values.shape):
@@ -767,13 +1320,14 @@ def mach_from_area_ratio(
 
 
 def critical_ratios(
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
     allow_extrapolation: bool = True,
 ) -> CriticalRatios:
     """Return total-to-critical state ratios at Mach one."""
-    if not isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, PerfectGas):
         gamma = gas.heat_capacity_ratio
         temperature_ratio = 0.5 * (gamma + 1.0)
         return CriticalRatios(
@@ -783,9 +1337,42 @@ def critical_ratios(
         )
 
     placeholder = np.asarray(1.0, dtype=np.float64)
+    if isinstance(gas, BeattieBridgemanGas):
+        mach, temperatures, pressures, scalar = _broadcast_real_inputs(
+            placeholder,
+            True,
+            total_temperature,
+            total_pressure,
+            value_name="critical state",
+        )
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        (
+            real_temperature_ratio,
+            real_pressure_ratio,
+            real_density_ratio,
+            _,
+        ) = _real_flow_states(np.ones_like(mach), temperatures, pressures, gas)
+        return CriticalRatios(
+            total_temperature_ratio=return_float(
+                real_temperature_ratio, scalar=scalar
+            ),
+            total_pressure_ratio=return_float(real_pressure_ratio, scalar=scalar),
+            total_density_ratio=return_float(real_density_ratio, scalar=scalar),
+        )
+
+    assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
     _, temperatures, scalar = _broadcast_thermal_inputs(
         placeholder, True, total_temperature, value_name="critical state"
     )
+    if isinstance(gas, HarmonicOscillatorGas):
+        _check_harmonic_total_temperature(
+            gas, temperatures, allow_extrapolation=allow_extrapolation
+        )
     mach = np.ones_like(temperatures)
     thermal_temperature_ratio, pressure_ratio, density_ratio, _, extrapolated = (
         _thermal_flow_states(
@@ -807,18 +1394,19 @@ def critical_ratios(
 
 def mass_flow_parameter(
     mach: ArrayLike,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
     allow_extrapolation: bool = True,
 ) -> FloatResult:
-    """Return the dimensionless ideal-gas mass-flow parameter.
+    """Return the dimensionless mass-flow parameter.
 
     The normalization is chosen so that mass flux equals
     ``p0 / sqrt(R T0)`` multiplied by the returned value.
     """
     values, scalar = _validate_mach(mach)
-    if not isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, PerfectGas):
         gamma = gas.heat_capacity_ratio
         exponent = (gamma + 1.0) / (2.0 * (gamma - 1.0))
         result = (
@@ -828,9 +1416,31 @@ def mass_flow_parameter(
         )
         return return_float(result, scalar=scalar)
 
+    if isinstance(gas, BeattieBridgemanGas):
+        values, temperatures, pressures, scalar = _broadcast_real_inputs(
+            values,
+            scalar,
+            total_temperature,
+            total_pressure,
+            value_name="mach",
+        )
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        _, _, _, result = _real_flow_states(values, temperatures, pressures, gas)
+        return return_float(result, scalar=scalar)
+
+    assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
     values, temperatures, scalar = _broadcast_thermal_inputs(
         values, scalar, total_temperature, value_name="mach"
     )
+    if isinstance(gas, HarmonicOscillatorGas):
+        _check_harmonic_total_temperature(
+            gas, temperatures, allow_extrapolation=allow_extrapolation
+        )
     _, _, _, result, extrapolated = _thermal_flow_states(
         values,
         temperatures,
@@ -845,7 +1455,7 @@ def mass_flux(
     total_pressure: ArrayLike,
     total_temperature: ArrayLike,
     mach: ArrayLike,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     allow_extrapolation: bool = True,
 ) -> FloatResult:
@@ -868,7 +1478,27 @@ def mass_flux(
     if np.any(temperature <= 0.0):
         raise ValueError("total_temperature must be greater than zero")
 
-    if isinstance(gas, ThermallyPerfectGas):
+    if isinstance(gas, BeattieBridgemanGas):
+        _check_real_total_conditions(
+            gas,
+            np.asarray(temperature, dtype=np.float64),
+            np.asarray(pressure, dtype=np.float64),
+            allow_extrapolation=allow_extrapolation,
+        )
+        _, _, _, parameter = _real_flow_states(
+            np.asarray(mach_values, dtype=np.float64),
+            np.asarray(temperature, dtype=np.float64),
+            np.asarray(pressure, dtype=np.float64),
+            gas,
+        )
+    elif isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
+        assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
+        if isinstance(gas, HarmonicOscillatorGas):
+            _check_harmonic_total_temperature(
+                gas,
+                np.asarray(temperature, dtype=np.float64),
+                allow_extrapolation=allow_extrapolation,
+            )
         _, _, _, parameter, extrapolated = _thermal_flow_states(
             np.asarray(mach_values, dtype=np.float64),
             np.asarray(temperature, dtype=np.float64),
@@ -896,7 +1526,7 @@ def mass_flux(
 def choked_mass_flux(
     total_pressure: ArrayLike,
     total_temperature: ArrayLike,
-    gas: PerfectGas | ThermallyPerfectGas = AIR,
+    gas: IsentropicGasModel = AIR,
     *,
     allow_extrapolation: bool = True,
 ) -> FloatResult:
@@ -910,14 +1540,148 @@ def choked_mass_flux(
     )
 
 
+def isentropic_state(
+    mach: ArrayLike,
+    gas: IsentropicGasModel = AIR,
+    *,
+    total_temperature: ArrayLike,
+    total_pressure: ArrayLike,
+    allow_extrapolation: bool = True,
+) -> IsentropicFlowState:
+    """Return absolute total and static properties for isentropic flow."""
+    mach_values, mach_scalar = _validate_mach(mach)
+    temperatures, temperature_scalar = as_float_array(
+        total_temperature, name="total_temperature"
+    )
+    pressures, pressure_scalar = as_float_array(
+        total_pressure, name="total_pressure"
+    )
+    if np.any(temperatures <= 0.0):
+        raise ValueError("total_temperature must be greater than zero")
+    if np.any(pressures <= 0.0):
+        raise ValueError("total_pressure must be greater than zero")
+    try:
+        mach_values, temperatures, pressures = np.broadcast_arrays(
+            mach_values, temperatures, pressures
+        )
+    except ValueError as error:
+        raise ValueError(
+            "mach, total_temperature, and total_pressure must be broadcastable"
+        ) from error
+    mach_values = np.asarray(mach_values, dtype=np.float64)
+    temperatures = np.asarray(temperatures, dtype=np.float64)
+    pressures = np.asarray(pressures, dtype=np.float64)
+    scalar = mach_scalar and temperature_scalar and pressure_scalar
+
+    total_density = np.empty_like(mach_values)
+    static_temperature = np.empty_like(mach_values)
+    static_pressure = np.empty_like(mach_values)
+    static_density = np.empty_like(mach_values)
+    velocity = np.empty_like(mach_values)
+    sound_speed = np.empty_like(mach_values)
+
+    if isinstance(gas, BeattieBridgemanGas):
+        _check_real_total_conditions(
+            gas,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
+        for index in np.ndindex(mach_values.shape):
+            real_state = _real_flow_state(
+                float(mach_values[index]),
+                float(temperatures[index]),
+                float(pressures[index]),
+                gas,
+            )
+            total_density[index] = real_state.total.density
+            static_temperature[index] = real_state.static.temperature
+            static_pressure[index] = real_state.static.pressure
+            static_density[index] = real_state.static.density
+            velocity[index] = real_state.velocity
+            sound_speed[index] = real_state.static.speed_of_sound
+    elif isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
+        assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
+        if isinstance(gas, HarmonicOscillatorGas):
+            _check_harmonic_total_temperature(
+                gas, temperatures, allow_extrapolation=allow_extrapolation
+            )
+        extrapolated = False
+        for index in np.ndindex(mach_values.shape):
+            thermal_state = _thermal_flow_state(
+                float(mach_values[index]),
+                float(temperatures[index]),
+                gas,
+                allow_extrapolation=allow_extrapolation,
+            )
+            properties = _thermal_properties(
+                thermal_state.static_temperature,
+                gas,
+                allow_extrapolation=allow_extrapolation,
+            )
+            static_temperature[index] = thermal_state.static_temperature
+            static_pressure[index] = (
+                pressures[index] / thermal_state.total_pressure_ratio
+            )
+            total_density[index] = pressures[index] / (
+                gas.specific_gas_constant * temperatures[index]
+            )
+            static_density[index] = (
+                static_pressure[index]
+                / (gas.specific_gas_constant * static_temperature[index])
+            )
+            sound_speed[index] = np.sqrt(properties.sound_speed_squared)
+            velocity[index] = mach_values[index] * sound_speed[index]
+            extrapolated = extrapolated or thermal_state.extrapolated
+        _warn_if_extrapolated(gas, extrapolated)
+    else:
+        ratios = _temperature_factor(mach_values, gas)
+        static_temperature = temperatures / ratios
+        pressure_ratios = ratios ** (
+            gas.heat_capacity_ratio / (gas.heat_capacity_ratio - 1.0)
+        )
+        static_pressure = pressures / pressure_ratios
+        total_density = pressures / (
+            gas.specific_gas_constant * temperatures
+        )
+        static_density = static_pressure / (
+            gas.specific_gas_constant * static_temperature
+        )
+        sound_speed = np.sqrt(
+            gas.heat_capacity_ratio
+            * gas.specific_gas_constant
+            * static_temperature
+        )
+        velocity = mach_values * sound_speed
+
+    dynamic_pressure = 0.5 * static_density * velocity**2
+    flux = static_density * velocity
+    return IsentropicFlowState(
+        mach=return_float(mach_values, scalar=scalar),
+        total_temperature=return_float(temperatures, scalar=scalar),
+        total_pressure=return_float(pressures, scalar=scalar),
+        total_density=return_float(total_density, scalar=scalar),
+        static_temperature=return_float(static_temperature, scalar=scalar),
+        static_pressure=return_float(static_pressure, scalar=scalar),
+        static_density=return_float(static_density, scalar=scalar),
+        velocity=return_float(velocity, scalar=scalar),
+        speed_of_sound=return_float(sound_speed, scalar=scalar),
+        dynamic_pressure=return_float(dynamic_pressure, scalar=scalar),
+        mass_flux=return_float(flux, scalar=scalar),
+    )
+
+
 __all__ = [
     "CriticalRatios",
+    "IsentropicFlowState",
+    "IsentropicGasModel",
     "IsentropicRatios",
     "MachBranch",
     "area_ratio",
     "choked_mass_flux",
     "critical_ratios",
     "isentropic_ratios",
+    "isentropic_state",
     "mach_from_area_ratio",
     "mach_from_total_density_ratio",
     "mach_from_total_pressure_ratio",

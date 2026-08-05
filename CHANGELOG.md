@@ -5,6 +5,12 @@
 - Add a reproducible U.S. Standard Atmosphere 1976 verification record using
   official tables, a pinned ``fluids`` snapshot, physical invariants, and
   generated comparison figures.
+- Add generic Kennard harmonic-oscillator and Beattie--Bridgeman gas models,
+  physics-named dry-air presets, complete thermodynamic states, and real-gas
+  isentropic forward/inverse, area--Mach, critical-state, and mass-flow APIs.
+- Extend the isentropic GUI with harmonic-oscillator and Beattie--Bridgeman air,
+  required real-gas reservoir pressure, absolute static properties, and
+  applicability warnings.
 - Add Taylor–Maccoll axisymmetric attached conical shocks, cone-surface state
   ratios, attached limits, vectorized APIs, and a dedicated GUI calculator.
 - Extend all isentropic forward/inverse, area--Mach, critical-state, and mass

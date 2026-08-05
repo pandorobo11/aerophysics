@@ -19,6 +19,7 @@ numpydoc_show_class_members = False
 nitpicky = True
 nitpick_ignore_regex = [
     ("py:class", r"aerophysics\._array\.Float(Array|Result)"),
+    ("py:class", r"aerophysics\.isentropic\.IsentropicGasModel"),
     ("py:class", r"numpy\._typing\..*\.ArrayLike"),
 ]
 

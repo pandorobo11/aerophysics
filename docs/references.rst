@@ -82,6 +82,42 @@ NACA Report 1135, 1953.
 
 https://www.nasa.gov/wp-content/uploads/2023/03/equations-tables-charts-compressibleflow-report-1135.pdf
 
+Kennard, E. H. *Kinetic Theory of Gases: With an Introduction to Statistical
+Mechanics*. McGraw-Hill, 1938. This is the theoretical source used for the
+harmonic-vibrational heat-capacity model.
+
+Beattie, J. A. and Bridgeman, O. C. *A New Equation of State for Fluids*.
+Proceedings of the American Academy of Arts and Sciences, 63, 229--306, 1928.
+
+https://doi.org/10.2307/20026205
+
+Randall, R. E. *Thermodynamic Properties of Air: Tables and Graphs Derived
+from the Beattie--Bridgeman Equation of State Assuming Variable Specific
+Heats*. AEDC-TR-57-8, AD 135331, 1957.
+
+Randall, R. E. *Thermodynamic Properties of Gases: Equations Derived from the
+Beattie--Bridgeman Equation of State Assuming Variable Specific Heats*.
+AEDC-TR-57-10, AD 135332, 1957.
+
+Watari, M. *Air Models Used in Flow Calculations for the JAXA Hypersonic Wind
+Tunnel*. JAXA-RR-06-011, 2007. This is an implementation and wind-tunnel
+application source, not the origin of either physical model.
+
+https://jaxa.repo.nii.ac.jp/records/2224
+
+Watari, M. *Air Models Used in the JAXA Hypersonic Wind Tunnels*. Proceedings
+of the Wind Tunnel Technology Association 76th Meeting, JAXA-SP-06-020,
+23--26, 2007.
+
+https://jaxa.repo.nii.ac.jp/records/5839
+
+Witte, D. W. and Tatum, K. E. *Computer Code for Determination of Thermally
+Perfect Gas Properties*. NASA TP-3447, 1994. This is an independent
+thermally-perfect-flow verification source, not the harmonic-oscillator
+model's origin.
+
+https://ntrs.nasa.gov/citations/19950005582
+
 Sims, J. L. *Tables for Supersonic Flow Around Right Circular Cones at Zero
 Angle of Attack*. NASA SP-3004, 1964. The Taylor--Maccoll reference values use
 an ideal-gas heat-capacity ratio of 1.4.

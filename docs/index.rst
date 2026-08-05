@@ -5,8 +5,9 @@ aerophysics
 atmospheric and aerodynamic physics. Calculation APIs use SI units and return
 Python floats for scalar inputs or float64 NumPy arrays for array-like inputs.
 
-The package covers calorically and thermally perfect gases, U.S. Standard
-Atmosphere 1976, isentropic compressible flow, normal, oblique, and conical
+The package covers calorically and thermally perfect gases, a
+Beattie--Bridgeman dense-gas model, U.S. Standard Atmosphere 1976,
+isentropic compressible flow, normal, oblique, and conical
 shocks, Prandtl–Meyer expansion, smooth flat-plate boundary layers, integrated
 flight conditions, and explicit unit conversions.
 

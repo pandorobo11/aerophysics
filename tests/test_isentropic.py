@@ -13,6 +13,7 @@ from aerophysics.isentropic import (
     choked_mass_flux,
     critical_ratios,
     isentropic_ratios,
+    isentropic_state,
     mach_from_area_ratio,
     mach_from_total_density_ratio,
     mach_from_total_pressure_ratio,
@@ -131,6 +132,55 @@ def test_mass_flux_broadcasts() -> None:
     assert result.shape == (2, 2)
     assert result.dtype == np.float64
     assert_allclose(result[1], 2.0 * result[0])
+
+
+def test_absolute_isentropic_state_supports_caloric_and_nasa_air() -> None:
+    caloric = isentropic_state(
+        [0.0, 2.0],
+        total_temperature=300.0,
+        total_pressure=101_325.0,
+    )
+    assert_allclose(caloric.static_temperature, [300.0, 300.0 / 1.8])
+    assert_allclose(caloric.velocity, np.asarray(caloric.mach) * caloric.speed_of_sound)
+    assert_allclose(caloric.mass_flux, caloric.static_density * caloric.velocity)
+    assert_allclose(
+        caloric.dynamic_pressure,
+        0.5 * caloric.static_density * np.asarray(caloric.velocity) ** 2,
+    )
+
+    thermal = isentropic_state(
+        2.0,
+        AIR_NASA9,
+        total_temperature=1000.0,
+        total_pressure=100_000.0,
+        allow_extrapolation=False,
+    )
+    ratios = isentropic_ratios(
+        2.0,
+        AIR_NASA9,
+        total_temperature=1000.0,
+        allow_extrapolation=False,
+    )
+    assert thermal.static_temperature == pytest.approx(
+        1000.0 / ratios.total_temperature_ratio
+    )
+    assert thermal.static_pressure == pytest.approx(
+        100_000.0 / ratios.total_pressure_ratio
+    )
+    assert thermal.velocity == pytest.approx(2.0 * thermal.speed_of_sound)
+
+
+def test_absolute_isentropic_state_validates_total_state() -> None:
+    with pytest.raises(ValueError, match="total_temperature"):
+        isentropic_state(1.0, total_temperature=0.0, total_pressure=1.0)
+    with pytest.raises(ValueError, match="total_pressure"):
+        isentropic_state(1.0, total_temperature=300.0, total_pressure=0.0)
+    with pytest.raises(ValueError, match="broadcastable"):
+        isentropic_state(
+            [1.0, 2.0],
+            total_temperature=[300.0, 400.0, 500.0],
+            total_pressure=1.0,
+        )
 
 
 @pytest.mark.parametrize("mach", [-1.0, np.nan, np.inf])

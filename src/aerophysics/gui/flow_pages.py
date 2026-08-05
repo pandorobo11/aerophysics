@@ -121,7 +121,13 @@ def render_isentropic(preferences: UnitPreferences) -> None:
             horizontal=True,
             key="isentropic_mode",
         )
-        gas_models = ("AIR", "NASA7", "NASA9")
+        gas_models = (
+            "AIR",
+            "NASA7",
+            "NASA9",
+            "HARMONIC_OSCILLATOR",
+            "BEATTIE_BRIDGEMAN",
+        )
         gas_model = st.selectbox(
             "気体モデル",
             gas_models,
@@ -134,6 +140,8 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                 "AIR": "定比熱 AIR",
                 "NASA7": "熱的完全気体 NASA7",
                 "NASA9": "熱的完全気体 NASA9",
+                "HARMONIC_OSCILLATOR": "Harmonic-oscillator air",
+                "BEATTIE_BRIDGEMAN": "Beattie–Bridgeman air",
             }[value],
             key="isentropic_gas_model",
         )
@@ -174,11 +182,14 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                 key="isentropic_branch",
             )
             assert branch is not None
-        with_mass_flux = st.checkbox(
+        requires_pressure = gas_model == "BEATTIE_BRIDGEMAN"
+        with_mass_flux_selection = st.checkbox(
             "全圧を指定して質量流束を計算",
-            value=bool(models.get("with_mass_flux", False)),
+            value=requires_pressure or bool(models.get("with_mass_flux", False)),
+            disabled=requires_pressure,
             key="isentropic_with_flux",
         )
+        with_mass_flux = requires_pressure or with_mass_flux_selection
         total_temperature_display = finite_number(
             f"全温 T₀ [{preferences.temperature}]",
             _display(
@@ -192,7 +203,7 @@ def render_isentropic(preferences: UnitPreferences) -> None:
             total_temperature_display, "temperature", preferences.temperature
         )
         allow_extrapolation = st.checkbox(
-            "NASA多項式の200–6000 K外への外挿を許可",
+            "モデルの文書化された適用範囲外への外挿を許可",
             value=bool(models.get("allow_extrapolation", True)),
             disabled=gas_model == "AIR",
             key="isentropic_allow_extrapolation",
@@ -299,8 +310,9 @@ def render_isentropic(preferences: UnitPreferences) -> None:
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
             st.write(
-                "定常・断熱・可逆な理想気体流れを仮定します。NASA7/NASA9は"
-                "凍結組成で、範囲外では警告付き外挿です。"
+                "定常・断熱・可逆な流れを仮定します。NASA7/NASA9と調和振動子"
+                "モデルは凍結組成の熱的完全気体です。Beattie–Bridgemanモデルは"
+                "圧力依存の高密度補正を含みます。"
             )
         return
     result, configuration = payload
@@ -329,8 +341,9 @@ def render_isentropic(preferences: UnitPreferences) -> None:
     with st.expander("モデルの前提・適用範囲"):
         st.write(
             "状態量比は全量/静量です。A/A* > 1の逆計算では亜音速枝または"
-            "超音速枝を必ず選択します。NASA7/NASA9は凍結組成の熱的完全"
-            "気体で、解離・反応・電離は含みません。"
+            "超音速枝を必ず選択します。NASA7/NASA9と調和振動子モデルは凍結"
+            "組成です。Beattie–Bridgemanを含め、解離・反応・電離・相変化は"
+            "扱いません。"
         )
 
 

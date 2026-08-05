@@ -135,6 +135,33 @@ APIは、全温を指定してNASA多項式のエンタルピー・エントロ�
 Prandtl–Meyer解析は引き続き定比熱モデル専用で、局所的な $\gamma(T)$ を
 定数 $\gamma$ の解析式へ代入することはできません。
 
+## 調和振動子・Beattie–Bridgeman空気
+
+`AIR_HARMONIC_OSCILLATOR` はKennard系の調和振動子式により振動励起を
+扱う熱的完全気体です。`AIR_BEATTIE_BRIDGEMAN` はこれに
+Beattie–Bridgeman状態方程式の密度補正を加え、Randall/JAXA記載の空気定数を
+使用します。JAXA-RR-06-011は風洞での採用、定数、計算手順、FORTRAN参照値の
+資料であり、モデル自体の発明元ではありません。
+
+```python
+from aerophysics import AIR_BEATTIE_BRIDGEMAN
+from aerophysics.isentropic import isentropic_state
+
+state = isentropic_state(
+    2.0,
+    AIR_BEATTIE_BRIDGEMAN,
+    total_temperature=1200.0,
+    total_pressure=6.0e6,
+    allow_extrapolation=False,
+)
+print(state.static_pressure, state.static_density, state.velocity)
+```
+
+調和振動子空気は全温400–2000 K、Beattie–Bridgeman空気は全温400–2000 K、
+全圧1–10 MPaを文書化された貯気槽条件の範囲とします。範囲外は既定で1公開
+呼び出しにつき1回警告し、厳密モードではエラーになります。いずれも凍結組成
+であり、解離、化学平衡、電離、凝縮、相変化は扱いません。
+
 境界層内の単独突起について、自由流中の抗力係数と前面積上の有効動圧積分
 から直接抗力を推定できます。既定の乱流 1/7 乗速度分布、任意の速度・密度
 プロファイル、および Walz 温度関係による圧縮性近似に対応します。

@@ -7,7 +7,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from aerophysics import AIR_NASA7, AIR_NASA9, FlightCondition
+from aerophysics import (
+    AIR_BEATTIE_BRIDGEMAN,
+    AIR_HARMONIC_OSCILLATOR,
+    AIR_NASA7,
+    AIR_NASA9,
+    FlightCondition,
+)
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -26,6 +32,7 @@ from aerophysics.isentropic import (
     choked_mass_flux,
     critical_ratios,
     isentropic_ratios,
+    isentropic_state,
     mach_from_area_ratio,
     mach_from_total_density_ratio,
     mach_from_total_pressure_ratio,
@@ -33,6 +40,7 @@ from aerophysics.isentropic import (
     mass_flow_parameter,
     mass_flux,
 )
+from aerophysics.real_gas import BeattieBridgemanGas, HarmonicOscillatorGas
 from aerophysics.shocks import (
     ShockBranch,
     conical_shock,
@@ -193,10 +201,17 @@ def flight_sweep(
     )
 
 
-_ISENTROPIC_GASES: dict[str, PerfectGas | ThermallyPerfectGas] = {
+type _GuiIsentropicGas = (
+    PerfectGas | ThermallyPerfectGas | HarmonicOscillatorGas | BeattieBridgemanGas
+)
+
+
+_ISENTROPIC_GASES: dict[str, _GuiIsentropicGas] = {
     "AIR": AIR,
     "NASA7": AIR_NASA7,
     "NASA9": AIR_NASA9,
+    "HARMONIC_OSCILLATOR": AIR_HARMONIC_OSCILLATOR,
+    "BEATTIE_BRIDGEMAN": AIR_BEATTIE_BRIDGEMAN,
 }
 
 
@@ -204,8 +219,9 @@ def _mach_from_isentropic_input(
     value: float,
     basis: str,
     branch: MachBranch,
-    gas: PerfectGas | ThermallyPerfectGas,
+    gas: _GuiIsentropicGas,
     total_temperature: float | None,
+    total_pressure: float | None,
     *,
     allow_extrapolation: bool,
 ) -> float:
@@ -225,6 +241,7 @@ def _mach_from_isentropic_input(
                 branch,
                 gas,
                 total_temperature=total_temperature,
+                total_pressure=total_pressure,
                 allow_extrapolation=allow_extrapolation,
             )
         )
@@ -237,6 +254,7 @@ def _mach_from_isentropic_input(
             value,
             gas,
             total_temperature=total_temperature,
+            total_pressure=total_pressure,
             allow_extrapolation=allow_extrapolation,
         )
     )
@@ -256,10 +274,22 @@ def isentropic_condition(
     try:
         gas = _ISENTROPIC_GASES[gas_model]
     except KeyError as error:
-        raise ValueError("gas_model must be AIR, NASA7, or NASA9") from error
-    if isinstance(gas, ThermallyPerfectGas) and total_temperature is None:
+        raise ValueError(
+            "gas_model must be AIR, NASA7, NASA9, HARMONIC_OSCILLATOR, "
+            "or BEATTIE_BRIDGEMAN"
+        ) from error
+    if isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)) and (
+        total_temperature is None
+    ):
         raise ValueError(
             "total_temperature is required for a thermally perfect gas"
+        )
+    if isinstance(gas, BeattieBridgemanGas) and (
+        total_temperature is None or total_pressure is None
+    ):
+        raise ValueError(
+            "total_temperature and total_pressure are required for a "
+            "Beattie--Bridgeman gas"
         )
     if total_pressure is not None and total_temperature is None:
         raise ValueError(
@@ -272,6 +302,7 @@ def isentropic_condition(
         critical = critical_ratios(
             gas,
             total_temperature=total_temperature,
+            total_pressure=total_pressure,
             allow_extrapolation=allow_extrapolation,
         )
         for raw_value in _array(input_value):
@@ -282,12 +313,14 @@ def isentropic_condition(
                 branch,
                 gas,
                 total_temperature,
+                total_pressure,
                 allow_extrapolation=allow_extrapolation,
             )
             ratios = isentropic_ratios(
                 mach,
                 gas,
                 total_temperature=total_temperature,
+                total_pressure=total_pressure,
                 allow_extrapolation=allow_extrapolation,
             )
             flux = (
@@ -315,6 +348,17 @@ def isentropic_condition(
                 if total_pressure is not None and total_temperature is not None
                 else None
             )
+            absolute_state = (
+                isentropic_state(
+                    mach,
+                    gas,
+                    total_temperature=total_temperature,
+                    total_pressure=total_pressure,
+                    allow_extrapolation=allow_extrapolation,
+                )
+                if total_pressure is not None and total_temperature is not None
+                else None
+            )
             rows.append(
                 {
                     "gas_model": gas_model,
@@ -325,6 +369,31 @@ def isentropic_condition(
                     "static_temperature": (
                         total_temperature / float(ratios.total_temperature_ratio)
                         if total_temperature is not None
+                        else None
+                    ),
+                    "static_pressure": (
+                        float(absolute_state.static_pressure)
+                        if absolute_state is not None
+                        else None
+                    ),
+                    "static_density": (
+                        float(absolute_state.static_density)
+                        if absolute_state is not None
+                        else None
+                    ),
+                    "velocity": (
+                        float(absolute_state.velocity)
+                        if absolute_state is not None
+                        else None
+                    ),
+                    "speed_of_sound": (
+                        float(absolute_state.speed_of_sound)
+                        if absolute_state is not None
+                        else None
+                    ),
+                    "dynamic_pressure": (
+                        float(absolute_state.dynamic_pressure)
+                        if absolute_state is not None
                         else None
                     ),
                     "total_temperature_ratio": float(
@@ -338,6 +407,7 @@ def isentropic_condition(
                                 mach,
                                 gas,
                                 total_temperature=total_temperature,
+                                total_pressure=total_pressure,
                                 allow_extrapolation=allow_extrapolation,
                             )
                         )
@@ -349,6 +419,7 @@ def isentropic_condition(
                             mach,
                             gas,
                             total_temperature=total_temperature,
+                            total_pressure=total_pressure,
                             allow_extrapolation=allow_extrapolation,
                         )
                     ),
