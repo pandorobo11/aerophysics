@@ -14,7 +14,7 @@ from aerophysics.gui.config import (
     load_configuration,
 )
 from aerophysics.gui.tables import display_rows, rows_to_csv
-from aerophysics.gui.units import UnitPreferences
+from aerophysics.gui.units import QuantityKind, UnitPreferences, from_si, to_si
 
 PLOTLY_CONFIG = {
     "displaylogo": False,
@@ -23,18 +23,177 @@ PLOTLY_CONFIG = {
 }
 
 
+_UNIT_STATE_KEY = "_gui_display_units"
+
+
+def _current_unit_preferences() -> UnitPreferences:
+    """Build preferences from widget state, including not-yet-rendered defaults."""
+    defaults = UnitPreferences()
+    return UnitPreferences(
+        **{
+            name: str(st.session_state.get(f"unit_{name}", value))
+            for name, value in defaults.to_dict().items()
+        }
+    )
+
+
+def _convert_state_value(
+    key: str, kind: QuantityKind, old: UnitPreferences, new: UnitPreferences
+) -> None:
+    value = st.session_state.get(key)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return
+    old_unit = str(getattr(old, kind))
+    new_unit = str(getattr(new, kind))
+    if old_unit == new_unit:
+        return
+    si_value = to_si(float(value), kind, old_unit)
+    st.session_state[key] = float(from_si(si_value, kind, new_unit))
+
+
+def _state_matches(key: str, expected: object) -> bool:
+    return st.session_state.get(key) == expected
+
+
+def clear_widget_state(keys: tuple[str, ...]) -> None:
+    """Clear dependent widget values after a structural selector changes."""
+    for key in keys:
+        st.session_state.pop(key, None)
+
+
+def _convert_display_input_state() -> None:
+    """Preserve physical input values when a global display unit changes."""
+    new = _current_unit_preferences()
+    stored = st.session_state.get(_UNIT_STATE_KEY)
+    try:
+        old = UnitPreferences.from_dict(stored)
+    except ValueError:
+        old = UnitPreferences()
+
+    fields: dict[QuantityKind, tuple[str, ...]] = {
+        "length": (
+            "flight_altitude",
+            "flight_length",
+            "boundary_distance",
+            "profile_thickness",
+            "protrusion_thickness",
+            "protrusion_height",
+            "protrusion_width",
+        ),
+        "speed": (
+            "boundary_velocity",
+            "profile_velocity",
+            "protrusion_velocity",
+        ),
+        "pressure": (
+            "isentropic_total_pressure",
+            "profile_shear",
+            "thermo_pressure",
+        ),
+        "temperature": (
+            "isentropic_total_temperature",
+            "boundary_temperature",
+            "boundary_wall_temperature",
+            "profile_temperature",
+            "profile_wall_temperature",
+            "protrusion_temperature",
+            "protrusion_wall_temperature",
+            "thermo_temperature",
+            "thermo_reference",
+            "thermo_sweep_start",
+            "thermo_sweep_stop",
+            "viscosity_temperature",
+            "viscosity_sweep_start",
+            "viscosity_sweep_stop",
+        ),
+        "density": (
+            "boundary_density",
+            "profile_density",
+            "protrusion_density",
+        ),
+        "angle": (
+            "shock_theta",
+            "cone_shock_angle",
+            "expansion_turn",
+        ),
+    }
+    for kind, keys in fields.items():
+        for key in keys:
+            _convert_state_value(key, kind, old, new)
+
+    if _state_matches("flight_basis", "velocity"):
+        _convert_state_value("flight_motion", "speed", old, new)
+        if _state_matches("flight_sweep_field", "motion"):
+            for key in ("flight_sweep_start", "flight_sweep_stop"):
+                _convert_state_value(key, "speed", old, new)
+    if _state_matches("flight_sweep_field", "altitude"):
+        for key in ("flight_sweep_start", "flight_sweep_stop"):
+            _convert_state_value(key, "length", old, new)
+    for prefix in ("boundary",):
+        for suffix in ("sweep_start", "sweep_stop"):
+            _convert_state_value(f"{prefix}_{suffix}", "length", old, new)
+    if _state_matches("shock_sweep_field", "deflection"):
+        for key in ("shock_sweep_start", "shock_sweep_stop"):
+            _convert_state_value(key, "angle", old, new)
+    if _state_matches("cone_shock_sweep_field", "cone_half_angle"):
+        for key in ("cone_shock_sweep_start", "cone_shock_sweep_stop"):
+            _convert_state_value(key, "angle", old, new)
+    if _state_matches("expansion_sweep_field", "turn_angle"):
+        for key in ("expansion_sweep_start", "expansion_sweep_stop"):
+            _convert_state_value(key, "angle", old, new)
+    if st.session_state.get("protrusion_sweep_field") in {
+        "height",
+        "base_width",
+        "boundary_layer_thickness",
+    }:
+        for key in ("protrusion_sweep_start", "protrusion_sweep_stop"):
+            _convert_state_value(key, "length", old, new)
+
+    st.session_state[_UNIT_STATE_KEY] = new.to_dict()
+
+
 def render_unit_sidebar() -> UnitPreferences:
     """Render persistent global unit selectors."""
     st.sidebar.header("表示単位")
     with st.sidebar.expander("単位設定", expanded=False):
-        length = st.selectbox("長さ", ("m", "ft"), key="unit_length")
-        speed = st.selectbox("速度", ("m/s", "kt"), key="unit_speed")
-        pressure = st.selectbox("圧力", ("Pa", "psi"), key="unit_pressure")
-        temperature = st.selectbox("温度", ("K", "°F"), key="unit_temperature")
-        density = st.selectbox("密度", ("kg/m³", "slug/ft³"), key="unit_density")
-        angle = st.selectbox("角度", ("deg", "rad"), key="unit_angle")
+        length = st.selectbox(
+            "長さ",
+            ("m", "ft"),
+            key="unit_length",
+            on_change=_convert_display_input_state,
+        )
+        speed = st.selectbox(
+            "速度",
+            ("m/s", "kt"),
+            key="unit_speed",
+            on_change=_convert_display_input_state,
+        )
+        pressure = st.selectbox(
+            "圧力",
+            ("Pa", "psi"),
+            key="unit_pressure",
+            on_change=_convert_display_input_state,
+        )
+        temperature = st.selectbox(
+            "温度",
+            ("K", "°F"),
+            key="unit_temperature",
+            on_change=_convert_display_input_state,
+        )
+        density = st.selectbox(
+            "密度",
+            ("kg/m³", "slug/ft³"),
+            key="unit_density",
+            on_change=_convert_display_input_state,
+        )
+        angle = st.selectbox(
+            "角度",
+            ("deg", "rad"),
+            key="unit_angle",
+            on_change=_convert_display_input_state,
+        )
     st.sidebar.caption("計算コアへ渡す前にSIへ明示変換します。")
-    return UnitPreferences(
+    preferences = UnitPreferences(
         length=length,
         speed=speed,
         pressure=pressure,
@@ -42,11 +201,23 @@ def render_unit_sidebar() -> UnitPreferences:
         density=density,
         angle=angle,
     )
+    st.session_state[_UNIT_STATE_KEY] = preferences.to_dict()
+    return preferences
 
 
 def _set_unit_state(preferences: UnitPreferences) -> None:
     for name, value in preferences.to_dict().items():
         st.session_state[f"unit_{name}"] = value
+    st.session_state[_UNIT_STATE_KEY] = preferences.to_dict()
+
+
+def calculation_button(form_key: str) -> bool:
+    """Render an explicit calculation trigger without batching input widgets."""
+    return st.button(
+        "計算",
+        type="primary",
+        key=f"FormSubmitter:{form_key}-計算",
+    )
 
 
 def render_configuration_import(calculator: str, prefix: str) -> None:
@@ -157,6 +328,17 @@ def finite_number(
     format: str = "%.6g",
 ) -> float:
     """Render a consistently configured floating-point input."""
+    if key in st.session_state:
+        return float(
+            st.number_input(
+                label,
+                min_value=min_value,
+                key=key,
+                disabled=disabled,
+                help=help,
+                format=format,
+            )
+        )
     return float(
         st.number_input(
             label,

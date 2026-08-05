@@ -26,6 +26,8 @@ from aerophysics.gui.advanced_adapters import (
     viscosity_sweep,
 )
 from aerophysics.gui.components import (
+    calculation_button,
+    clear_widget_state,
     finite_number,
     pop_pending_configuration,
     render_configuration_import,
@@ -135,7 +137,7 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
     linked = st.session_state.get("current_boundary_layer_case")
     has_linked = isinstance(linked, BoundaryLayerCase)
 
-    with st.form("profile_form"):
+    with st.container():
         sources = ("manual", "boundary") if has_linked else ("manual",)
         default_source = str(models.get("source", "manual"))
         source = st.radio(
@@ -147,6 +149,16 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
             ),
             horizontal=True,
             key="profile_source",
+            on_change=clear_widget_state,
+            args=(
+                (
+                    "profile_velocity",
+                    "profile_density",
+                    "profile_temperature",
+                    "profile_thickness",
+                    "profile_shear",
+                ),
+            ),
         )
         case = linked if source == "boundary" and has_linked else None
         edge_velocity_si = (
@@ -282,7 +294,7 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
                 key="profile_points",
             )
         )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("profile_form")
 
     if submitted:
         st.session_state.pop("profile_payload", None)
@@ -450,7 +462,7 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
     embedded_profile = isinstance(embedded_profile_data, ProfileCSV)
     embedded_shape_data = st.session_state.get("protrusion_embedded_shape")
 
-    with st.form("protrusion_form"):
+    with st.container():
         sources = ["power_law"]
         if has_saved:
             sources.append("saved")
@@ -477,6 +489,14 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
             }[value],
             horizontal=True,
             key="protrusion_source",
+            on_change=clear_widget_state,
+            args=(
+                (
+                    "protrusion_velocity",
+                    "protrusion_density",
+                    "protrusion_thickness",
+                ),
+            ),
         )
         uploaded_profile = (
             st.file_uploader(
@@ -638,6 +658,8 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
                     "mach": "外縁 Mach M_e",
                 }[value],
                 key="protrusion_sweep_field",
+                on_change=clear_widget_state,
+                args=(("protrusion_sweep_start", "protrusion_sweep_stop"),),
             )
             length_field = sweep_field in {
                 "height",
@@ -675,7 +697,7 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
                         key="protrusion_sweep_points",
                     )
                 )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("protrusion_form")
 
     if submitted:
         st.session_state.pop("protrusion_payload", None)
@@ -910,7 +932,7 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
     render_configuration_import("thermochemistry", "thermo")
     render_reset_button("thermo", "thermo_payload")
 
-    with st.form("thermo_form"):
+    with st.container():
         mode = st.radio(
             "計算モード",
             ("single", "sweep"),
@@ -998,7 +1020,7 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
                         key="thermo_sweep_points",
                     )
                 )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("thermo_form")
 
     if submitted:
         st.session_state.pop("thermo_payload", None)
@@ -1111,7 +1133,7 @@ def render_viscosity(preferences: UnitPreferences) -> None:
     if scale_default not in {"linear", "log"}:
         scale_default = "log"
 
-    with st.form("viscosity_form"):
+    with st.container():
         mode = st.radio(
             "計算モード",
             ("single", "sweep"),
@@ -1187,7 +1209,7 @@ def render_viscosity(preferences: UnitPreferences) -> None:
                 horizontal=True,
                 key="viscosity_sweep_scale",
             )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("viscosity_form")
 
     if submitted:
         st.session_state.pop("viscosity_payload", None)

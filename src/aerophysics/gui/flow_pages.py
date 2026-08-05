@@ -18,6 +18,8 @@ from aerophysics.gui.adapters import (
     normal_shock_sweep,
 )
 from aerophysics.gui.components import (
+    calculation_button,
+    clear_widget_state,
     finite_number,
     pop_pending_configuration,
     render_configuration_import,
@@ -110,7 +112,7 @@ def render_isentropic(preferences: UnitPreferences) -> None:
         else 300.0
     )
 
-    with st.form("isentropic_form"):
+    with st.container():
         mode = st.radio(
             "計算モード",
             ("single", "sweep"),
@@ -143,6 +145,14 @@ def render_isentropic(preferences: UnitPreferences) -> None:
             index=bases.index(default_basis) if default_basis in bases else 0,
             format_func=_ISENTROPIC_LABELS.__getitem__,
             key="isentropic_basis",
+            on_change=clear_widget_state,
+            args=(
+                (
+                    "isentropic_input",
+                    "isentropic_sweep_start",
+                    "isentropic_sweep_stop",
+                ),
+            ),
         )
         assert basis is not None
         minimum = 0.0 if basis == "mach" else 1.0
@@ -228,7 +238,7 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                         key="isentropic_sweep_points",
                     )
                 )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("isentropic_form")
 
     if submitted:
         st.session_state.pop("isentropic_payload", None)
@@ -334,7 +344,7 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
     render_reset_button("normal", "normal_payload")
     default_mode = str(imported.get("mode", "single")) if imported else "single"
 
-    with st.form("normal_form"):
+    with st.container():
         mode = st.radio(
             "計算モード",
             ("single", "sweep"),
@@ -378,7 +388,7 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
                         key="normal_sweep_points",
                     )
                 )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("normal_form")
 
     if submitted:
         st.session_state.pop("normal_payload", None)
@@ -449,7 +459,7 @@ def render_expansion(preferences: UnitPreferences) -> None:
     render_reset_button("expansion", "expansion_payload")
     default_mode = str(imported.get("mode", "single")) if imported else "single"
 
-    with st.form("expansion_form"):
+    with st.container():
         mode = st.radio(
             "計算モード",
             ("single", "sweep"),
@@ -483,6 +493,8 @@ def render_expansion(preferences: UnitPreferences) -> None:
                     "膨張角 θ" if value == "turn_angle" else "上流 Mach M₁"
                 ),
                 key="expansion_sweep_field",
+                on_change=clear_widget_state,
+                args=(("expansion_sweep_start", "expansion_sweep_stop"),),
             )
             assert sweep_field is not None
             if sweep_field == "turn_angle":
@@ -527,7 +539,7 @@ def render_expansion(preferences: UnitPreferences) -> None:
                         key="expansion_sweep_points",
                     )
                 )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("expansion_form")
 
     if submitted:
         st.session_state.pop("expansion_payload", None)

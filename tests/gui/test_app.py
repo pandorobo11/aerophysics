@@ -31,12 +31,107 @@ def test_main_app_default_page_and_calculation() -> None:
 
 def test_flight_page_sweep_mode() -> None:
     app = AppTest.from_file(APP, default_timeout=15).run()
+    assert "flight_sweep_start" not in {widget.key for widget in app.number_input}
     app.radio(key="flight_mode").set_value("1変数スイープ").run()
+    assert "flight_sweep_start" in {widget.key for widget in app.number_input}
     app.button(key="FormSubmitter:flight_form-計算").click().run()
     assert not app.exception
     assert not app.error
     assert len(app.dataframe[0].value) == 101
     assert len(app.get("plotly_chart")) == 3
+
+
+@pytest.mark.parametrize(
+    ("module", "function", "mode_key", "mode_value", "dependent_key"),
+    (
+        (
+            "aerophysics.gui.pages",
+            "render_shock",
+            "shock_mode",
+            "1変数スイープ",
+            "shock_sweep_start",
+        ),
+        (
+            "aerophysics.gui.pages",
+            "render_conical_shock",
+            "cone_shock_mode",
+            "1変数スイープ",
+            "cone_shock_sweep_start",
+        ),
+        (
+            "aerophysics.gui.pages",
+            "render_boundary_layer",
+            "boundary_mode",
+            "距離スイープ",
+            "boundary_sweep_start",
+        ),
+        (
+            "aerophysics.gui.flow_pages",
+            "render_isentropic",
+            "isentropic_mode",
+            "入力値スイープ",
+            "isentropic_sweep_start",
+        ),
+        (
+            "aerophysics.gui.flow_pages",
+            "render_normal_shock",
+            "normal_mode",
+            "Machスイープ",
+            "normal_sweep_start",
+        ),
+        (
+            "aerophysics.gui.flow_pages",
+            "render_expansion",
+            "expansion_mode",
+            "1変数スイープ",
+            "expansion_sweep_start",
+        ),
+    ),
+)
+def test_mode_switch_immediately_updates_dependent_inputs(
+    module: str,
+    function: str,
+    mode_key: str,
+    mode_value: str,
+    dependent_key: str,
+) -> None:
+    script = f"""
+from {module} import {function}
+from aerophysics.gui.units import UnitPreferences
+{function}(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=15).run()
+    assert dependent_key not in {widget.key for widget in app.number_input}
+    app.radio(key=mode_key).set_value(mode_value).run()
+    assert dependent_key in {widget.key for widget in app.number_input}
+
+
+def test_single_mode_immediately_hides_sweep_inputs() -> None:
+    script = """
+from aerophysics.gui.analysis_pages import render_thermochemistry
+from aerophysics.gui.units import UnitPreferences
+render_thermochemistry(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=15).run()
+    assert "thermo_sweep_start" in {widget.key for widget in app.number_input}
+    app.radio(key="thermo_mode").set_value("single").run()
+    assert "thermo_sweep_start" not in {widget.key for widget in app.number_input}
+
+
+def test_display_unit_change_preserves_physical_input_value() -> None:
+    script = """
+from aerophysics.gui.components import finite_number, render_unit_sidebar
+preferences = render_unit_sidebar()
+finite_number(
+    f"高度 [{preferences.length}]", 10_000.0, key="flight_altitude"
+)
+"""
+    app = AppTest.from_string(script, default_timeout=15).run()
+    assert app.number_input(key="flight_altitude").value == pytest.approx(10_000.0)
+    app.selectbox(key="unit_length").set_value("ft").run()
+    assert app.number_input(key="flight_altitude").value == pytest.approx(
+        32_808.3989501
+    )
 
 
 def test_shock_page_calculation() -> None:
@@ -160,9 +255,7 @@ render_isentropic(UnitPreferences())
     assert not app.exception
     assert not app.error
     assert app.dataframe[0].value["気体モデル"].tolist() == ["NASA9"]
-    assert app.dataframe[0].value["静温 T [K]"].iloc[0] == pytest.approx(
-        580.6729799
-    )
+    assert app.dataframe[0].value["静温 T [K]"].iloc[0] == pytest.approx(580.6729799)
 
 
 def test_isentropic_page_loads_legacy_configuration_as_air() -> None:

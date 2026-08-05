@@ -27,6 +27,8 @@ from aerophysics.gui.adapters import (
 )
 from aerophysics.gui.advanced_adapters import BoundaryLayerCase
 from aerophysics.gui.components import (
+    calculation_button,
+    clear_widget_state,
     finite_number,
     pop_pending_configuration,
     render_configuration_import,
@@ -112,7 +114,7 @@ def render_flight(preferences: UnitPreferences) -> None:
     length_si = float(length_value) if isinstance(length_value, (int, float)) else 1.0
     has_length = length_value is not None
 
-    with st.form("flight_form"):
+    with st.container():
         mode = st.radio(
             "計算モード",
             ("single", "sweep"),
@@ -128,6 +130,8 @@ def render_flight(preferences: UnitPreferences) -> None:
             format_func=lambda value: "Mach数" if value == "mach" else "速度",
             horizontal=True,
             key="flight_basis",
+            on_change=clear_widget_state,
+            args=(("flight_motion", "flight_sweep_start", "flight_sweep_stop"),),
         )
         altitude = finite_number(
             f"幾何高度 h [{preferences.length}]",
@@ -177,6 +181,8 @@ def render_flight(preferences: UnitPreferences) -> None:
                     "幾何高度" if value == "altitude" else "運動条件"
                 ),
                 key="flight_sweep_field",
+                on_change=clear_widget_state,
+                args=(("flight_sweep_start", "flight_sweep_stop"),),
             )
             kind = (
                 "length"
@@ -224,7 +230,7 @@ def render_flight(preferences: UnitPreferences) -> None:
                         key="flight_sweep_points",
                     )
                 )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("flight_form")
 
     if submitted:
         st.session_state.pop("flight_payload", None)
@@ -374,7 +380,7 @@ def render_shock(preferences: UnitPreferences) -> None:
     default_mode = str(imported.get("mode", "single")) if imported else "single"
     default_branch = str(models.get("branch", ShockBranch.WEAK.value))
 
-    with st.form("shock_form"):
+    with st.container():
         mode = st.radio(
             "計算モード",
             ("single", "sweep"),
@@ -419,6 +425,8 @@ def render_shock(preferences: UnitPreferences) -> None:
                     "偏向角 θ" if value == "deflection" else "Mach M₁"
                 ),
                 key="shock_sweep_field",
+                on_change=clear_widget_state,
+                args=(("shock_sweep_start", "shock_sweep_stop"),),
             )
             if sweep_field == "deflection":
                 default_limit = float(
@@ -453,7 +461,7 @@ def render_shock(preferences: UnitPreferences) -> None:
                         key="shock_sweep_points",
                     )
                 )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("shock_form")
 
     if submitted:
         st.session_state.pop("shock_payload", None)
@@ -556,7 +564,7 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     render_reset_button("cone_shock", "cone_shock_payload")
     default_mode = str(imported.get("mode", "single")) if imported else "single"
 
-    with st.form("cone_shock_form"):
+    with st.container():
         mode = st.radio(
             "計算モード",
             ("single", "sweep"),
@@ -596,6 +604,8 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                     "円錐半頂角 θc" if value == "cone_half_angle" else "Mach M∞"
                 ),
                 key="cone_shock_sweep_field",
+                on_change=clear_widget_state,
+                args=(("cone_shock_sweep_start", "cone_shock_sweep_stop"),),
             )
             if sweep_field == "cone_half_angle":
                 default_limit = float(maximum_attached_cone_angle(mach).cone_half_angle)
@@ -628,7 +638,7 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                         key="cone_shock_sweep_points",
                     )
                 )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("cone_shock_form")
 
     if submitted:
         st.session_state.pop("cone_shock_payload", None)
@@ -733,7 +743,7 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
     has_case = isinstance(case, FlightCase)
     default_mode = str(imported.get("mode", "single")) if imported else "single"
 
-    with st.form("boundary_form"):
+    with st.container():
         source_choices = ("manual", "flight") if has_case else ("manual",)
         source = st.radio(
             "外縁条件の入力元",
@@ -743,6 +753,16 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
             ),
             horizontal=True,
             key="boundary_source",
+            on_change=clear_widget_state,
+            args=(
+                (
+                    "boundary_velocity",
+                    "boundary_density",
+                    "boundary_viscosity",
+                    "boundary_mach",
+                    "boundary_temperature",
+                ),
+            ),
         )
         mode = st.radio(
             "計算モード",
@@ -929,7 +949,7 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
                 value=bool(sweep.get("logarithmic", True)),
                 key="boundary_sweep_log",
             )
-        submitted = st.form_submit_button("計算", type="primary")
+        submitted = calculation_button("boundary_form")
 
     if submitted:
         st.session_state.pop("boundary_payload", None)
