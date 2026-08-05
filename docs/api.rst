@@ -22,6 +22,12 @@ Thermochemistry
 .. automodule:: aerophysics.thermochemistry
    :members:
 
+High-temperature and real-gas models
+------------------------------------
+
+.. automodule:: aerophysics.real_gas
+   :members:
+
 Standard atmosphere
 -------------------
 

@@ -25,6 +25,14 @@ from aerophysics.protrusion import (
     ProtrusionProfile,
     protrusion_drag,
 )
+from aerophysics.real_gas import (
+    AIR_BEATTIE_BRIDGEMAN,
+    AIR_HARMONIC_OSCILLATOR,
+    BeattieBridgemanGas,
+    HarmonicOscillatorGas,
+    ThermodynamicState,
+    VibrationalMode,
+)
 from aerophysics.shocks import ShockBranch, conical_shock, normal_shock, oblique_shock
 from aerophysics.thermochemistry import (
     AIR_NASA7,
@@ -39,14 +47,18 @@ __version__ = version("aerophysics")
 
 __all__ = [
     "AIR",
+    "AIR_BEATTIE_BRIDGEMAN",
+    "AIR_HARMONIC_OSCILLATOR",
     "AIR_NASA7",
     "AIR_NASA9",
     "AtmosphereState",
+    "BeattieBridgemanGas",
     "BoundaryLayerRegime",
     "CompressibilityCorrection",
     "CompressibleBoundaryLayerProfileResult",
     "CompressibleVelocityTransformation",
     "FlightCondition",
+    "HarmonicOscillatorGas",
     "IdealGasSpecies",
     "NASA7Polynomial",
     "NASA9Polynomial",
@@ -56,8 +68,10 @@ __all__ = [
     "ShockBranch",
     "TemperatureVelocityRelation",
     "ThermallyPerfectGas",
+    "ThermodynamicState",
     "TransformedVelocityProfileResult",
     "TurbulentCorrelation",
+    "VibrationalMode",
     "__version__",
     "compressible_turbulent_boundary_layer_profile",
     "conical_shock",

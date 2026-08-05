@@ -196,6 +196,29 @@ render_isentropic(UnitPreferences())
     assert not app.error
 
 
+def test_isentropic_page_supports_beattie_bridgeman_air() -> None:
+    script = """
+from aerophysics.gui.flow_pages import render_isentropic
+from aerophysics.gui.units import UnitPreferences
+render_isentropic(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="isentropic_gas_model").set_value(
+        "BEATTIE_BRIDGEMAN"
+    ).run()
+    assert app.checkbox(key="isentropic_with_flux").disabled
+    app.number_input(key="isentropic_input").set_value(2.0).run()
+    app.number_input(key="isentropic_total_temperature").set_value(1200.0).run()
+    app.number_input(key="isentropic_total_pressure").set_value(6.0e6).run()
+    app.button(key="FormSubmitter:isentropic_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    table = app.dataframe[0].value
+    assert table["気体モデル"].tolist() == ["BEATTIE_BRIDGEMAN"]
+    assert table["静圧 p [Pa]"].iloc[0] > 0.0
+    assert table["音速 a [m/s]"].iloc[0] > 0.0
+
+
 def test_expansion_sweep_marks_limit_rows() -> None:
     script = """
 from aerophysics.gui.flow_pages import render_expansion

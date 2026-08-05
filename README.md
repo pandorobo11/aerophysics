@@ -84,6 +84,30 @@ relations support frozen-composition NASA7/NASA9 gases. Their fitted range is
 200–6000 K; isentropic calculations warn when their default extrapolation is
 used outside it.
 
+Harmonic-oscillator and Beattie–Bridgeman air presets use physics-based names:
+
+```python
+from aerophysics import AIR_BEATTIE_BRIDGEMAN
+from aerophysics.isentropic import isentropic_state
+
+state = isentropic_state(
+    2.0,
+    AIR_BEATTIE_BRIDGEMAN,
+    total_temperature=1200.0,
+    total_pressure=6.0e6,
+    allow_extrapolation=False,
+)
+print(state.static_pressure, state.velocity)
+```
+
+`AIR_HARMONIC_OSCILLATOR` follows Kennard's frozen harmonic-vibration model.
+`AIR_BEATTIE_BRIDGEMAN` uses the Beattie–Bridgeman equation of state with
+Randall air constants. JAXA-RR-06-011 supplies the wind-tunnel implementation,
+constants, and reference calculations; JAXA did not originate either model.
+The documented reservoir ranges are 400–2000 K for both presets and 1–10 MPa
+for Beattie–Bridgeman air. Neither includes dissociation, chemical equilibrium,
+ionization, condensation, or phase change.
+
 ## Models and references
 
 - Atmospheric state and transport properties: *U.S. Standard Atmosphere,
@@ -92,6 +116,9 @@ used outside it.
 - Calorically and thermally perfect isentropic relations, including
   NASA-polynomial enthalpy and entropy variation; constant-heat-capacity
   relations follow NACA Report 1135.
+- Kennard harmonic-oscillator thermally perfect gas and the Beattie–Bridgeman
+  dense-gas equation of state, using Randall/JAXA air constants and
+  wind-tunnel calculation procedures.
 - Normal and oblique shocks, supersonic Pitot pressure, and Prandtl–Meyer
   expansion: NACA Report 1135. Axisymmetric sharp-cone shocks use the
   Taylor–Maccoll model and NASA SP-3004 reference tables.

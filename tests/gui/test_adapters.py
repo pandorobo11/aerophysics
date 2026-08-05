@@ -205,6 +205,50 @@ def test_thermally_perfect_isentropic_adapter_validation() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "gas_model",
+    ["HARMONIC_OSCILLATOR", "BEATTIE_BRIDGEMAN"],
+)
+def test_high_temperature_air_adapters_return_absolute_state(
+    gas_model: str,
+) -> None:
+    result = isentropic_condition(
+        input_value=2.0,
+        input_basis="mach",
+        gas_model=gas_model,
+        total_temperature=1200.0,
+        total_pressure=6.0e6,
+        allow_extrapolation=False,
+    )
+    row = result.rows[0]
+    assert row["gas_model"] == gas_model
+    assert float(row["static_pressure"]) > 0.0  # type: ignore[arg-type]
+    assert float(row["static_density"]) > 0.0  # type: ignore[arg-type]
+    assert float(row["velocity"]) > 0.0  # type: ignore[arg-type]
+    assert float(row["speed_of_sound"]) > 0.0  # type: ignore[arg-type]
+    assert float(row["dynamic_pressure"]) > 0.0  # type: ignore[arg-type]
+
+    inverse = isentropic_condition(
+        input_value=float(row["total_pressure_ratio"]),  # type: ignore[arg-type]
+        input_basis="pressure_ratio",
+        gas_model=gas_model,
+        total_temperature=1200.0,
+        total_pressure=6.0e6,
+        allow_extrapolation=False,
+    )
+    assert inverse.rows[0]["mach"] == pytest.approx(2.0)
+
+
+def test_beattie_bridgeman_adapter_requires_total_state() -> None:
+    with pytest.raises(ValueError, match="total_temperature and total_pressure"):
+        isentropic_condition(
+            input_value=1.0,
+            input_basis="mach",
+            gas_model="BEATTIE_BRIDGEMAN",
+            total_temperature=1200.0,
+        )
+
+
 def test_normal_shock_adapter_and_sweep() -> None:
     single = normal_shock_condition(upstream_mach=2.0)
     assert single.rows[0]["downstream_mach"] == pytest.approx(0.57735, rel=1e-5)

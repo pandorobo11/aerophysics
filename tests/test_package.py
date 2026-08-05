@@ -3,11 +3,15 @@
 import pytest
 
 from aerophysics import (
+    AIR_BEATTIE_BRIDGEMAN,
+    AIR_HARMONIC_OSCILLATOR,
     AIR_NASA7,
     AIR_NASA9,
+    BeattieBridgemanGas,
     BoundaryLayerRegime,
     CompressibilityCorrection,
     CompressibleVelocityTransformation,
+    HarmonicOscillatorGas,
     ShockBranch,
     TemperatureVelocityRelation,
     ThermallyPerfectGas,
@@ -51,6 +55,8 @@ def test_thermally_perfect_air_api_is_exported() -> None:
     assert isinstance(AIR_NASA7, ThermallyPerfectGas)
     assert isinstance(AIR_NASA9, ThermallyPerfectGas)
     assert AIR_NASA9.heat_capacity_ratio(300.0) < 1.4
+    assert isinstance(AIR_HARMONIC_OSCILLATOR, HarmonicOscillatorGas)
+    assert isinstance(AIR_BEATTIE_BRIDGEMAN, BeattieBridgemanGas)
 
 
 def test_primary_boundary_layer_api_is_exported() -> None:
