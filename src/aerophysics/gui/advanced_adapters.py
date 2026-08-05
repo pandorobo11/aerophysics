@@ -487,13 +487,9 @@ def viscosity_condition(
         raise ValueError("models must contain unique viscosity model choices")
     unknown = tuple(name for name in selected if name not in _VISCOSITY_MODELS)
     if unknown:
-        raise ValueError(
-            "model must be Sutherland, Keyes, or Blottner/Wilke"
-        )
+        raise ValueError("model must be Sutherland, Keyes, or Blottner/Wilke")
 
-    temperatures = np.atleast_1d(
-        np.asarray(temperature, dtype=np.float64)
-    ).reshape(-1)
+    temperatures = np.atleast_1d(np.asarray(temperature, dtype=np.float64)).reshape(-1)
     if not np.all(np.isfinite(temperatures)) or np.any(temperatures <= 0.0):
         raise ValueError("temperature must be finite and greater than zero")
     baseline = np.atleast_1d(
@@ -515,9 +511,7 @@ def viscosity_condition(
             with warnings.catch_warnings(record=True) as captured:
                 warnings.simplefilter("always")
                 values = np.atleast_1d(
-                    np.asarray(
-                        model.dynamic_viscosity(temperatures), dtype=np.float64
-                    )
+                    np.asarray(model.dynamic_viscosity(temperatures), dtype=np.float64)
                 )
             messages.extend(str(item.message) for item in captured)
         elif np.any(valid):

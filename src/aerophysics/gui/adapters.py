@@ -281,9 +281,7 @@ def isentropic_condition(
     if isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)) and (
         total_temperature is None
     ):
-        raise ValueError(
-            "total_temperature is required for a thermally perfect gas"
-        )
+        raise ValueError("total_temperature is required for a thermally perfect gas")
     if isinstance(gas, BeattieBridgemanGas) and (
         total_temperature is None or total_pressure is None
     ):
@@ -396,9 +394,7 @@ def isentropic_condition(
                         if absolute_state is not None
                         else None
                     ),
-                    "total_temperature_ratio": float(
-                        ratios.total_temperature_ratio
-                    ),
+                    "total_temperature_ratio": float(ratios.total_temperature_ratio),
                     "total_pressure_ratio": float(ratios.total_pressure_ratio),
                     "total_density_ratio": float(ratios.total_density_ratio),
                     "area_ratio": (

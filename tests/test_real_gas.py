@@ -61,9 +61,7 @@ def test_harmonic_oscillator_matches_independent_kennard_equation() -> None:
     temperature = np.array([400.0, 1000.0, 2000.0])
     theta = 3055.56
     x = theta / temperature
-    expected_cv = 287.05287 / 0.4 + 287.05287 * (
-        x**2 * np.exp(x) / np.expm1(x) ** 2
-    )
+    expected_cv = 287.05287 / 0.4 + 287.05287 * (x**2 * np.exp(x) / np.expm1(x) ** 2)
     assert_allclose(gas.cv(temperature), expected_cv, rtol=2e-15)
     assert_allclose(gas.cp(temperature), expected_cv + 287.05287, rtol=2e-15)
     assert_allclose(
@@ -257,13 +255,17 @@ def test_new_models_isentropic_forward_inverse_and_area_branches(
         total_temperature=1200.0,
         total_pressure=total_pressure,
     ) == pytest.approx(2.0, abs=2e-11)
-    assert 0.0 < mach_from_area_ratio(
-        target,
-        MachBranch.SUBSONIC,
-        gas,
-        total_temperature=1200.0,
-        total_pressure=total_pressure,
-    ) < 1.0
+    assert (
+        0.0
+        < mach_from_area_ratio(
+            target,
+            MachBranch.SUBSONIC,
+            gas,
+            total_temperature=1200.0,
+            total_pressure=total_pressure,
+        )
+        < 1.0
+    )
 
 
 @pytest.mark.parametrize(
@@ -334,9 +336,7 @@ def test_isentropic_requirements_broadcast_and_range_handling() -> None:
     with pytest.raises(ValueError, match="total_temperature"):
         isentropic_ratios(1.0, AIR_HARMONIC_OSCILLATOR)
     with pytest.raises(ValueError, match="total_pressure"):
-        isentropic_ratios(
-            1.0, AIR_BEATTIE_BRIDGEMAN, total_temperature=1200.0
-        )
+        isentropic_ratios(1.0, AIR_BEATTIE_BRIDGEMAN, total_temperature=1200.0)
     with pytest.warns(ApplicabilityWarning) as captured:
         isentropic_ratios(
             [1.0, 2.0],

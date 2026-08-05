@@ -305,9 +305,7 @@ def test_viscosity_adapter_ranges_and_explicit_extrapolation() -> None:
         allow_extrapolation=True,
     )
     assert all(row["status"] == "extrapolated" for row in extrapolated.rows)
-    assert all(
-        isinstance(row["dynamic_viscosity"], float) for row in extrapolated.rows
-    )
+    assert all(isinstance(row["dynamic_viscosity"], float) for row in extrapolated.rows)
     assert len(extrapolated.warnings) == 2
 
 

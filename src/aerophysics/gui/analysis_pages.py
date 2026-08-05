@@ -1146,9 +1146,7 @@ def render_viscosity(preferences: UnitPreferences) -> None:
             "粘性モデル",
             selections,
             index=selections.index(selected_default),
-            format_func=lambda value: (
-                "3モデルを比較" if value == "compare" else value
-            ),
+            format_func=lambda value: "3モデルを比較" if value == "compare" else value,
             key="viscosity_selection",
         )
         temperature = finite_number(

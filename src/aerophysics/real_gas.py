@@ -59,9 +59,7 @@ def _warn_or_raise_outside(
     lower, upper = applicable_range
     outside = bool(np.any((values < lower) | (values > upper)))
     if outside and not allow_extrapolation:
-        raise ModelRangeError(
-            f"{name} must be within {lower:g}--{upper:g} {unit}"
-        )
+        raise ModelRangeError(f"{name} must be within {lower:g}--{upper:g} {unit}")
     if outside and warn:
         warnings.warn(
             f"{name} is outside the documented range {lower:g}--{upper:g} {unit}",
@@ -74,9 +72,7 @@ def _warn_or_raise_outside(
 def _broadcast_temperature_pressure(
     temperature: ArrayLike, pressure: ArrayLike
 ) -> tuple[FloatArray, FloatArray, bool]:
-    temperatures, temperature_scalar = as_float_array(
-        temperature, name="temperature"
-    )
+    temperatures, temperature_scalar = as_float_array(temperature, name="temperature")
     pressures, pressure_scalar = as_float_array(pressure, name="pressure")
     if np.any(temperatures <= 0.0):
         raise ValueError("temperature must be greater than zero")
@@ -100,9 +96,7 @@ def _broadcast_temperature_pressure(
 def _broadcast_temperature_density(
     temperature: ArrayLike, density: ArrayLike
 ) -> tuple[FloatArray, FloatArray, bool]:
-    temperatures, temperature_scalar = as_float_array(
-        temperature, name="temperature"
-    )
+    temperatures, temperature_scalar = as_float_array(temperature, name="temperature")
     densities, density_scalar = as_float_array(density, name="density")
     if np.any(temperatures <= 0.0):
         raise ValueError("temperature must be greater than zero")
@@ -192,9 +186,7 @@ def _vibrational_terms(
         occupation = exp_minus_x / denominator
         energy += mode.weight * x * occupation
         heat_capacity += mode.weight * x**2 * exp_minus_x / denominator**2
-        entropy += mode.weight * (
-            x * occupation - np.log1p(-exp_minus_x)
-        )
+        entropy += mode.weight * (x * occupation - np.log1p(-exp_minus_x))
     return heat_capacity, energy, entropy
 
 
@@ -274,10 +266,9 @@ class HarmonicOscillatorGas:
             gas_constant * temperature * vibration_energy
         )
         enthalpy = internal_energy + gas_constant * temperature
-        entropy_temperature = (
-            (base_cv + gas_constant) * np.log(temperature)
-            + gas_constant * vibration_entropy
-        )
+        entropy_temperature = (base_cv + gas_constant) * np.log(
+            temperature
+        ) + gas_constant * vibration_entropy
         return cp, cv, internal_energy, enthalpy, entropy_temperature
 
     def cp(
@@ -515,8 +506,9 @@ class BeattieBridgemanGas:
             if residual >= 0.0:
                 density = float(
                     brentq(
-                        lambda value: self._pressure_scalar(temperature, value)
-                        - pressure,
+                        lambda value: (
+                            self._pressure_scalar(temperature, value) - pressure
+                        ),
                         lower,
                         upper,
                         xtol=_ROOT_XTOL,
@@ -562,11 +554,7 @@ class BeattieBridgemanGas:
             * self.c
             / temperature**3
             * density
-            * (
-                1.0
-                + 0.5 * self.b0 * density
-                - self.b0 * self.b * density**2 / 3.0
-            )
+            * (1.0 + 0.5 * self.b0 * density - self.b0 * self.b * density**2 / 3.0)
         )
         cp = cv + temperature * dp_dtemperature**2 / (density**2 * dp_drho)
         gamma = cp / cv
@@ -587,10 +575,7 @@ class BeattieBridgemanGas:
 
         correction = (
             -density
-            * (
-                self.a0 / (gas_constant * temperature)
-                + 3.0 * self.c / temperature**3
-            )
+            * (self.a0 / (gas_constant * temperature) + 3.0 * self.c / temperature**3)
             - density**2
             * (
                 3.0 * self.b0 * self.c / (2.0 * temperature**3)
@@ -606,8 +591,7 @@ class BeattieBridgemanGas:
         enthalpy = internal_energy + pressure / density
         log_f = (
             density * (self.b0 + 2.0 * self.c / temperature**3)
-            + density**2
-            * (self.b0 * self.c / temperature**3 - 0.5 * self.b0 * self.b)
+            + density**2 * (self.b0 * self.c / temperature**3 - 0.5 * self.b0 * self.b)
             - density**3 * 2.0 * self.b0 * self.b * self.c / (3.0 * temperature**3)
         )
         entropy = float(

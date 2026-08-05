@@ -296,9 +296,7 @@ from aerophysics.gui.units import UnitPreferences
 render_isentropic(UnitPreferences())
 """
     app = AppTest.from_string(script, default_timeout=30).run()
-    app.selectbox(key="isentropic_gas_model").set_value(
-        "BEATTIE_BRIDGEMAN"
-    ).run()
+    app.selectbox(key="isentropic_gas_model").set_value("BEATTIE_BRIDGEMAN").run()
     assert app.checkbox(key="isentropic_with_flux").disabled
     app.number_input(key="isentropic_input").set_value(2.0).run()
     app.number_input(key="isentropic_total_temperature").set_value(1200.0).run()

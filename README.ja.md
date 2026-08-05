@@ -184,8 +184,8 @@ uv run sphinx-build -W -b html docs docs/_build/html
 タグを push します。
 
 ```console
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 リリースワークフローはすべての検証を実行し、wheel、sdist、

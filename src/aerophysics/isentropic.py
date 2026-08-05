@@ -44,6 +44,7 @@ _MAX_TEMPERATURE_BRACKET_STEPS: Final = 80
 type _IdealThermalGas = ThermallyPerfectGas | HarmonicOscillatorGas
 type IsentropicGasModel = PerfectGas | _IdealThermalGas | BeattieBridgemanGas
 
+
 class MachBranch(StrEnum):
     """Branch of the area-Mach relation."""
 
@@ -250,9 +251,7 @@ def _broadcast_thermal_inputs(
     value_name: str,
 ) -> tuple[FloatArray, FloatArray, bool]:
     if total_temperature is None:
-        raise ValueError(
-            "total_temperature is required for a thermally perfect gas"
-        )
+        raise ValueError("total_temperature is required for a thermally perfect gas")
     temperatures, temperature_scalar = as_float_array(
         total_temperature, name="total_temperature"
     )
@@ -282,17 +281,13 @@ def _broadcast_real_inputs(
     value_name: str,
 ) -> tuple[FloatArray, FloatArray, FloatArray, bool]:
     if total_temperature is None:
-        raise ValueError(
-            "total_temperature is required for a Beattie--Bridgeman gas"
-        )
+        raise ValueError("total_temperature is required for a Beattie--Bridgeman gas")
     if total_pressure is None:
         raise ValueError("total_pressure is required for a Beattie--Bridgeman gas")
     temperatures, temperature_scalar = as_float_array(
         total_temperature, name="total_temperature"
     )
-    pressures, pressure_scalar = as_float_array(
-        total_pressure, name="total_pressure"
-    )
+    pressures, pressure_scalar = as_float_array(total_pressure, name="total_pressure")
     if np.any(temperatures <= 0.0):
         raise ValueError("total_temperature must be greater than zero")
     if np.any(pressures <= 0.0):
@@ -303,8 +298,7 @@ def _broadcast_real_inputs(
         )
     except ValueError as error:
         raise ValueError(
-            f"{value_name}, total_temperature, and total_pressure must be "
-            "broadcastable"
+            f"{value_name}, total_temperature, and total_pressure must be broadcastable"
         ) from error
     return (
         np.asarray(broadcast_values, dtype=np.float64),
@@ -365,8 +359,7 @@ def _find_lower_temperature(
             break
         lower = max(0.5 * lower, floor)
     raise ModelRangeError(
-        "could not bracket a positive-temperature thermally perfect "
-        "isentropic solution"
+        "could not bracket a positive-temperature thermally perfect isentropic solution"
     )
 
 
@@ -427,9 +420,7 @@ def _thermal_flow_state(
     density_ratio = pressure_ratio * static_temperature / total_temperature
     temperature_ratio = total_temperature / static_temperature
     parameter = (
-        mach
-        * np.sqrt(static.heat_capacity_ratio * temperature_ratio)
-        / pressure_ratio
+        mach * np.sqrt(static.heat_capacity_ratio * temperature_ratio) / pressure_ratio
     )
     values = (pressure_ratio, density_ratio, temperature_ratio, parameter)
     if not np.all(np.isfinite(values)) or any(value <= 0.0 for value in values):
@@ -528,9 +519,7 @@ def _real_flow_state(
     ) -> tuple[_ScalarThermodynamicState, float]:
         static = _real_isentropic_state_at_temperature(temperature, total, gas)
         residual = (
-            total.enthalpy
-            - static.enthalpy
-            - 0.5 * mach**2 * static.speed_of_sound**2
+            total.enthalpy - static.enthalpy - 0.5 * mach**2 * static.speed_of_sound**2
         )
         return static, residual
 
@@ -562,9 +551,7 @@ def _real_flow_state(
             maxiter=_ROOT_MAXITER,
         )
     )
-    static = _real_isentropic_state_at_temperature(
-        static_temperature, total, gas
-    )
+    static = _real_isentropic_state_at_temperature(static_temperature, total, gas)
     velocity = mach * static.speed_of_sound
     parameter = (
         static.density
@@ -704,9 +691,7 @@ def _thermal_mach_from_static_temperature(
             "thermally perfect gas enthalpy is not monotonic over the required "
             "temperature interval"
         )
-    mach = np.sqrt(
-        2.0 * max(0.0, enthalpy_difference) / static.sound_speed_squared
-    )
+    mach = np.sqrt(2.0 * max(0.0, enthalpy_difference) / static.sound_speed_squared)
     if not np.isfinite(mach):
         raise ModelRangeError("thermally perfect isentropic Mach number is invalid")
     return float(mach), total.extrapolated or static.extrapolated
@@ -1224,9 +1209,7 @@ def _real_mach_from_area_scalar(
 
     def residual(mach: float) -> float:
         return (
-            _real_area_ratio_scalar(
-                mach, total_temperature, total_pressure, gas
-            )
+            _real_area_ratio_scalar(mach, total_temperature, total_pressure, gas)
             - target
         )
 
@@ -1358,9 +1341,7 @@ def critical_ratios(
             _,
         ) = _real_flow_states(np.ones_like(mach), temperatures, pressures, gas)
         return CriticalRatios(
-            total_temperature_ratio=return_float(
-                real_temperature_ratio, scalar=scalar
-            ),
+            total_temperature_ratio=return_float(real_temperature_ratio, scalar=scalar),
             total_pressure_ratio=return_float(real_pressure_ratio, scalar=scalar),
             total_density_ratio=return_float(real_density_ratio, scalar=scalar),
         )
@@ -1384,9 +1365,7 @@ def critical_ratios(
     )
     _warn_if_extrapolated(gas, extrapolated)
     return CriticalRatios(
-        total_temperature_ratio=return_float(
-            thermal_temperature_ratio, scalar=scalar
-        ),
+        total_temperature_ratio=return_float(thermal_temperature_ratio, scalar=scalar),
         total_pressure_ratio=return_float(pressure_ratio, scalar=scalar),
         total_density_ratio=return_float(density_ratio, scalar=scalar),
     )
@@ -1409,11 +1388,7 @@ def mass_flow_parameter(
     if isinstance(gas, PerfectGas):
         gamma = gas.heat_capacity_ratio
         exponent = (gamma + 1.0) / (2.0 * (gamma - 1.0))
-        result = (
-            np.sqrt(gamma)
-            * values
-            / _temperature_factor(values, gas) ** exponent
-        )
+        result = np.sqrt(gamma) * values / _temperature_factor(values, gas) ** exponent
         return return_float(result, scalar=scalar)
 
     if isinstance(gas, BeattieBridgemanGas):
@@ -1514,11 +1489,7 @@ def mass_flux(
             * mach_values
             / _temperature_factor(mach_values, gas) ** exponent
         )
-    result = (
-        pressure
-        * parameter
-        / np.sqrt(gas.specific_gas_constant * temperature)
-    )
+    result = pressure * parameter / np.sqrt(gas.specific_gas_constant * temperature)
     scalar = pressure_scalar and temperature_scalar and mach_scalar
     return return_float(np.asarray(result, dtype=np.float64), scalar=scalar)
 
@@ -1553,9 +1524,7 @@ def isentropic_state(
     temperatures, temperature_scalar = as_float_array(
         total_temperature, name="total_temperature"
     )
-    pressures, pressure_scalar = as_float_array(
-        total_pressure, name="total_pressure"
-    )
+    pressures, pressure_scalar = as_float_array(total_pressure, name="total_pressure")
     if np.any(temperatures <= 0.0):
         raise ValueError("total_temperature must be greater than zero")
     if np.any(pressures <= 0.0):
@@ -1626,9 +1595,8 @@ def isentropic_state(
             total_density[index] = pressures[index] / (
                 gas.specific_gas_constant * temperatures[index]
             )
-            static_density[index] = (
-                static_pressure[index]
-                / (gas.specific_gas_constant * static_temperature[index])
+            static_density[index] = static_pressure[index] / (
+                gas.specific_gas_constant * static_temperature[index]
             )
             sound_speed[index] = np.sqrt(properties.sound_speed_squared)
             velocity[index] = mach_values[index] * sound_speed[index]
@@ -1641,16 +1609,12 @@ def isentropic_state(
             gas.heat_capacity_ratio / (gas.heat_capacity_ratio - 1.0)
         )
         static_pressure = pressures / pressure_ratios
-        total_density = pressures / (
-            gas.specific_gas_constant * temperatures
-        )
+        total_density = pressures / (gas.specific_gas_constant * temperatures)
         static_density = static_pressure / (
             gas.specific_gas_constant * static_temperature
         )
         sound_speed = np.sqrt(
-            gas.heat_capacity_ratio
-            * gas.specific_gas_constant
-            * static_temperature
+            gas.heat_capacity_ratio * gas.specific_gas_constant * static_temperature
         )
         velocity = mach_values * sound_speed
 

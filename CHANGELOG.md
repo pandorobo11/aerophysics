@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+All notable changes to this project are documented in this file. The project
+uses Semantic Versioning, including during the pre-1.0 period.
+
+## [Unreleased]
+
+## [0.4.0] - 2026-08-05
+
+### Added
 
 - Add a reproducible U.S. Standard Atmosphere 1976 verification record using
   official tables, a pinned ``fluids`` snapshot, physical invariants, and
@@ -29,14 +36,6 @@
   boundary-layer-immersed protrusion drag, and NASA7/NASA9 frozen-air
   thermochemistry, including model comparison, validated CSV inputs, and
   SI-preserving handoff between viscous-flow pages.
-
-All notable changes to this project are documented in this file. The project
-uses Semantic Versioning, including during the pre-1.0 period.
-
-## [Unreleased]
-
-### Added
-
 - NASA seven- and nine-coefficient thermochemistry, reusable ideal-gas species,
   and frozen-composition thermally perfect gas mixtures.
 - Built-in NASA7 and NASA9 dry-air models with temperature-dependent heat
@@ -92,6 +91,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Typed public APIs, cross-platform CI, Sphinx documentation, and validated
   examples.
 
+[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.4.0
 [0.3.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.3.0
 [0.2.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.2.0
 [0.1.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.1.0

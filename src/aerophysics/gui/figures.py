@@ -877,9 +877,7 @@ def viscosity_figures(
     relative = go.Figure()
     model_names = tuple(
         dict.fromkeys(
-            str(row["model"])
-            for row in rows
-            if isinstance(row.get("model"), str)
+            str(row["model"]) for row in rows if isinstance(row.get("model"), str)
         )
     )
     for model in model_names:
@@ -915,7 +913,5 @@ def viscosity_figures(
     relative.add_hline(line_dash="dot", line_color="#777777", y=0.0)
     return {
         "粘性係数": _style(absolute, "乾燥空気の動的粘性係数"),
-        "Sutherland基準相対差": _style(
-            relative, "Sutherland基準の相対差"
-        ),
+        "Sutherland基準相対差": _style(relative, "Sutherland基準の相対差"),
     }

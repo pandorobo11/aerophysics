@@ -34,7 +34,7 @@ from aerophysics.exceptions import (
 
 
 def test_version() -> None:
-    assert __version__ == "0.3.0"
+    assert __version__ == "0.4.0"
 
 
 def test_public_diagnostics() -> None:
