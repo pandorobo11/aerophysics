@@ -15,6 +15,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = PROJECT_ROOT / "docs/scripts/generate_viscosity_comparison.py"
 TABLE_FRAGMENT = PROJECT_ROOT / "docs/_generated/viscosity_model_comparison.rst"
 SVG = PROJECT_ROOT / "docs/_static/viscosity_model_comparison.svg"
+ATMOSPHERE_GENERATOR = (
+    PROJECT_ROOT / "docs/scripts/generate_standard_atmosphere_validation.py"
+)
+ATMOSPHERE_FRAGMENT = (
+    PROJECT_ROOT / "docs/_generated/standard_atmosphere_validation.rst"
+)
+ATMOSPHERE_SVGS = (
+    PROJECT_ROOT / "docs/_static/standard_atmosphere_profiles.svg",
+    PROJECT_ROOT / "docs/_static/standard_atmosphere_comparison.svg",
+)
 
 
 def _expected_row(temperature: float, candidate: DynamicViscosityModel) -> str:
@@ -57,3 +67,32 @@ def test_viscosity_comparison_svg_has_accessible_labels() -> None:
     assert "Dynamic viscosity (Pa·s)" in svg
     assert "Relative difference (%)" in svg
     assert "frozen N₂/O₂/Ar/CO₂ dry-air composition" in svg
+
+
+def test_standard_atmosphere_validation_assets_are_current() -> None:
+    subprocess.run(
+        [sys.executable, str(ATMOSPHERE_GENERATOR), "--check"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_standard_atmosphere_tables_record_the_computed_result() -> None:
+    fragment = ATMOSPHERE_FRAGMENT.read_text(encoding="utf-8")
+    assert "**Verified with observations**" in fragment
+    assert "Official-table comparison summary" in fragment
+    assert "fluids 1.3.1 comparison summary" in fragment
+    assert "Physical and mathematical invariant summary" in fragment
+    assert "9.1690e-05" in fragment
+
+
+def test_standard_atmosphere_svgs_have_accessible_labels() -> None:
+    for path in ATMOSPHERE_SVGS:
+        svg = path.read_text(encoding="utf-8")
+        assert 'role="img"' in svg
+        assert 'aria-labelledby="svg-title svg-desc"' in svg
+        assert '<title id="svg-title">' in svg
+        assert '<desc id="svg-desc">' in svg
+        assert "Geometric altitude (km)" in svg

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add a reproducible U.S. Standard Atmosphere 1976 verification record using
+  official tables, a pinned ``fluids`` snapshot, physical invariants, and
+  generated comparison figures.
 - Add Taylor–Maccoll axisymmetric attached conical shocks, cone-surface state
   ratios, attached limits, vectorized APIs, and a dedicated GUI calculator.
 - Extend all isentropic forward/inverse, area--Mach, critical-state, and mass

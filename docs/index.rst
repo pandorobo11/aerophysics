@@ -46,6 +46,12 @@ flight conditions, and explicit unit conversions.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Verification
+
+   verification
+
+.. toctree::
+   :maxdepth: 2
    :caption: Reference
 
    api
