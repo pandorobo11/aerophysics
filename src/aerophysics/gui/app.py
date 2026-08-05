@@ -11,6 +11,7 @@ from aerophysics.gui.analysis_pages import (
     render_viscosity,
 )
 from aerophysics.gui.components import render_unit_sidebar
+from aerophysics.gui.documentation import render_documentation
 from aerophysics.gui.flow_pages import (
     render_expansion,
     render_isentropic,
@@ -76,6 +77,10 @@ def viscosity_page() -> None:
     render_viscosity(preferences)
 
 
+def documentation_page() -> None:
+    render_documentation()
+
+
 pages = {
     "飛行状態": [
         st.Page(
@@ -139,6 +144,13 @@ pages = {
             thermochemistry_page,
             title="熱化学",
             icon="🔥",
+        ),
+    ],
+    "ヘルプ": [
+        st.Page(
+            documentation_page,
+            title="ドキュメント",
+            icon="📚",
         ),
     ],
 }
