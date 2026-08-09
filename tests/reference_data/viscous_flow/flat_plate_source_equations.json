@@ -1,0 +1,9 @@
+{
+  "sources": [
+    "Blasius laminar flat-plate similarity solution",
+    "one-fifth-power turbulent flat-plate correlation",
+    "Schlichting smooth-plate average skin-friction correlation"
+  ],
+  "role": "independent direct evaluation of published correlation equations",
+  "command": "python docs/scripts/build_viscous_reference.py"
+}

@@ -1,0 +1,7 @@
+{
+  "source": "Hopkins, Charts for Predicting Turbulent Skin Friction from the Van Driest Method (II), NASA TN D-6945 (1972)",
+  "figure": "Figure 3(e), local skin friction versus length Reynolds number, Te=222 K and Tw/Taw=0.6",
+  "method": "Representative values read from the logarithmic chart at Rex=1e6 and rounded to the chart-readable 0.0001 Cf increment",
+  "tolerance": "One chart-readable increment (0.0001 absolute Cf), including line thickness and scan reading uncertainty",
+  "role": "chart-resolution acceptance comparison"
+}

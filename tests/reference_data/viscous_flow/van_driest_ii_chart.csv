@@ -1,0 +1,4 @@
+source,figure,pdf_page,printed_page,edge_temperature_K,wall_to_adiabatic_temperature_ratio,reynolds_number,mach,local_cf,absolute_tolerance
+NASA TN D-6945,Figure 3(e),32,27,222,0.6,1000000,0,0.0037,0.0001
+NASA TN D-6945,Figure 3(e),32,27,222,0.6,1000000,5,0.0020,0.0001
+NASA TN D-6945,Figure 3(e),32,27,222,0.6,1000000,10,0.0010,0.0001
