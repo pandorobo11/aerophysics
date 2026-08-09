@@ -12,9 +12,13 @@ from aerophysics.boundary_layer_profile import (
     CompressibleVelocityTransformation,
     TemperatureVelocityRelation,
 )
+from aerophysics.detached_shock import DetachedShockGeometry
 from aerophysics.gui.adapters import (
     conical_shock_condition,
     conical_shock_sweep,
+    detached_shock_condition,
+    detached_shock_shape,
+    detached_shock_sweep,
     expansion_sweep,
     flat_plate_sweep,
     flight_sweep,
@@ -34,6 +38,8 @@ from aerophysics.gui.figures import (
     boundary_layer_profile_figures,
     conical_shock_geometry,
     conical_shock_trends,
+    detached_shock_geometry,
+    detached_shock_trends,
     expansion_figures,
     flight_figures,
     isentropic_figures,
@@ -200,6 +206,52 @@ def test_additional_compressible_flow_figures() -> None:
     )
     assert set(expansion_plots) == {"Mach数", "角度", "状態量比"}
     assert "膨張角" in str(expansion_plots["Mach数"].layout.xaxis.title.text)
+
+
+def test_detached_shock_geometry_and_trends() -> None:
+    shape = detached_shock_shape(
+        upstream_mach=4.0,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+    )
+    geometry = detached_shock_geometry(shape, UnitPreferences(length="ft"))
+    assert len(geometry.data) == 2
+    assert geometry.layout.xaxis.scaleanchor == "y"
+    assert "ft" in str(geometry.layout.xaxis.title.text)
+
+    comparison = detached_shock_sweep(
+        start=2.0,
+        stop=4.0,
+        points=3,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+        selection="comparison",
+    )
+    figures = detached_shock_trends(comparison.rows, UnitPreferences())
+    assert set(figures) == {"無次元離脱距離", "寸法・曲率", "モデル差"}
+    assert len(figures["無次元離脱距離"].data) == 2
+
+    cylinder = detached_shock_condition(
+        upstream_mach=np.array([2.0, 4.0]),
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.CYLINDRICAL_NOSE_2D,
+        selection="ambrosio_wortman",
+    )
+    cylinder_figures = detached_shock_trends(cylinder.rows, UnitPreferences())
+    assert set(cylinder_figures) == {"無次元離脱距離", "寸法・曲率"}
+    assert len(cylinder_figures["無次元離脱距離"].data) == 1
+
+    seiff = detached_shock_sweep(
+        start=2.0,
+        stop=4.0,
+        points=3,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+        selection="seiff",
+    )
+    seiff_figures = detached_shock_trends(seiff.rows, UnitPreferences())
+    assert len(seiff_figures["無次元離脱距離"].data) == 1
+    assert seiff_figures["無次元離脱距離"].data[0].name == "Seiff"
 
 
 def test_boundary_profile_and_protrusion_figures() -> None:

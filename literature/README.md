@@ -9,7 +9,7 @@
 
 ## 収集方針
 
-- 対象は、2026-08-05時点の作業ツリーにある `docs/references.rst` の全40件。
+- 対象は、2026-08-09時点の作業ツリーにある `docs/references.rst` の全45件。
 - 記載済みURL、DOI、正式題名の順で調査し、公式機関、出版社、著者、大学リポジトリを優先する。
 - 一般公開された第三者サイトも調査対象とするが、認証、購読、アクセス制限の回避は行わない。
 - 実際に開けるPDFを保存し、`pdfinfo` でページ数を取得できた場合のみ「取得済み」とする。
@@ -61,10 +61,14 @@
 | 39 | Wind-tunnel gas models | 2007 | Watari, M. | Air Models Used in the JAXA Hypersonic Wind Tunnels | 取得済み | `2007_Watari_Air-Models-JAXA-Hypersonic-Wind-Tunnels-Conference.pdf` | [JAXA](https://jaxa.repo.nii.ac.jp/records/5839) | 4ページ。JAXA-SP-06-020会議論文。完全版との関係確認用。 |
 | 40 | Thermally perfect flow | 1994 | Witte, D. W.; Tatum, K. E. | Computer Code for Determination of Thermally Perfect Gas Properties | 取得済み | `1994_Witte_Computer-Code-Thermally-Perfect-Gas-Properties.pdf` | [NASA NTRS](https://ntrs.nasa.gov/citations/19950005582) | 80ページ。NASA TP-3447。熱的完全気体流れの独立検証資料であり、調和振動子モデルの原典ではない。 |
 | 41 | Conical flow | 1964 | Sims, J. L. | Tables for Supersonic Flow Around Right Circular Cones at Zero Angle of Attack | 取得済み | `1964_Sims_Tables-Supersonic-Flow-Right-Circular-Cones.pdf` | [NASA NTRS](https://ntrs.nasa.gov/api/citations/19640009035/downloads/19640009035.pdf) | 430ページ。NASA SP-3004。γ=1.4のTaylor–Maccoll表を円錐衝撃波検証へ使用。 |
+| 42 | Detached shocks | 1962 | Ambrosio, A.; Wortman, A. | Stagnation-Point Shock-Detachment Distance for Flow around Spheres and Cylinders | 未取得 | — | [DOI](https://doi.org/10.2514/8.5988) | ARS Journal 32(2), 281。球・二次元円柱の離脱距離相関の原典。出版社レコードと式を確認したが、公開PDFは保存していない。 |
+| 43 | Detached shocks | 1967 | Billig, F. S. | Shock-Wave Shapes around Spherical- and Cylindrical-Nosed Bodies | 未取得 | — | [DOI](https://doi.org/10.2514/3.28969) | 頂点曲率半径と双曲線衝撃波形状の原典。出版社レコードと式を確認したが、公開PDFは保存していない。 |
+| 44 | Detached shocks | 1964 | Seiff, A. | Recent Information on Hypersonic Flow Fields | 未取得 | — | [NASA SP-24 / Google Books](https://books.google.com/books?id=fygCAAAAIAAJ) | 密度比による球の離脱距離相関の原典。書籍表示で書誌と式を確認したが、全文PDFは保存していない。 |
+| 45 | Detached shocks | 1965 | Inouye, M. | Blunt Body Solutions for Spheres and Ellipsoids in Equilibrium Gas Mixtures | 未取得 | — | [NASA NTRS](https://ntrs.nasa.gov/citations/19650012766) | NASA TN D-2780。Seiff式を0.04<ρ1/ρ2<0.16で独立検証した資料。公式レコードと本文を確認したが、PDFは保存していない。 |
 
 ## 集計
 
-- 対象: 41件
+- 対象: 45件
 - 取得済み: 26件
-- 未取得: 15件
-- 最終確認日: 2026-08-05
+- 未取得: 19件
+- 最終確認日: 2026-08-09

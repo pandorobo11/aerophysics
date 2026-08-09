@@ -13,6 +13,7 @@ CALCULATORS = {
     "boundary_layer",
     "boundary_layer_profile",
     "conical_shock",
+    "detached_shock",
     "expansion",
     "flight",
     "isentropic",

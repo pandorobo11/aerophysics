@@ -4,8 +4,9 @@
 vectorized atmospheric and aerodynamic physics models.
 
 Version 0.3 includes perfect-gas properties, the U.S. Standard Atmosphere 1976,
-isentropic compressible flow, normal, oblique, and conical shocks, Prandtl–Meyer
-expansion, laminar and turbulent flat-plate boundary layers, flight conditions,
+isentropic compressible flow, normal, oblique, conical, and detached shocks,
+Prandtl–Meyer expansion, laminar and turbulent flat-plate boundary layers,
+flight conditions,
 and explicit aviation unit conversions. Public calculation APIs use SI units;
 angles use radians.
 
@@ -26,7 +27,7 @@ python -m pip install aerophysics
 
 Install the optional GUI dependencies to calculate and plot standard-atmosphere,
 flight-condition, isentropic-flow, normal-, oblique-, and conical-shock,
-Prandtl-Meyer-expansion, and flat-plate boundary-layer results in a local
+detached-shock, Prandtl-Meyer-expansion, and flat-plate boundary-layer results in a local
 browser. Compressible boundary-layer profiles, boundary-layer-immersed
 protrusion drag, Sutherland/Keyes/Blottner-Wilke viscosity comparisons, and
 NASA7/NASA9 frozen-air thermochemistry are also available:
@@ -126,6 +127,8 @@ dissociation, chemical equilibrium, ionization, condensation, or phase change.
 - Normal and oblique shocks, supersonic Pitot pressure, and Prandtl–Meyer
   expansion: NACA Report 1135. Axisymmetric sharp-cone shocks use the
   Taylor–Maccoll model and NASA SP-3004 reference tables.
+- Detached-shock standoff and shape correlations for spherical/hemispherical
+  and two-dimensional cylindrical noses: Ambrosio--Wortman, Billig, and Seiff.
 - Smooth flat-plate boundary layers: Blasius and smooth-wall turbulent
   correlations, with Eckert and Van Driest II compressibility corrections.
 - Direct drag of isolated boundary-layer protrusions using an

@@ -13,6 +13,7 @@ from aerophysics.gui.analysis_pages import (
 from aerophysics.gui.components import render_unit_sidebar
 from aerophysics.gui.documentation import render_documentation
 from aerophysics.gui.flow_pages import (
+    render_detached_shock,
     render_expansion,
     render_isentropic,
     render_normal_shock,
@@ -59,6 +60,10 @@ def normal_shock_page() -> None:
 
 def expansion_page() -> None:
     render_expansion(preferences)
+
+
+def detached_shock_page() -> None:
+    render_detached_shock(preferences)
 
 
 def boundary_layer_profile_page() -> None:
@@ -110,6 +115,11 @@ pages = {
             conical_shock_page,
             title="円錐衝撃波",
             icon="🔺",
+        ),
+        st.Page(
+            detached_shock_page,
+            title="離脱衝撃波",
+            icon="🛡️",
         ),
         st.Page(
             expansion_page,

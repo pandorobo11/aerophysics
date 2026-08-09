@@ -17,6 +17,18 @@ from aerophysics.boundary_layer_profile import (
     compressible_turbulent_boundary_layer_profile,
     transform_compressible_velocity_profile,
 )
+from aerophysics.detached_shock import (
+    BilligShockShapeResult,
+    DetachedShockComparisonResult,
+    DetachedShockGeometry,
+    DetachedShockModel,
+    DetachedShockStandoffResult,
+    billig_shock_shape,
+    compare_standoff_distances,
+    seiff_standoff_distance,
+    seiff_standoff_distance_from_mach,
+    shock_standoff_distance,
+)
 from aerophysics.expansion import prandtl_meyer_expansion
 from aerophysics.flight import FlightCondition
 from aerophysics.gas import AIR, PerfectGas
@@ -53,10 +65,15 @@ __all__ = [
     "AIR_NASA9",
     "AtmosphereState",
     "BeattieBridgemanGas",
+    "BilligShockShapeResult",
     "BoundaryLayerRegime",
     "CompressibilityCorrection",
     "CompressibleBoundaryLayerProfileResult",
     "CompressibleVelocityTransformation",
+    "DetachedShockComparisonResult",
+    "DetachedShockGeometry",
+    "DetachedShockModel",
+    "DetachedShockStandoffResult",
     "FlightCondition",
     "HarmonicOscillatorGas",
     "IdealGasSpecies",
@@ -73,6 +90,8 @@ __all__ = [
     "TurbulentCorrelation",
     "VibrationalMode",
     "__version__",
+    "billig_shock_shape",
+    "compare_standoff_distances",
     "compressible_turbulent_boundary_layer_profile",
     "conical_shock",
     "flat_plate_boundary_layer",
@@ -80,6 +99,9 @@ __all__ = [
     "oblique_shock",
     "prandtl_meyer_expansion",
     "protrusion_drag",
+    "seiff_standoff_distance",
+    "seiff_standoff_distance_from_mach",
+    "shock_standoff_distance",
     "standard_atmosphere",
     "transform_compressible_velocity_profile",
 ]

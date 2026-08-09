@@ -54,12 +54,12 @@ def test_local_documentation_server(tmp_path: Path) -> None:
         patch("aerophysics.gui.launcher.ThreadingHTTPServer") as server_class,
         patch("aerophysics.gui.launcher.threading.Thread") as thread_class,
     ):
-        server, thread = _start_documentation_server(tmp_path)
+        server, _thread = _start_documentation_server(tmp_path)
     address, handler = server_class.call_args.args
     assert address == ("127.0.0.1", 0)
     assert callable(handler)
     thread_class.assert_called_once_with(target=server.serve_forever, daemon=True)
-    thread.start.assert_called_once_with()
+    thread_class.return_value.start.assert_called_once_with()
 
 
 def test_documentation_directory_override(

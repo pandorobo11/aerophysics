@@ -5,7 +5,8 @@ import json
 import numpy as np
 import pytest
 
-from aerophysics.gui.adapters import Row
+from aerophysics.detached_shock import DetachedShockGeometry
+from aerophysics.gui.adapters import Row, detached_shock_shape
 from aerophysics.gui.config import (
     CONFIG_SCHEMA_VERSION,
     ConfigurationError,
@@ -14,7 +15,12 @@ from aerophysics.gui.config import (
     make_configuration,
     validate_configuration,
 )
-from aerophysics.gui.tables import columns_for, display_rows, rows_to_csv
+from aerophysics.gui.tables import (
+    columns_for,
+    detached_shock_shape_csv,
+    display_rows,
+    rows_to_csv,
+)
 from aerophysics.gui.units import (
     UnitPreferences,
     from_si,
@@ -82,6 +88,32 @@ def test_configuration_round_trip() -> None:
     assert restored == configuration
     assert restored["schema_version"] == CONFIG_SCHEMA_VERSION
     assert json.loads(serialized)["display_units"]["length"] == "ft"
+
+
+def test_detached_shock_configuration_table_and_shape_csv() -> None:
+    configuration = make_configuration(
+        calculator="detached_shock",
+        mode="sweep",
+        inputs_si={"upstream_mach": 4.0, "nose_radius": 0.1},
+        models={
+            "geometry": DetachedShockGeometry.AXISYMMETRIC_SPHERE.value,
+            "model": "comparison",
+        },
+        units=UnitPreferences(length="ft"),
+        sweep_si={"field": "upstream_mach", "start": 2.0, "stop": 8.0, "points": 5},
+    )
+    assert load_configuration(dump_configuration(configuration)) == configuration
+    assert columns_for("detached_shock")[0].key == "upstream_mach"
+
+    shape = detached_shock_shape(
+        upstream_mach=4.0,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+        points=3,
+    )
+    csv = detached_shock_shape_csv(shape, UnitPreferences(length="ft"))
+    assert "x [ft],y [ft]" in csv
+    assert len(csv.splitlines()) == 4
 
 
 def test_configuration_round_trip_with_embedded_profile_arrays() -> None:

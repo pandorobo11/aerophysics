@@ -8,8 +8,15 @@ from typing import Any
 import numpy as np
 import streamlit as st
 
+from aerophysics.detached_shock import (
+    BilligShockShapeResult,
+    DetachedShockGeometry,
+)
 from aerophysics.gui.adapters import (
     CalculationResult,
+    detached_shock_condition,
+    detached_shock_shape,
+    detached_shock_sweep,
     expansion_condition,
     expansion_sweep,
     isentropic_condition,
@@ -28,10 +35,13 @@ from aerophysics.gui.components import (
 )
 from aerophysics.gui.config import make_configuration
 from aerophysics.gui.figures import (
+    detached_shock_geometry,
+    detached_shock_trends,
     expansion_figures,
     isentropic_figures,
     normal_shock_figures,
 )
+from aerophysics.gui.tables import detached_shock_shape_csv
 from aerophysics.gui.units import UnitPreferences, from_si, to_si
 from aerophysics.isentropic import MachBranch
 
@@ -638,3 +648,244 @@ def render_expansion(preferences: UnitPreferences) -> None:
         st.warning(f"{invalid}点はPrandtl–Meyer角の極限を超えるため欠損値としました。")
     with st.expander("モデルの前提・適用範囲"):
         st.write("膨張前後で全温・全圧は一定です。角度はGUI境界でradianへ変換します。")
+
+
+def render_detached_shock(preferences: UnitPreferences) -> None:
+    """Render detached-shock standoff and Billig-shape calculations."""
+    st.title("離脱衝撃波")
+    st.caption(
+        "鈍頭物体の離脱距離を推算し、Billigの双曲線衝撃波形状を表示します。"
+    )
+    imported = pop_pending_configuration("detached_shock")
+    inputs, models, sweep = _defaults(imported)
+    render_configuration_import("detached_shock", "detached_shock")
+    render_reset_button("detached_shock", "detached_shock_payload")
+    default_mode = str(imported.get("mode", "single")) if imported else "single"
+    default_geometry = str(
+        models.get("geometry", DetachedShockGeometry.AXISYMMETRIC_SPHERE.value)
+    )
+    default_selection = str(
+        models.get("model", models.get("selection", "ambrosio_wortman"))
+    )
+
+    with st.container():
+        mode = st.radio(
+            "計算モード",
+            ("single", "sweep"),
+            index=0 if default_mode == "single" else 1,
+            format_func=lambda value: "単点" if value == "single" else "Machスイープ",
+            horizontal=True,
+            key="detached_shock_mode",
+        )
+        geometries = tuple(DetachedShockGeometry)
+        geometry = st.selectbox(
+            "geometry",
+            geometries,
+            index=(
+                next(
+                    (
+                        index
+                        for index, item in enumerate(geometries)
+                        if item.value == default_geometry
+                    ),
+                    0,
+                )
+            ),
+            format_func=lambda value: (
+                "axisymmetric sphere / hemispherical nose"
+                if value is DetachedShockGeometry.AXISYMMETRIC_SPHERE
+                else "2D cylindrical nose"
+            ),
+            key="detached_shock_geometry",
+        )
+        assert geometry is not None
+        selections = (
+            ("ambrosio_wortman", "seiff", "comparison")
+            if geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE
+            else ("ambrosio_wortman",)
+        )
+        selection = st.selectbox(
+            "離脱距離モデル",
+            selections,
+            index=(
+                selections.index(default_selection)
+                if default_selection in selections
+                else 0
+            ),
+            format_func=lambda value: {
+                "ambrosio_wortman": "Ambrosio–Wortman",
+                "seiff": "Seiff（定比熱AIRの垂直衝撃波密度比）",
+                "comparison": "Ambrosio–Wortman / Seiff 比較",
+            }[value],
+            key="detached_shock_selection",
+        )
+        assert selection is not None
+        mach = finite_number(
+            "上流 Mach M∞",
+            _number(inputs, "upstream_mach", 4.0),
+            key="detached_shock_mach",
+            min_value=1.0,
+        )
+        radius_si = _number(inputs, "nose_radius", 0.1)
+        radius_display = finite_number(
+            f"nose radius Rn [{preferences.length}]",
+            _display(radius_si, "length", preferences.length),
+            key="detached_shock_radius",
+            min_value=0.0,
+        )
+        radius = _si(radius_display, "length", preferences.length)
+        start = stop = 0.0
+        points = 101
+        if mode == "sweep":
+            left, right, count = st.columns(3)
+            with left:
+                start = finite_number(
+                    "開始 Mach",
+                    _number(sweep, "start", 1.5),
+                    key="detached_shock_sweep_start",
+                    min_value=1.0,
+                )
+            with right:
+                stop = finite_number(
+                    "終了 Mach",
+                    _number(sweep, "stop", 10.0),
+                    key="detached_shock_sweep_stop",
+                    min_value=1.0,
+                )
+            with count:
+                points = int(
+                    st.number_input(
+                        "点数",
+                        2,
+                        501,
+                        int(sweep.get("points", 101)),
+                        1,
+                        key="detached_shock_sweep_points",
+                    )
+                )
+        submitted = calculation_button("detached_shock_form")
+
+    if submitted:
+        st.session_state.pop("detached_shock_payload", None)
+        st.session_state.pop("detached_shock_shape_result", None)
+        try:
+            sweep_configuration: dict[str, object] | None = None
+            if mode == "single":
+                result = detached_shock_condition(
+                    upstream_mach=mach,
+                    nose_radius=radius,
+                    geometry=geometry,
+                    selection=selection,
+                )
+                shape = detached_shock_shape(
+                    upstream_mach=mach,
+                    nose_radius=radius,
+                    geometry=geometry,
+                )
+            else:
+                result = detached_shock_sweep(
+                    start=start,
+                    stop=stop,
+                    points=points,
+                    nose_radius=radius,
+                    geometry=geometry,
+                    selection=selection,
+                )
+                shape = None
+                sweep_configuration = {
+                    "field": "upstream_mach",
+                    "start": start,
+                    "stop": stop,
+                    "points": points,
+                }
+            configuration = make_configuration(
+                calculator="detached_shock",
+                mode=mode,
+                inputs_si={"upstream_mach": mach, "nose_radius": radius},
+                models={"geometry": geometry.value, "model": selection},
+                units=preferences,
+                sweep_si=sweep_configuration,
+            )
+        except ValueError as error:
+            st.error(str(error), icon="🚫")
+        else:
+            st.session_state["detached_shock_payload"] = (result, configuration)
+            if shape is not None:
+                st.session_state["detached_shock_shape_result"] = shape
+
+    payload = _payload("detached_shock_payload")
+    if payload is None:
+        with st.expander("モデルの前提・適用範囲"):
+            st.write(
+                "連続流・低温完全気体の経験相関です。Seiffは球形のみ、Billigの"
+                "離脱距離は常にAmbrosio–Wortmanを使用します。"
+            )
+        return
+    result, configuration = payload
+    stored_shape = st.session_state.get("detached_shock_shape_result")
+    shape = stored_shape if isinstance(stored_shape, BilligShockShapeResult) else None
+    configured_models = configuration.get("models")
+    configured_model = (
+        configured_models.get("model")
+        if isinstance(configured_models, dict)
+        else None
+    )
+
+    def metrics(row: Mapping[str, object]) -> None:
+        wanted: tuple[tuple[str, str], ...]
+        if configured_model == "comparison":
+            wanted = (
+                ("AW Δ/Rn", "Ambrosio–Wortman Δ/Rn"),
+                ("Seiff Δ/Rn", "Seiff Δ/Rn"),
+                ("AW Δ", "Ambrosio–Wortman Δ ["),
+                ("Seiff Δ", "Seiff Δ ["),
+                ("Billig Rc", "Billig頂点曲率半径"),
+            )
+        else:
+            wanted = (
+                ("Δ/Rn", "選択モデル Δ/Rn"),
+                ("Δ", "選択モデル Δ ["),
+                ("AW Δ/Rn", "Ambrosio–Wortman Δ/Rn"),
+                ("Billig Rc", "Billig頂点曲率半径"),
+            )
+        columns = st.columns(len(wanted))
+        for column, (label, contains) in zip(columns, wanted, strict=True):
+            heading = next(name for name in row if contains in name)
+            value = row.get(heading)
+            with column:
+                st.metric(
+                    label,
+                    f"{float(value):.5g}"
+                    if isinstance(value, (int, float))
+                    else "—",
+                )
+
+    figures = (
+        {"衝撃波形状": detached_shock_geometry(shape, preferences)}
+        if shape is not None
+        else detached_shock_trends(result.rows, preferences)
+    )
+    render_result_bundle(
+        calculator="detached_shock",
+        result=result,
+        configuration=configuration,
+        preferences=preferences,
+        figures=figures,
+        filename_prefix="aerophysics-detached-shock",
+        metrics=metrics,
+    )
+    if shape is not None:
+        st.download_button(
+            "shock-shape x,y CSVをダウンロード",
+            detached_shock_shape_csv(shape, preferences),
+            file_name="aerophysics-detached-shock-shape.csv",
+            mime="text/csv",
+            key="detached_shock_shape_csv",
+        )
+    with st.expander("モデルの前提・適用範囲"):
+        st.write(
+            "座標原点はnose curvature center、x正方向は上流です。body vertexは"
+            "x=Rn、shock vertexはx=Rn+Δです。平行afterbodyのためBillig双曲線の"
+            "漸近角にはMach角を使用します。希薄流、実在気体補正、shock-fittingは"
+            "含みません。"
+        )

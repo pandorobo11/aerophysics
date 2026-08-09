@@ -74,6 +74,7 @@ def _convert_display_input_state() -> None:
         "length": (
             "flight_altitude",
             "flight_length",
+            "detached_shock_radius",
             "boundary_distance",
             "profile_thickness",
             "protrusion_thickness",

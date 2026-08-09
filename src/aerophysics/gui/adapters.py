@@ -20,6 +20,14 @@ from aerophysics.boundary_layer import (
     TurbulentCorrelation,
     flat_plate_boundary_layer,
 )
+from aerophysics.detached_shock import (
+    BilligShockShapeResult,
+    DetachedShockGeometry,
+    billig_shock_shape,
+    compare_standoff_distances,
+    seiff_standoff_distance_from_mach,
+    shock_standoff_distance,
+)
 from aerophysics.expansion import (
     maximum_prandtl_meyer_angle,
     prandtl_meyer_angle,
@@ -492,6 +500,149 @@ def normal_shock_condition(*, upstream_mach: float | np.ndarray) -> CalculationR
 def normal_shock_sweep(*, start: float, stop: float, points: int) -> CalculationResult:
     """Sweep upstream Mach number through a normal shock."""
     return normal_shock_condition(upstream_mach=sweep_values(start, stop, points))
+
+
+def detached_shock_condition(
+    *,
+    upstream_mach: float | np.ndarray,
+    nose_radius: float,
+    geometry: DetachedShockGeometry,
+    selection: str,
+) -> CalculationResult:
+    """Calculate detached-shock standoff and Billig curvature data."""
+    if selection not in {"ambrosio_wortman", "seiff", "comparison"}:
+        raise ValueError(
+            "selection must be ambrosio_wortman, seiff, or comparison"
+        )
+    if (
+        geometry is DetachedShockGeometry.CYLINDRICAL_NOSE_2D
+        and selection != "ambrosio_wortman"
+    ):
+        raise ValueError("Seiff and comparison are available only for sphere geometry")
+
+    aw = shock_standoff_distance(
+        upstream_mach,
+        nose_radius,
+        geometry=geometry,
+    )
+    curvature = billig_shock_shape(
+        upstream_mach,
+        nose_radius,
+        [0.0],
+        geometry=geometry,
+    )
+    mach_values = _array(aw.upstream_mach)
+    aw_normalized = _array(aw.normalized_standoff_distance)
+    aw_distance = _array(aw.standoff_distance)
+    curvature_radius = _array(curvature.vertex_curvature_radius)
+
+    seiff_normalized: np.ndarray | None = None
+    seiff_distance: np.ndarray | None = None
+    density_ratio: np.ndarray | None = None
+    normalized_difference: np.ndarray | None = None
+    distance_difference: np.ndarray | None = None
+    relative_difference: np.ndarray | None = None
+    if geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE:
+        seiff = seiff_standoff_distance_from_mach(upstream_mach, nose_radius)
+        seiff_normalized = _array(seiff.normalized_standoff_distance)
+        seiff_distance = _array(seiff.standoff_distance)
+        density_ratio = _array(seiff.density_ratio)
+        comparison = compare_standoff_distances(upstream_mach, nose_radius)
+        normalized_difference = _array(
+            comparison.normalized_standoff_difference
+        )
+        distance_difference = _array(comparison.standoff_distance_difference)
+        relative_difference = _array(comparison.relative_difference)
+
+    rows: list[Row] = []
+    for index, mach in enumerate(mach_values):
+        selected_normalized = (
+            float(seiff_normalized[index])
+            if selection == "seiff" and seiff_normalized is not None
+            else float(aw_normalized[index])
+            if selection == "ambrosio_wortman"
+            else None
+        )
+        selected_distance = (
+            float(seiff_distance[index])
+            if selection == "seiff" and seiff_distance is not None
+            else float(aw_distance[index])
+            if selection == "ambrosio_wortman"
+            else None
+        )
+        rows.append(
+            {
+                "upstream_mach": float(mach),
+                "nose_radius": nose_radius,
+                "geometry": geometry.value,
+                "selection": selection,
+                "normalized_standoff_distance": selected_normalized,
+                "standoff_distance": selected_distance,
+                "aw_normalized_standoff_distance": float(aw_normalized[index]),
+                "aw_standoff_distance": float(aw_distance[index]),
+                "seiff_density_ratio": _optional_at(density_ratio, index),
+                "seiff_normalized_standoff_distance": _optional_at(
+                    seiff_normalized, index
+                ),
+                "seiff_standoff_distance": _optional_at(seiff_distance, index),
+                "normalized_standoff_difference": _optional_at(
+                    normalized_difference, index
+                ),
+                "standoff_distance_difference": _optional_at(
+                    distance_difference, index
+                ),
+                "relative_difference": _optional_at(relative_difference, index),
+                "billig_vertex_curvature_radius": float(curvature_radius[index]),
+                "status": "ok",
+                "message": "",
+            }
+        )
+    return CalculationResult(tuple(rows))
+
+
+def detached_shock_sweep(
+    *,
+    start: float,
+    stop: float,
+    points: int,
+    nose_radius: float,
+    geometry: DetachedShockGeometry,
+    selection: str,
+) -> CalculationResult:
+    """Sweep Mach number for detached-shock correlations."""
+    return detached_shock_condition(
+        upstream_mach=sweep_values(start, stop, points),
+        nose_radius=nose_radius,
+        geometry=geometry,
+        selection=selection,
+    )
+
+
+def detached_shock_shape(
+    *,
+    upstream_mach: float,
+    nose_radius: float,
+    geometry: DetachedShockGeometry,
+    points: int = 401,
+    span_radii: float = 2.0,
+) -> BilligShockShapeResult:
+    """Return the GUI's symmetric Billig shock-shape sampling."""
+    if not 3 <= points <= 2001 or points % 2 == 0:
+        raise ValueError("points must be an odd integer between 3 and 2001")
+    if not np.isfinite(span_radii) or span_radii <= 0.0:
+        raise ValueError("span_radii must be greater than zero")
+    transverse = np.linspace(
+        -span_radii * nose_radius,
+        span_radii * nose_radius,
+        points,
+        dtype=np.float64,
+    )
+    return billig_shock_shape(
+        upstream_mach,
+        nose_radius,
+        transverse,
+        geometry=geometry,
+    )
 
 
 def expansion_condition(

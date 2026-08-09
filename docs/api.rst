@@ -46,6 +46,12 @@ Shock waves
 .. automodule:: aerophysics.shocks
    :members:
 
+Detached shock waves
+---------------------
+
+.. automodule:: aerophysics.detached_shock
+   :members:
+
 Expansion waves
 ---------------
 

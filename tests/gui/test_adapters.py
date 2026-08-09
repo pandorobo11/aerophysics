@@ -9,10 +9,14 @@ from aerophysics.boundary_layer import (
     CompressibilityCorrection,
     TurbulentCorrelation,
 )
+from aerophysics.detached_shock import DetachedShockGeometry
 from aerophysics.gui.adapters import (
     FlightCase,
     conical_shock_condition,
     conical_shock_sweep,
+    detached_shock_condition,
+    detached_shock_shape,
+    detached_shock_sweep,
     expansion_condition,
     expansion_sweep,
     flat_plate,
@@ -260,6 +264,64 @@ def test_normal_shock_adapter_and_sweep() -> None:
     assert isinstance(first_ratio, float)
     assert isinstance(last_ratio, float)
     assert last_ratio < first_ratio
+
+
+def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
+    single = detached_shock_condition(
+        upstream_mach=4.0,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+        selection="comparison",
+    )
+    row = single.rows[0]
+    assert row["aw_normalized_standoff_distance"] == pytest.approx(
+        0.1750977921724338
+    )
+    assert isinstance(row["seiff_normalized_standoff_distance"], float)
+    assert isinstance(row["billig_vertex_curvature_radius"], float)
+    assert row["normalized_standoff_distance"] is None
+
+    sweep = detached_shock_sweep(
+        start=2.0,
+        stop=4.0,
+        points=3,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.CYLINDRICAL_NOSE_2D,
+        selection="ambrosio_wortman",
+    )
+    assert len(sweep.rows) == 3
+    assert sweep.rows[0]["seiff_standoff_distance"] is None
+    shape = detached_shock_shape(
+        upstream_mach=4.0,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+    )
+    assert shape.shock_x.shape == (401,)
+    assert shape.shock_y[[0, -1]].tolist() == pytest.approx([-0.2, 0.2])
+
+
+def test_detached_shock_adapter_rejects_unsupported_requests() -> None:
+    with pytest.raises(ValueError, match="sphere"):
+        detached_shock_condition(
+            upstream_mach=4.0,
+            nose_radius=0.1,
+            geometry=DetachedShockGeometry.CYLINDRICAL_NOSE_2D,
+            selection="seiff",
+        )
+    with pytest.raises(ValueError, match="selection"):
+        detached_shock_condition(
+            upstream_mach=4.0,
+            nose_radius=0.1,
+            geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+            selection="other",
+        )
+    with pytest.raises(ValueError, match="odd integer"):
+        detached_shock_shape(
+            upstream_mach=4.0,
+            nose_radius=0.1,
+            geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+            points=100,
+        )
 
 
 def test_expansion_adapter_and_limit_rows() -> None:

@@ -6,6 +6,9 @@ import csv
 import io
 from dataclasses import dataclass
 
+import numpy as np
+
+from aerophysics.detached_shock import BilligShockShapeResult
 from aerophysics.gui.adapters import CellValue, Row
 from aerophysics.gui.units import (
     QuantityKind,
@@ -116,6 +119,26 @@ NORMAL_SHOCK_COLUMNS = (
     Column("static_temperature_ratio", "T₂/T₁"),
     Column("total_pressure_ratio", "p₀₂/p₀₁"),
     Column("pitot_pressure_ratio", "p₀₂/p₁"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
+DETACHED_SHOCK_COLUMNS = (
+    Column("upstream_mach", "上流 Mach M∞"),
+    Column("nose_radius", "nose radius Rn", "length"),
+    Column("geometry", "geometry"),
+    Column("selection", "表示モデル"),
+    Column("normalized_standoff_distance", "選択モデル Δ/Rn"),
+    Column("standoff_distance", "選択モデル Δ", "length"),
+    Column("aw_normalized_standoff_distance", "Ambrosio–Wortman Δ/Rn"),
+    Column("aw_standoff_distance", "Ambrosio–Wortman Δ", "length"),
+    Column("seiff_density_ratio", "Seiff ρ₂/ρ₁"),
+    Column("seiff_normalized_standoff_distance", "Seiff Δ/Rn"),
+    Column("seiff_standoff_distance", "Seiff Δ", "length"),
+    Column("normalized_standoff_difference", "Seiff−AW Δ/Rn"),
+    Column("standoff_distance_difference", "Seiff−AW Δ", "length"),
+    Column("relative_difference", "(Seiff−AW)/AW"),
+    Column("billig_vertex_curvature_radius", "Billig頂点曲率半径 Rc", "length"),
     Column("status", "status"),
     Column("message", "message"),
 )
@@ -232,6 +255,7 @@ def columns_for(calculator: str) -> tuple[Column, ...]:
     """Return ordered table columns for a calculator."""
     choices = {
         "conical_shock": CONICAL_SHOCK_COLUMNS,
+        "detached_shock": DETACHED_SHOCK_COLUMNS,
         "flight": FLIGHT_COLUMNS,
         "isentropic": ISENTROPIC_COLUMNS,
         "normal_shock": NORMAL_SHOCK_COLUMNS,
@@ -274,3 +298,19 @@ def rows_to_csv(rows: list[dict[str, CellValue]]) -> str:
     writer.writeheader()
     writer.writerows(rows)
     return "\ufeff" + output.getvalue()
+
+
+def detached_shock_shape_csv(
+    shape: BilligShockShapeResult, preferences: UnitPreferences
+) -> str:
+    """Encode scalar Billig x/y coordinates in selected display units."""
+    if shape.shock_x.ndim != 1 or shape.shock_y.ndim != 1:
+        raise ValueError("shape CSV requires a scalar Billig result")
+    unit = preferences.length
+    x = np.asarray(from_si(shape.shock_x, "length", unit), dtype=np.float64)
+    y = np.asarray(from_si(shape.shock_y, "length", unit), dtype=np.float64)
+    rows: list[dict[str, CellValue]] = [
+        {f"x [{unit}]": float(x_value), f"y [{unit}]": float(y_value)}
+        for x_value, y_value in zip(x, y, strict=True)
+    ]
+    return rows_to_csv(rows)

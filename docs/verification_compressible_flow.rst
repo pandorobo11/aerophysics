@@ -6,9 +6,10 @@ Scope
 
 This record covers the public calorically perfect-gas isentropic, normal-shock,
 oblique-shock, conical-shock, supersonic-Pitot, and Prandtl--Meyer APIs.  It
-also checks the shared isentropic path used by the temperature-dependent and
-real-gas models.  Verification means agreement with the stated mathematical
-model; it is not experimental validation of an inviscid-flow approximation.
+also covers the detached-shock correlations and checks the shared isentropic
+path used by the temperature-dependent and real-gas models.  Verification
+means agreement with the stated mathematical model; it is not experimental
+validation of an inviscid-flow approximation.
 
 Primary references
 ------------------
@@ -29,6 +30,12 @@ Mach 1.5, 2, 3, and 5 where the report provides an attached-flow solution.
 The source's compact numeric notation is decoded from the PDF text layer;
 damaged OCR cells are recovered at the report's eight-significant-digit
 precision and checked against adjacent state relations.
+
+Detached-shock formulas are checked directly against Ambrosio--Wortman,
+Billig, and Seiff at Mach 2, 4, and 8 for both supported geometries where
+applicable.  The coefficients, expected values, citations, coordinate
+convention, and NASA TN D-2780 independent Seiff interval are committed in
+``tests/reference_data/compressible_flow/detached_shock_sources.json``.
 
 Comparison and acceptance
 -------------------------
@@ -52,7 +59,9 @@ Static pressure, density, and temperature fall as Mach number increases at
 fixed stagnation conditions.  The area relation has subsonic and supersonic
 branches meeting at the sonic throat, and the mass-flow parameter is maximal
 there.  Shock calculations conserve mass, momentum, and energy while losing
-total pressure.  Prandtl--Meyer angle increases monotonically with Mach.
+total pressure.  Detached-shock standoff decreases toward the finite
+high-Mach correlation limit, and the Billig shape is symmetric about its
+vertex axis.  Prandtl--Meyer angle increases monotonically with Mach.
 
 .. image:: _static/compressible_flow_profiles.svg
    :alt: Static-to-total pressure, density, and temperature ratios versus Mach number.

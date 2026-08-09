@@ -11,12 +11,16 @@ from aerophysics import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
     CompressibleVelocityTransformation,
+    DetachedShockGeometry,
+    DetachedShockModel,
     HarmonicOscillatorGas,
     ShockBranch,
     TemperatureVelocityRelation,
     ThermallyPerfectGas,
     TurbulentCorrelation,
     __version__,
+    billig_shock_shape,
+    compare_standoff_distances,
     compressible_turbulent_boundary_layer_profile,
     conical_shock,
     flat_plate_boundary_layer,
@@ -24,6 +28,9 @@ from aerophysics import (
     oblique_shock,
     prandtl_meyer_expansion,
     protrusion_drag,
+    seiff_standoff_distance,
+    seiff_standoff_distance_from_mach,
+    shock_standoff_distance,
     transform_compressible_velocity_profile,
 )
 from aerophysics.exceptions import (
@@ -49,6 +56,21 @@ def test_primary_compressible_flow_api_is_exported() -> None:
     assert oblique_shock(2.0, 0.1).downstream_mach > 1.0
     assert conical_shock(2.0, 0.1).surface_mach > 1.0
     assert prandtl_meyer_expansion(2.0, 0.1).downstream_mach > 2.0
+
+
+def test_detached_shock_api_is_exported() -> None:
+    geometry = DetachedShockGeometry.AXISYMMETRIC_SPHERE
+    aw = shock_standoff_distance(4.0, 0.5, geometry=geometry)
+    seiff = seiff_standoff_distance(4.0, 0.5)
+    from_mach = seiff_standoff_distance_from_mach(4.0, 0.5)
+    comparison = compare_standoff_distances(4.0, 0.5)
+    shape = billig_shock_shape(4.0, 0.5, [-0.5, 0.0, 0.5], geometry=geometry)
+    assert aw.model is DetachedShockModel.AMBROSIO_WORTMAN
+    assert seiff.model is DetachedShockModel.SEIFF
+    assert from_mach.density_ratio is not None
+    assert from_mach.density_ratio > 1.0
+    assert comparison.ambrosio_wortman.model is aw.model
+    assert shape.model is DetachedShockModel.BILLIG
 
 
 def test_thermally_perfect_air_api_is_exported() -> None:

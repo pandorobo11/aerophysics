@@ -542,6 +542,123 @@ flow.
 >>> round(cone.surface_pressure_ratio, 3)
 1.293
 
+Detached shocks
+---------------
+
+The detached-shock correlations are implemented separately from the
+Rankine--Hugoniot solvers in :mod:`aerophysics.detached_shock`. Two geometries
+are explicit: an axisymmetric sphere or hemispherical nose, and a
+two-dimensional cylindrical nose. In both cases :math:`R_n` is the nose
+radius and :math:`\Delta` is the axial gap from the body vertex to the shock
+vertex.
+
+Ambrosio--Wortman standoff
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Ambrosio--Wortman correlations used by
+:func:`aerophysics.detached_shock.shock_standoff_distance` are
+
+.. math::
+
+   \frac{\Delta}{R_n}=0.143\exp\left(\frac{3.24}{M^2}\right)
+   \quad\text{(sphere or hemispherical nose)},
+
+.. math::
+
+   \frac{\Delta}{R_n}=0.386\exp\left(\frac{4.67}{M^2}\right)
+   \quad\text{(two-dimensional cylindrical nose)}.
+
+Billig shock shape
+^^^^^^^^^^^^^^^^^^
+
+Billig gives the shock-vertex curvature radius
+
+.. math::
+
+   \frac{R_c}{R_n}=1.143\exp\left[
+       \frac{0.54}{(M-1)^{1.2}}\right]
+   \quad\text{(sphere or hemispherical nose)},
+
+.. math::
+
+   \frac{R_c}{R_n}=1.386\exp\left[
+       \frac{1.8}{(M-1)^{0.75}}\right]
+   \quad\text{(two-dimensional cylindrical nose)}.
+
+For a hemispherical or cylindrical nose followed by a parallel afterbody,
+:func:`aerophysics.detached_shock.billig_shock_shape` uses
+:math:`\beta=\sin^{-1}(1/M)` and the hyperbola
+
+.. math::
+
+   x=R_n+\Delta-R_c\cot^2\beta
+   \left[
+     \sqrt{1+\frac{y^2\tan^2\beta}{R_c^2}}-1
+   \right].
+
+The nose-curvature center is the origin, positive :math:`x` points upstream,
+the body vertex is at :math:`x=R_n`, and the shock vertex is at
+:math:`x=R_n+\Delta`. Billig shape calculations deliberately use the
+Ambrosio--Wortman value of :math:`\Delta`; changing the displayed Seiff model
+does not change that shape convention. A one-dimensional transverse
+coordinate array is appended as the final output axis, so broadcast Mach and
+radius cases retain their case axes.
+
+Seiff density-ratio standoff
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For a sphere, Seiff's density-ratio relation is
+
+.. math::
+
+   \frac{\Delta}{R_n}=\frac{0.78}{\rho_2/\rho_1}.
+
+:func:`aerophysics.detached_shock.seiff_standoff_distance` accepts
+:math:`\rho_2/\rho_1` directly and therefore does not attach a Mach number to
+its result. The convenience API
+:func:`aerophysics.detached_shock.seiff_standoff_distance_from_mach` obtains
+the density ratio from the existing calorically perfect-gas
+:func:`aerophysics.shocks.normal_shock`. No cylindrical Seiff correlation is
+claimed or accepted. :func:`aerophysics.detached_shock.compare_standoff_distances`
+returns the Ambrosio--Wortman and Seiff sphere results together with their
+signed and relative differences.
+
+All functions require finite :math:`M>1` and :math:`R_n>0`; the low-level
+Seiff function additionally requires finite :math:`\rho_2/\rho_1>1`. These
+are physical and mathematical domains, not empirical fit limits, and invalid
+values raise :class:`ValueError`. The cited original publications do not give
+a sufficiently explicit numerical Mach fit range to justify inventing an
+``ApplicabilityWarning`` or ``ModelRangeError`` boundary. NASA TN D-2780's
+independent comparison over :math:`0.04<\rho_1/\rho_2<0.16` is recorded as a
+verification interval, not as the full validity range of Seiff's correlation.
+
+These engineering correlations assume continuum, steady, low-temperature
+flow. Their common use is for calorically perfect air; Billig's fitted curves
+are primarily associated with :math:`\gamma=1.4`. They do not solve the
+shock-layer thermodynamics. Real-gas Seiff models, NASA7/NASA9 or harmonic-
+oscillator general normal-shock solvers, Beattie--Bridgeman shock states,
+rarefied-flow corrections, and shock fitting are outside this implementation.
+
+>>> from aerophysics import DetachedShockGeometry, billig_shock_shape
+>>> from aerophysics import compare_standoff_distances, shock_standoff_distance
+>>> sphere = shock_standoff_distance(
+...     4.0, 0.5, geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE
+... )
+>>> round(sphere.normalized_standoff_distance, 6)
+0.175098
+>>> shape = billig_shock_shape(
+...     4.0, 0.5, [-1.0, 0.0, 1.0],
+...     geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+... )
+>>> shape.shock_x_coordinates[1] == sphere.nose_radius + sphere.standoff_distance
+True
+>>> compare_standoff_distances(4.0, 0.5).seiff.density_ratio > 1.0
+True
+
+The formulas and geometry definitions follow Ambrosio and Wortman
+(DOI ``10.2514/8.5988``), Billig (DOI ``10.2514/3.28969``), and Seiff
+(NASA SP-24); the Seiff cross-check follows Inouye, NASA TN D-2780.
+
 Prandtl--Meyer expansions
 -------------------------
 

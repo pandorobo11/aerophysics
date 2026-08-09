@@ -8,6 +8,10 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from aerophysics.detached_shock import (
+    BilligShockShapeResult,
+    DetachedShockGeometry,
+)
 from aerophysics.gui.adapters import Row
 from aerophysics.gui.units import UnitPreferences, from_si, selected_unit
 
@@ -362,6 +366,145 @@ def conical_shock_trends(
         "状態量": _style(state, "円錐表面の状態量"),
         "角度": _style(angles, "円錐衝撃波の角度"),
     }
+
+
+def detached_shock_geometry(
+    shape: BilligShockShapeResult,
+    preferences: UnitPreferences,
+) -> go.Figure:
+    """Plot a blunt nose and its Billig detached-shock shape."""
+    if not isinstance(shape.nose_radius, float):
+        raise ValueError("geometry figure requires a scalar Billig result")
+    radius = shape.nose_radius
+    body_y = np.linspace(radius, -radius, 181, dtype=np.float64)
+    body_x = np.sqrt(np.maximum(radius**2 - body_y**2, 0.0))
+    afterbody_x = -2.0 * radius
+    outline_x = np.concatenate(([-2.0 * radius, 0.0], body_x, [afterbody_x]))
+    outline_y = np.concatenate(([radius, radius], body_y, [-radius]))
+    unit = preferences.length
+
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=from_si(outline_x, "length", unit),
+            y=from_si(outline_y, "length", unit),
+            mode="lines",
+            line={"width": 5, "color": "#555"},
+            fill="toself",
+            fillcolor="rgba(100,100,100,0.12)",
+            name=(
+                "半球頭部"
+                if shape.geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE
+                else "2D円柱頭部"
+            ),
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=from_si(shape.shock_x, "length", unit),
+            y=from_si(shape.shock_y, "length", unit),
+            mode="lines",
+            line={"width": 4, "color": "#d62728"},
+            name="Billig衝撃波",
+        )
+    )
+    figure.add_annotation(
+        x=float(from_si(1.6 * radius, "length", unit)),
+        y=float(from_si(1.7 * radius, "length", unit)),
+        text="M∞",
+        showarrow=True,
+        ax=60,
+        ay=0,
+    )
+    figure.update_layout(
+        title="離脱衝撃波形状（Billig、離脱距離はAmbrosio–Wortman）",
+        template="plotly_white",
+        height=560,
+        xaxis={"title": f"x [{unit}]", "scaleanchor": "y", "scaleratio": 1},
+        yaxis={"title": f"y [{unit}]"},
+        margin={"l": 60, "r": 30, "t": 70, "b": 55},
+        legend={"orientation": "h", "y": 1.08, "x": 0.0},
+    )
+    return figure
+
+
+def detached_shock_trends(
+    rows: tuple[Row, ...], preferences: UnitPreferences
+) -> dict[str, go.Figure]:
+    """Create Mach-sweep standoff, curvature, and comparison figures."""
+    mach = _numeric(rows, "upstream_mach")
+    selection = str(rows[0].get("selection", "comparison"))
+    show_aw = selection in {"ambrosio_wortman", "comparison"}
+    show_seiff = selection in {"seiff", "comparison"}
+    normalized = go.Figure()
+    if show_aw:
+        normalized.add_trace(
+            go.Scatter(
+                x=mach,
+                y=_numeric(rows, "aw_normalized_standoff_distance"),
+                name="Ambrosio–Wortman",
+            )
+        )
+    seiff_normalized = _numeric(rows, "seiff_normalized_standoff_distance")
+    if show_seiff and np.any(np.isfinite(seiff_normalized)):
+        normalized.add_trace(
+            go.Scatter(x=mach, y=seiff_normalized, name="Seiff")
+        )
+    normalized.update_xaxes(title_text="Mach M∞")
+    normalized.update_yaxes(title_text="Δ/Rn")
+
+    dimensional = go.Figure()
+    if show_aw:
+        dimensional.add_trace(
+            go.Scatter(
+                x=mach,
+                y=_converted(
+                    rows, "aw_standoff_distance", "length", preferences
+                ),
+                name="AW Δ",
+            )
+        )
+    seiff_distance = _numeric(rows, "seiff_standoff_distance")
+    if show_seiff and np.any(np.isfinite(seiff_distance)):
+        dimensional.add_trace(
+            go.Scatter(
+                x=mach,
+                y=_converted(
+                    rows, "seiff_standoff_distance", "length", preferences
+                ),
+                name="Seiff Δ",
+            )
+        )
+    dimensional.add_trace(
+        go.Scatter(
+            x=mach,
+            y=_converted(
+                rows,
+                "billig_vertex_curvature_radius",
+                "length",
+                preferences,
+            ),
+            name="Billig Rc",
+            line={"dash": "dash"},
+        )
+    )
+    dimensional.update_xaxes(title_text="Mach M∞")
+    dimensional.update_yaxes(title_text=f"距離 [{preferences.length}]")
+
+    figures = {
+        "無次元離脱距離": _style(normalized, "離脱距離のMach依存性"),
+        "寸法・曲率": _style(dimensional, "離脱距離と衝撃波頂点曲率半径"),
+    }
+    relative = _numeric(rows, "relative_difference")
+    if selection == "comparison" and np.any(np.isfinite(relative)):
+        comparison = go.Figure()
+        comparison.add_trace(
+            go.Scatter(x=mach, y=100.0 * relative, name="(Seiff−AW)/AW")
+        )
+        comparison.update_xaxes(title_text="Mach M∞")
+        comparison.update_yaxes(title_text="相対差 [%]")
+        figures["モデル差"] = _style(comparison, "SeiffとAmbrosio–Wortmanの差")
+    return figures
 
 
 def isentropic_figures(

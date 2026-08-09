@@ -81,6 +81,13 @@ def test_flight_page_sweep_mode() -> None:
         ),
         (
             "aerophysics.gui.flow_pages",
+            "render_detached_shock",
+            "detached_shock_mode",
+            "Machスイープ",
+            "detached_shock_sweep_start",
+        ),
+        (
+            "aerophysics.gui.flow_pages",
             "render_expansion",
             "expansion_mode",
             "1変数スイープ",
@@ -188,6 +195,75 @@ render_conical_shock(UnitPreferences())
         for status in app.dataframe[0].value["status"].tolist()
     )
     assert app.warning
+
+
+def test_detached_shock_page_single_sweep_and_geometry_options() -> None:
+    script = """
+from aerophysics.gui.flow_pages import render_detached_shock
+from aerophysics.gui.units import UnitPreferences
+render_detached_shock(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=15).run()
+    app.button(key="FormSubmitter:detached_shock_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert app.metric[0].label == "Δ/Rn"
+    assert len(app.get("plotly_chart")) == 1
+    assert len(app.download_button) == 3
+
+    app.radio(key="detached_shock_mode").set_value("Machスイープ").run()
+    app.number_input(key="detached_shock_sweep_points").set_value(3).run()
+    app.selectbox(key="detached_shock_selection").set_value(
+        "Ambrosio–Wortman / Seiff 比較"  # noqa: RUF001
+    ).run()
+    app.button(key="FormSubmitter:detached_shock_form-計算").click().run()
+    assert not app.exception
+    assert len(app.dataframe[0].value) == 3
+    assert len(app.get("plotly_chart")) == 3
+
+    app.selectbox(key="detached_shock_geometry").set_value(
+        "2D cylindrical nose"
+    ).run()
+    assert app.selectbox(key="detached_shock_selection").options == [
+        "Ambrosio–Wortman"  # noqa: RUF001
+    ]
+
+
+def test_detached_shock_page_loads_configuration() -> None:
+    script = """
+from aerophysics.gui.flow_pages import render_detached_shock
+from aerophysics.gui.units import UnitPreferences
+render_detached_shock(UnitPreferences())
+"""
+    configuration = make_configuration(
+        calculator="detached_shock",
+        mode="sweep",
+        inputs_si={"upstream_mach": 5.0, "nose_radius": 0.25},
+        models={
+            "geometry": "axisymmetric_sphere",
+            "model": "comparison",
+        },
+        units=UnitPreferences(),
+        sweep_si={
+            "field": "upstream_mach",
+            "start": 2.0,
+            "stop": 8.0,
+            "points": 5,
+        },
+    )
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_detached_shock_configuration"] = configuration
+    app.run()
+    assert app.radio(key="detached_shock_mode").value == "sweep"
+    assert app.selectbox(key="detached_shock_selection").value == "comparison"
+    assert app.number_input(key="detached_shock_radius").value == pytest.approx(0.25)
+    assert app.number_input(key="detached_shock_sweep_start").value == 2.0
+    assert app.number_input(key="detached_shock_sweep_stop").value == 8.0
+    assert app.number_input(key="detached_shock_sweep_points").value == 5
+    app.button(key="FormSubmitter:detached_shock_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.dataframe[0].value) == 5
 
 
 def test_boundary_layer_page_calculation_and_case_source() -> None:

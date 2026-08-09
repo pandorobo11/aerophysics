@@ -124,6 +124,28 @@ an ideal-gas heat-capacity ratio of 1.4.
 
 https://ntrs.nasa.gov/citations/19640009035
 
+Ambrosio, A. and Wortman, A. *Stagnation-Point Shock-Detachment Distance for
+Flow around Spheres and Cylinders*. ARS Journal, 32(2), 281, 1962.
+
+https://doi.org/10.2514/8.5988
+
+Billig, F. S. *Shock-Wave Shapes around Spherical- and Cylindrical-Nosed
+Bodies*. Journal of Spacecraft and Rockets, 4(6), 822--823, 1967.
+
+https://doi.org/10.2514/3.28969
+
+Seiff, A. *Recent Information on Hypersonic Flow Fields*. In *The High
+Temperature Aspects of Hypersonic Flow*, NASA SP-24, 1964. This is the source
+of the density-ratio sphere standoff correlation.
+
+https://books.google.com/books?id=fygCAAAAIAAJ
+
+Inouye, M. *Blunt Body Solutions for Spheres and Ellipsoids in Equilibrium
+Gas Mixtures*. NASA TN D-2780, 1965. The report independently compares the
+Seiff relation over :math:`0.04<\rho_1/\rho_2<0.16`.
+
+https://ntrs.nasa.gov/citations/19650012766
+
 Boundary layers
 ---------------
 
