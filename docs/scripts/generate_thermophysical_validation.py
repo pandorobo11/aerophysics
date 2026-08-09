@@ -163,7 +163,7 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
     minimum_dpdrho = float("inf")
     maximum_state_closure = 0.0
     for pressure in np.linspace(1.0e6, 10.0e6, 10):
-        for value in np.linspace(400.0, 2000.0, 17):
+        for value in np.linspace(400.0, 1200.0, 17):
             state = real.state(value, pressure)
             density = float(state.density)
             delta = density * 1.0e-5
@@ -203,10 +203,11 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
             np.asarray([0.2, 1.0, 1.5]),
         ),
     ):
+        total_temperature = 900.0 if label == "Beattie-Bridgeman" else 1500.0
         flow = isentropic_state(
             mach,
             gas,
-            total_temperature=1500.0,
+            total_temperature=total_temperature,
             total_pressure=total_pressure,
         )
         static_temperature = np.asarray(flow.static_temperature)
@@ -216,12 +217,12 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
             static_enthalpy = np.asarray(
                 gas.enthalpy(static_temperature, static_pressure)
             )
-            total_enthalpy = float(gas.enthalpy(1500.0, total_pressure))
+            total_enthalpy = float(gas.enthalpy(total_temperature, total_pressure))
         else:
             static_enthalpy = np.asarray(gas.standard_enthalpy(static_temperature))
-            total_enthalpy = float(gas.standard_enthalpy(1500.0))
+            total_enthalpy = float(gas.standard_enthalpy(total_temperature))
         static_entropy = np.asarray(gas.entropy(static_temperature, static_pressure))
-        total_entropy = float(gas.entropy(1500.0, total_pressure))
+        total_entropy = float(gas.entropy(total_temperature, total_pressure))
         enthalpy_closure = float(
             np.max(np.abs((static_enthalpy + 0.5 * velocity**2) / total_enthalpy - 1.0))
         )

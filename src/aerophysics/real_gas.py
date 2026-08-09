@@ -401,7 +401,13 @@ class HarmonicOscillatorGas:
 
 @dataclass(frozen=True, slots=True)
 class BeattieBridgemanGas:
-    """Beattie--Bridgeman gas with harmonic vibrational heat capacity."""
+    """Beattie--Bridgeman gas with harmonic vibrational heat capacity.
+
+    An ``applicable_*_range`` records the conditions tabulated for a
+    particular use of the model; it is not an inherent physical-validity
+    limit of the equation of state.  In particular, the air preset uses the
+    R. E. Randall, *AEDC-TR-57-8* (1957) tabulated range.
+    """
 
     specific_gas_constant: float
     base_heat_capacity_ratio: float
@@ -487,6 +493,20 @@ class BeattieBridgemanGas:
             * temperature
             * (1.0 + 2.0 * e1 * density + 3.0 * e2 * density**2 + 4.0 * e3 * density**3)
         )
+
+    def _first_spinodal_density(self, temperature: float) -> float | None:
+        """Return the lowest positive root of ``(dp/drho)_T``, if present."""
+        e1, e2, e3 = self._coefficients(temperature)
+        roots = np.roots((4.0 * e3, 3.0 * e2, 2.0 * e1, 1.0))
+        positive_roots = [
+            float(root.real)
+            for root in roots
+            if np.isfinite(root.real)
+            and np.isfinite(root.imag)
+            and root.real > 0.0
+            and abs(root.imag) <= 1e-10 * max(1.0, abs(root.real))
+        ]
+        return min(positive_roots, default=None)
 
     def _dp_dtemperature_scalar(self, temperature: float, density: float) -> float:
         return float(
@@ -649,11 +669,17 @@ class BeattieBridgemanGas:
         outside = temperature_outside or pressure_outside
         if outside and warn:
             warnings.warn(
-                "state is outside the documented Beattie--Bridgeman air range",
+                f"state is outside the {self._applicability_description()}",
                 ApplicabilityWarning,
                 stacklevel=3,
             )
         return outside
+
+    def _applicability_description(self) -> str:
+        """Describe this model's documented table without misattribution."""
+        if self is AIR_BEATTIE_BRIDGEMAN:
+            return "Randall, AEDC-TR-57-8 Beattie--Bridgeman air tabulated range"
+        return "configured Beattie--Bridgeman tabulated range"
 
     def pressure(
         self,
@@ -666,14 +692,6 @@ class BeattieBridgemanGas:
         temperatures, densities, scalar = _broadcast_temperature_density(
             temperature, density
         )
-        _warn_or_raise_outside(
-            temperatures,
-            self.applicable_temperature_range,
-            name="temperature",
-            unit="K",
-            allow_extrapolation=allow_extrapolation,
-            warn=True,
-        )
         result = np.empty_like(temperatures)
         for index in np.ndindex(result.shape):
             result[index] = self._pressure_scalar(
@@ -681,6 +699,12 @@ class BeattieBridgemanGas:
             )
         if np.any(result <= 0.0) or not np.all(np.isfinite(result)):
             raise ModelRangeError("Beattie--Bridgeman pressure is non-physical")
+        self._check_applicability(
+            temperatures,
+            result,
+            allow_extrapolation=allow_extrapolation,
+            warn=True,
+        )
         return return_float(result, scalar=scalar)
 
     def density(
@@ -900,10 +924,15 @@ AIR_BEATTIE_BRIDGEMAN = BeattieBridgemanGas(
         VibrationalMode(0.78088, 3394.3),
         VibrationalMode(0.20950, 2273.4),
     ),
-    applicable_temperature_range=(400.0, 2000.0),
-    applicable_pressure_range=(1.0e6, 10.0e6),
+    applicable_temperature_range=(38.888888888888886, 1222.2222222222222),
+    applicable_pressure_range=(172.3689323292, 27579029.172672),
 )
-"""Dry-air Beattie--Bridgeman model used in hypersonic wind-tunnel work."""
+"""Dry-air model tabulated by R. E. Randall, AEDC-TR-57-8 (1957).
+
+The 70--2200 degR and 0.025--4000 psia ranges identify Randall's tabulated
+air-property range, not a strict physical-validity range of the equation of
+state.  Set ``allow_extrapolation=True`` to evaluate beyond those tables.
+"""
 
 
 __all__ = [

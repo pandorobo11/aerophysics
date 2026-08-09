@@ -17,6 +17,7 @@ from aerophysics import (
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.isentropic import (
     MachBranch,
+    _real_flow_state,
     area_ratio,
     choked_mass_flux,
     critical_ratios,
@@ -138,7 +139,7 @@ def test_beattie_bridgeman_eos_and_thermodynamic_identities() -> None:
 
 def test_beattie_bridgeman_arrays_applicability_and_validation() -> None:
     gas = AIR_BEATTIE_BRIDGEMAN
-    temperatures = np.array([[800.0], [1400.0]])
+    temperatures = np.array([[800.0], [1200.0]])
     pressures = np.array([2.0e6, 8.0e6])
     densities = gas.density(temperatures, pressures)
     assert isinstance(densities, np.ndarray)
@@ -147,15 +148,316 @@ def test_beattie_bridgeman_arrays_applicability_and_validation() -> None:
         gas.pressure(temperatures, densities), np.broadcast_to(pressures, (2, 2))
     )
     with pytest.warns(ApplicabilityWarning, match="outside"):
-        gas.state(300.0, 20.0e6, allow_extrapolation=True)
-    with pytest.raises(ModelRangeError, match="400--2000"):
-        gas.state(300.0, 6.0e6)
-    with pytest.raises(ModelRangeError, match=r"1e\+06--1e\+07"):
-        gas.density(1200.0, 0.5e6)
+        gas.state(1300.0, 20.0e6, allow_extrapolation=True)
+    with pytest.raises(ModelRangeError, match="temperature"):
+        gas.state(30.0, 6.0e6)
+    with pytest.raises(ModelRangeError, match="pressure"):
+        gas.density(1200.0, 100.0)
     with pytest.raises(ValueError, match="density"):
         gas.pressure(1200.0, 0.0)
     with pytest.raises(ValueError, match="broadcast"):
         gas.pressure(np.ones(2) * 1200.0, np.ones(3))
+
+
+def test_beattie_bridgeman_randall_tabulated_range_endpoints() -> None:
+    gas = AIR_BEATTIE_BRIDGEMAN
+    temperature_range = gas.applicable_temperature_range
+    pressure_range = gas.applicable_pressure_range
+    assert temperature_range is not None
+    assert pressure_range is not None
+    temperature_minimum, temperature_maximum = temperature_range
+    pressure_minimum, pressure_maximum = pressure_range
+
+    # The low-temperature endpoint has a stable gas root at low pressure.
+    for temperature in (temperature_minimum, temperature_maximum):
+        gas.state(temperature, pressure_minimum)
+    for pressure in (pressure_minimum, pressure_maximum):
+        gas.state(900.0, pressure)
+
+    for temperature in (
+        np.nextafter(temperature_minimum, 0.0),
+        np.nextafter(temperature_maximum, np.inf),
+    ):
+        with pytest.raises(ModelRangeError, match="temperature"):
+            gas.state(temperature, pressure_minimum, allow_extrapolation=False)
+        with pytest.warns(
+            ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
+        ):
+            gas.state(temperature, pressure_minimum, allow_extrapolation=True)
+
+    for pressure in (
+        np.nextafter(pressure_minimum, 0.0),
+        np.nextafter(pressure_maximum, np.inf),
+    ):
+        with pytest.raises(ModelRangeError, match="pressure"):
+            gas.state(900.0, pressure, allow_extrapolation=False)
+        with pytest.warns(
+            ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
+        ):
+            gas.state(900.0, pressure, allow_extrapolation=True)
+
+
+def test_beattie_bridgeman_pressure_checks_computed_randall_range() -> None:
+    gas = AIR_BEATTIE_BRIDGEMAN
+    pressure_range = gas.applicable_pressure_range
+    assert pressure_range is not None
+    pressure_minimum, pressure_maximum = pressure_range
+
+    def density_for_output_pressure(
+        pressure: float, *, comparison: str, direction: float
+    ) -> float:
+        """Invert pressure, then choose the representable density on one side."""
+        density = gas._density_scalar(900.0, pressure)
+        for _ in range(32):
+            output_pressure = gas._pressure_scalar(900.0, density)
+            if (
+                comparison == "at_or_above_minimum"
+                and output_pressure >= pressure_minimum
+            ):
+                return density
+            if (
+                comparison == "at_or_below_maximum"
+                and output_pressure <= pressure_maximum
+            ):
+                return density
+            if comparison == "below_minimum" and output_pressure < pressure_minimum:
+                return density
+            if comparison == "above_maximum" and output_pressure > pressure_maximum:
+                return density
+            density = np.nextafter(density, direction)
+        raise AssertionError("could not construct a pressure output at the boundary")
+
+    for pressure, comparison, direction in (
+        (pressure_minimum, "at_or_above_minimum", np.inf),
+        (pressure_maximum, "at_or_below_maximum", 0.0),
+    ):
+        density = density_for_output_pressure(
+            pressure, comparison=comparison, direction=direction
+        )
+        assert gas.pressure(900.0, density) == pytest.approx(pressure)
+
+    for pressure, comparison, direction in (
+        (np.nextafter(pressure_minimum, 0.0), "below_minimum", 0.0),
+        (np.nextafter(pressure_maximum, np.inf), "above_maximum", np.inf),
+    ):
+        density = density_for_output_pressure(
+            pressure, comparison=comparison, direction=direction
+        )
+        with pytest.raises(ModelRangeError, match="pressure"):
+            gas.pressure(900.0, density, allow_extrapolation=False)
+        with pytest.warns(
+            ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
+        ) as captured:
+            assert gas.pressure(
+                900.0, density, allow_extrapolation=True
+            ) == pytest.approx(pressure)
+        assert len(captured) == 1
+
+
+@pytest.mark.parametrize("density", [1.0, 100.0])
+def test_beattie_bridgeman_pressure_combines_temperature_and_pressure_range(
+    density: float,
+) -> None:
+    gas = AIR_BEATTIE_BRIDGEMAN
+    with pytest.warns(
+        ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
+    ) as captured:
+        pressure = gas.pressure(1300.0, density, allow_extrapolation=True)
+    assert pressure > 0.0
+    assert len(captured) == 1
+    with pytest.raises(ModelRangeError):
+        gas.pressure(1300.0, density, allow_extrapolation=False)
+
+
+def test_beattie_bridgeman_exact_total_temperature_endpoint() -> None:
+    state = isentropic_state(
+        1.0e-10,
+        AIR_BEATTIE_BRIDGEMAN,
+        total_temperature=45.0,
+        total_pressure=1.0e5,
+        allow_extrapolation=False,
+    )
+    total = AIR_BEATTIE_BRIDGEMAN.state(45.0, 1.0e5)
+    static = AIR_BEATTIE_BRIDGEMAN._scalar_state_from_density(
+        float(state.static_temperature), float(state.static_density)
+    )
+    assert state.static_temperature == pytest.approx(45.0, abs=2e-12)
+    assert state.static_pressure > 0.0
+    assert state.static_density > 0.0
+    assert static.entropy == pytest.approx(total.entropy, abs=2e-8)
+    assert static.enthalpy + 0.5 * state.velocity**2 == pytest.approx(
+        total.enthalpy, rel=2e-13
+    )
+
+
+@pytest.mark.parametrize("mach", [0.0, 1.0e-10, 1.0e-6])
+def test_beattie_bridgeman_low_mach_log_endpoint_regression(mach: float) -> None:
+    total_temperature = 565.0
+    total_pressure = 1.0e5
+    state = isentropic_state(
+        mach,
+        AIR_BEATTIE_BRIDGEMAN,
+        total_temperature=total_temperature,
+        total_pressure=total_pressure,
+        allow_extrapolation=False,
+    )
+    assert 0.0 < state.static_temperature <= total_temperature
+    assert state.static_pressure > 0.0
+    assert state.static_density > 0.0
+    if mach > 0.0:
+        for value in (
+            isentropic_ratios(
+                mach,
+                AIR_BEATTIE_BRIDGEMAN,
+                total_temperature=total_temperature,
+                total_pressure=total_pressure,
+            ).total_temperature_ratio,
+            mass_flow_parameter(
+                mach,
+                AIR_BEATTIE_BRIDGEMAN,
+                total_temperature=total_temperature,
+                total_pressure=total_pressure,
+            ),
+            mass_flux(total_pressure, total_temperature, mach, AIR_BEATTIE_BRIDGEMAN),
+            area_ratio(
+                mach,
+                AIR_BEATTIE_BRIDGEMAN,
+                total_temperature=total_temperature,
+                total_pressure=total_pressure,
+            ),
+        ):
+            assert np.isfinite(value)
+
+
+def test_beattie_bridgeman_area_checks_critical_applicability() -> None:
+    with pytest.raises(ModelRangeError, match="temperature"):
+        area_ratio(
+            0.1,
+            AIR_BEATTIE_BRIDGEMAN,
+            total_temperature=45.0,
+            total_pressure=1.0e5,
+            allow_extrapolation=False,
+        )
+    with pytest.warns(
+        ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
+    ) as captured:
+        target = area_ratio(
+            0.1,
+            AIR_BEATTIE_BRIDGEMAN,
+            total_temperature=45.0,
+            total_pressure=1.0e5,
+        )
+    assert len(captured) == 1
+    with pytest.raises(ModelRangeError, match="temperature"):
+        mach_from_area_ratio(
+            target,
+            MachBranch.SUBSONIC,
+            AIR_BEATTIE_BRIDGEMAN,
+            total_temperature=45.0,
+            total_pressure=1.0e5,
+            allow_extrapolation=False,
+        )
+    with pytest.warns(
+        ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
+    ) as captured:
+        mach = mach_from_area_ratio(
+            target,
+            MachBranch.SUBSONIC,
+            AIR_BEATTIE_BRIDGEMAN,
+            total_temperature=45.0,
+            total_pressure=1.0e5,
+        )
+    assert len(captured) == 1
+    assert mach == pytest.approx(0.1, abs=2e-11)
+
+
+def test_custom_beattie_bridgeman_warning_does_not_claim_randall_air() -> None:
+    gas = BeattieBridgemanGas(
+        287.0,
+        1.4,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        applicable_temperature_range=(100.0, 200.0),
+        applicable_pressure_range=(1.0e3, 2.0e3),
+    )
+    with pytest.warns(
+        ApplicabilityWarning, match=r"configured.*tabulated range"
+    ) as captured:
+        gas.state(300.0, 3.0e3, allow_extrapolation=True)
+    assert len(captured) == 1
+    assert "Randall" not in str(captured[0].message)
+
+    with pytest.warns(
+        ApplicabilityWarning, match=r"configured.*tabulated range"
+    ) as captured:
+        isentropic_ratios(
+            1.0,
+            gas,
+            total_temperature=300.0,
+            total_pressure=3.0e3,
+            allow_extrapolation=True,
+        )
+    assert len(captured) == 1
+    assert "Randall" not in str(captured[0].message)
+    with pytest.raises(ModelRangeError):
+        isentropic_ratios(
+            1.0,
+            gas,
+            total_temperature=300.0,
+            total_pressure=3.0e3,
+            allow_extrapolation=False,
+        )
+
+
+@pytest.mark.parametrize(
+    ("coefficients", "mach", "total_temperature"),
+    [
+        (
+            (
+                12825.936657414117,
+                2.0739052512358574e-06,
+                0.21038314102297515,
+                -0.000816567523215019,
+                28906.11424191098,
+            ),
+            32.0,
+            221.48207105566667,
+        ),
+        (
+            (
+                4918.005459004671,
+                6.453841220102751e-06,
+                0.12006443547655751,
+                -0.006863118307642916,
+                25215.558965841552,
+            ),
+            20.344423140819163,
+            221.48207105566667,
+        ),
+        (
+            (
+                4918.005459004671,
+                6.453841220102751e-06,
+                0.12006443547655751,
+                -0.006863118307642916,
+                25215.558965841552 * 0.9205,
+            ),
+            20.0,
+            221.49,
+        ),
+    ],
+)
+def test_real_isentropic_solver_rejects_disconnected_validity_gap(
+    coefficients: tuple[float, float, float, float, float],
+    mach: float,
+    total_temperature: float,
+) -> None:
+    disconnected = BeattieBridgemanGas(287.05287, 1.4, *coefficients)
+    with pytest.raises(ModelRangeError, match=r"no connected.*solution"):
+        _real_flow_state(mach, total_temperature, 55.716069666e6, disconnected)
 
 
 def test_zero_beattie_bridgeman_correction_is_harmonic_oscillator_limit() -> None:
@@ -309,6 +611,112 @@ def test_isentropic_state_conserves_energy_and_entropy(
     )
 
 
+def test_beattie_bridgeman_high_mach_gas_branch_conserves_state() -> None:
+    gas = AIR_BEATTIE_BRIDGEMAN
+    total_temperature = 900.0
+    total_pressure = 1.0e7
+    mach = np.arange(11.0)
+    state = isentropic_state(
+        mach,
+        gas,
+        total_temperature=total_temperature,
+        total_pressure=total_pressure,
+        allow_extrapolation=False,
+    )
+    total = gas.state(total_temperature, total_pressure)
+    static_temperatures = np.asarray(state.static_temperature, dtype=np.float64)
+    static_densities = np.asarray(state.static_density, dtype=np.float64)
+    velocities = np.asarray(state.velocity, dtype=np.float64)
+    scalar_states = [
+        gas._scalar_state_from_density(float(temperature), float(density))
+        for temperature, density in zip(
+            static_temperatures, static_densities, strict=True
+        )
+    ]
+    assert np.all(np.asarray(state.static_pressure) > 0.0)
+    assert np.all(np.asarray(state.static_density) > 0.0)
+    assert all(
+        gas._dp_drho_scalar(item.temperature, item.density) > 0.0
+        for item in scalar_states
+    )
+    assert all(item.cp > 0.0 and item.cv > 0.0 for item in scalar_states)
+    assert all(item.speed_of_sound**2 > 0.0 for item in scalar_states)
+    assert_allclose([item.entropy for item in scalar_states], total.entropy, atol=2e-8)
+    assert_allclose(
+        [
+            item.enthalpy + 0.5 * velocity**2
+            for item, velocity in zip(scalar_states, velocities, strict=True)
+        ],
+        total.enthalpy,
+        rtol=2e-13,
+    )
+
+
+def test_beattie_bridgeman_continuation_reaches_very_low_temperature() -> None:
+    _, gas = _zero_correction_pair()
+    total_temperature = 1000.0
+    total_pressure = 1.0e5
+    state = isentropic_state(
+        50.0,
+        gas,
+        total_temperature=total_temperature,
+        total_pressure=total_pressure,
+    )
+    static = gas._scalar_state_from_density(
+        float(state.static_temperature), float(state.static_density)
+    )
+    total = gas.state(total_temperature, total_pressure)
+    assert state.static_temperature < total_temperature * np.exp(-0.8)
+    assert static.pressure > 0.0
+    assert static.density > 0.0
+    assert gas._dp_drho_scalar(static.temperature, static.density) > 0.0
+    assert static.cp > 0.0
+    assert static.cv > 0.0
+    assert static.entropy == pytest.approx(total.entropy, abs=2e-8)
+    assert static.enthalpy + 0.5 * state.velocity**2 == pytest.approx(
+        total.enthalpy, rel=2e-13
+    )
+
+
+def test_beattie_bridgeman_mach_ten_regression_and_static_range_handling() -> None:
+    state = isentropic_state(
+        10.0,
+        AIR_BEATTIE_BRIDGEMAN,
+        total_temperature=900.0,
+        total_pressure=1.0e7,
+        allow_extrapolation=False,
+    )
+    static = AIR_BEATTIE_BRIDGEMAN._scalar_state_from_density(
+        float(state.static_temperature), float(state.static_density)
+    )
+    assert np.isfinite(state.static_temperature)
+    assert state.static_pressure > 0.0
+    assert state.static_density > 0.0
+    assert static.speed_of_sound > 0.0
+    assert (
+        AIR_BEATTIE_BRIDGEMAN._dp_drho_scalar(static.temperature, static.density) > 0.0
+    )
+
+    with pytest.raises(ModelRangeError, match="temperature"):
+        isentropic_state(
+            11.0,
+            AIR_BEATTIE_BRIDGEMAN,
+            total_temperature=900.0,
+            total_pressure=1.0e7,
+            allow_extrapolation=False,
+        )
+    with pytest.warns(
+        ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
+    ):
+        isentropic_state(
+            11.0,
+            AIR_BEATTIE_BRIDGEMAN,
+            total_temperature=900.0,
+            total_pressure=1.0e7,
+            allow_extrapolation=True,
+        )
+
+
 @pytest.mark.parametrize(
     "gas,total_pressure",
     [
@@ -349,7 +757,7 @@ def test_isentropic_requirements_broadcast_and_range_handling() -> None:
         isentropic_ratios(
             1.0,
             AIR_BEATTIE_BRIDGEMAN,
-            total_temperature=300.0,
+            total_temperature=30.0,
             total_pressure=6.0e6,
             allow_extrapolation=False,
         )
@@ -370,7 +778,7 @@ def test_isentropic_requirements_broadcast_and_range_handling() -> None:
     ratios = isentropic_ratios(
         np.array([[0.5], [1.0]]),
         AIR_BEATTIE_BRIDGEMAN,
-        total_temperature=np.array([1000.0, 1400.0]),
+        total_temperature=np.array([1000.0, 1200.0]),
         total_pressure=6.0e6,
     )
     assert np.shape(ratios.total_pressure_ratio) == (2, 2)

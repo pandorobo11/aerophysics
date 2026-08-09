@@ -40,6 +40,10 @@ _ROOT_RTOL: Final = 4.0 * np.finfo(np.float64).eps
 _ROOT_MAXITER: Final = 100
 _MAX_SUPERSONIC_BRACKET: Final = 1e6
 _MAX_TEMPERATURE_BRACKET_STEPS: Final = 80
+_MAX_BRANCH_LOG_TEMPERATURE_STEP: Final = 1.0e-2
+_BRANCH_GAP_SAFETY_FACTOR: Final = 0.25
+_BRANCH_GAP_DIFFERENCE_STEP: Final = 1.0e-4
+_MAX_BRANCH_CONTINUATION_STEPS: Final = 3000
 
 type _IdealThermalGas = ThermallyPerfectGas | HarmonicOscillatorGas
 type IsentropicGasModel = PerfectGas | _IdealThermalGas | BeattieBridgemanGas
@@ -314,16 +318,34 @@ def _check_real_total_conditions(
     total_pressure: FloatArray,
     *,
     allow_extrapolation: bool,
-) -> None:
+) -> bool:
     outside = gas._check_applicability(
         total_temperature,
         total_pressure,
         allow_extrapolation=allow_extrapolation,
         warn=False,
     )
-    if outside:
+    return outside
+
+
+def _check_real_static_conditions(
+    gas: BeattieBridgemanGas,
+    total_outside: bool,
+    static_temperature: FloatArray,
+    static_pressure: FloatArray,
+    *,
+    allow_extrapolation: bool,
+) -> None:
+    """Validate all states and emit one extrapolation warning per public call."""
+    static_outside = gas._check_applicability(
+        static_temperature,
+        static_pressure,
+        allow_extrapolation=allow_extrapolation,
+        warn=False,
+    )
+    if total_outside or static_outside:
         warnings.warn(
-            "total state is outside the documented Beattie--Bridgeman air range",
+            f"isentropic solution is outside the {gas._applicability_description()}",
             ApplicabilityWarning,
             stacklevel=3,
         )
@@ -467,31 +489,59 @@ def _real_isentropic_state_at_temperature(
     total: _ScalarThermodynamicState,
     gas: BeattieBridgemanGas,
 ) -> _ScalarThermodynamicState:
+    if temperature == total.temperature:
+        return total
     density_floor = max(
         np.finfo(np.float64).tiny,
         total.density * 1e-14,
     )
+
+    spinodal = gas._first_spinodal_density(temperature)
+    density_upper = total.density
+    if spinodal is not None:
+        # ``np.roots`` is accurate enough to locate the boundary, but a small
+        # relative retreat keeps endpoint and Brent iterates away from roundoff
+        # that can otherwise change the sign of dp/drho at the spinodal.
+        stable_upper = np.nextafter(spinodal * (1.0 - 1.0e-10), 0.0)
+        for _ in range(64):
+            if gas._dp_drho_scalar(temperature, stable_upper) > 0.0:
+                break
+            stable_upper = np.nextafter(stable_upper, 0.0)
+        else:
+            raise ModelRangeError(
+                "could not establish the mechanically stable "
+                "Beattie--Bridgeman gas branch"
+            )
+        density_upper = min(density_upper, stable_upper)
+    if density_upper <= density_floor:
+        raise ModelRangeError(
+            "could not bracket the Beattie--Bridgeman isentropic gas branch"
+        )
 
     def entropy_residual(density: float) -> float:
         state = gas._scalar_state_from_density(temperature, density)
         return state.entropy - total.entropy
 
     lower_residual = entropy_residual(density_floor)
-    upper_residual = entropy_residual(total.density)
+    upper_residual = entropy_residual(density_upper)
     if lower_residual < 0.0 or upper_residual > 0.0:
         raise ModelRangeError(
             "could not bracket the Beattie--Bridgeman isentropic gas branch"
         )
-    density = float(
-        brentq(
-            entropy_residual,
-            density_floor,
-            total.density,
-            xtol=_ROOT_XTOL,
-            rtol=_ROOT_RTOL,
-            maxiter=_ROOT_MAXITER,
+    if upper_residual == 0.0:
+        density = density_upper
+    else:
+        log_density = float(
+            brentq(
+                lambda value: entropy_residual(float(np.exp(value))),
+                float(np.log(density_floor)),
+                float(np.log(density_upper)),
+                xtol=_ROOT_XTOL,
+                rtol=_ROOT_RTOL,
+                maxiter=_ROOT_MAXITER,
+            )
         )
-    )
+        density = float(np.exp(log_density))
     return gas._scalar_state_from_density(temperature, density)
 
 
@@ -523,10 +573,77 @@ def _real_flow_state(
         )
         return static, residual
 
-    lower = 0.5 * total_temperature
     floor = max(np.finfo(np.float64).tiny, total_temperature * 1e-12)
-    static, lower_residual = state_and_residual(lower)
-    for _ in range(_MAX_TEMPERATURE_BRACKET_STEPS):
+    upper = total_temperature
+    upper_static, upper_residual = state_and_residual(upper)
+
+    def continuation_temperature(
+        current_temperature: float, current_static: _ScalarThermodynamicState
+    ) -> float:
+        """Advance the entropy branch without stepping over its spinodal event."""
+        spinodal = gas._first_spinodal_density(current_temperature)
+        if spinodal is None:
+            log_step = _MAX_BRANCH_LOG_TEMPERATURE_STEP
+        else:
+            gap = spinodal - current_static.density
+            if gap <= 0.0:
+                raise ModelRangeError(
+                    "no connected Beattie--Bridgeman isentropic solution "
+                    "above the non-physical temperature boundary"
+                )
+            probe_temperature = float(
+                np.exp(np.log(current_temperature) - _BRANCH_GAP_DIFFERENCE_STEP)
+            )
+            try:
+                probe_static = _real_isentropic_state_at_temperature(
+                    probe_temperature, total, gas
+                )
+            except ModelRangeError:
+                # The infinitesimal continuation probe is itself the first
+                # observed branch event; let the outer boundary refinement
+                # locate it from the last connected state.
+                return probe_temperature
+            probe_spinodal = gas._first_spinodal_density(probe_temperature)
+            if probe_spinodal is None:
+                log_step = _MAX_BRANCH_LOG_TEMPERATURE_STEP
+            else:
+                probe_gap = probe_spinodal - probe_static.density
+                gap_rate = abs((probe_gap - gap) / _BRANCH_GAP_DIFFERENCE_STEP)
+                log_step = min(
+                    _MAX_BRANCH_LOG_TEMPERATURE_STEP,
+                    _BRANCH_GAP_SAFETY_FACTOR
+                    * gap
+                    / max(gap_rate, np.finfo(np.float64).tiny),
+                )
+        return max(float(np.exp(np.log(current_temperature) - log_step)), floor)
+
+    lower = continuation_temperature(upper, upper_static)
+    for _ in range(_MAX_BRANCH_CONTINUATION_STEPS):
+        try:
+            lower_static, lower_residual = state_and_residual(lower)
+        except ModelRangeError:
+            invalid_lower = lower
+            connected_lower = upper
+            connected_residual = upper_residual
+            for _ in range(_MAX_TEMPERATURE_BRACKET_STEPS):
+                midpoint = float(
+                    np.exp(0.5 * (np.log(connected_lower) + np.log(invalid_lower)))
+                )
+                try:
+                    _, midpoint_residual = state_and_residual(midpoint)
+                except ModelRangeError:
+                    invalid_lower = midpoint
+                else:
+                    connected_lower = midpoint
+                    connected_residual = midpoint_residual
+            if connected_residual < 0.0:
+                raise ModelRangeError(
+                    "no connected Beattie--Bridgeman isentropic solution "
+                    "above the non-physical temperature boundary"
+                ) from None
+            lower = connected_lower
+            lower_residual = connected_residual
+            break
         if lower_residual >= 0.0:
             break
         if lower <= floor:
@@ -534,23 +651,50 @@ def _real_flow_state(
                 "could not bracket a positive-temperature "
                 "Beattie--Bridgeman isentropic solution"
             )
-        lower = max(0.5 * lower, floor)
-        static, lower_residual = state_and_residual(lower)
+        upper = lower
+        upper_residual = lower_residual
+        upper_static = lower_static
+        if lower <= floor:
+            raise ModelRangeError(
+                "could not bracket a positive-temperature "
+                "Beattie--Bridgeman isentropic solution"
+            )
+        next_lower = continuation_temperature(upper, upper_static)
+        if not np.isfinite(next_lower) or next_lower <= 0.0 or next_lower >= upper:
+            raise ModelRangeError(
+                "could not make positive-temperature progress on the "
+                "Beattie--Bridgeman isentropic branch"
+            )
+        lower = next_lower
     else:
         raise ModelRangeError(
-            "could not bracket the Beattie--Bridgeman isentropic solution"
+            "could not reach a Beattie--Bridgeman isentropic branch boundary"
         )
+
+    log_lower = float(np.log(lower))
+    log_upper = float(np.log(upper))
+
+    def temperature_from_log(log_temperature: float) -> float:
+        if log_temperature == log_upper:
+            return upper
+        if log_temperature == log_lower:
+            return lower
+        return float(np.exp(log_temperature))
+
+    def log_temperature_residual(log_temperature: float) -> float:
+        return state_and_residual(temperature_from_log(log_temperature))[1]
 
     static_temperature = float(
         brentq(
-            lambda temperature: state_and_residual(temperature)[1],
-            lower,
-            total_temperature,
+            log_temperature_residual,
+            log_lower,
+            log_upper,
             xtol=_ROOT_XTOL,
             rtol=_ROOT_RTOL,
             maxiter=_ROOT_MAXITER,
         )
     )
+    static_temperature = temperature_from_log(static_temperature)
     static = _real_isentropic_state_at_temperature(static_temperature, total, gas)
     velocity = mach * static.speed_of_sound
     parameter = (
@@ -584,11 +728,13 @@ def _real_flow_states(
     total_temperature: FloatArray,
     total_pressure: FloatArray,
     gas: BeattieBridgemanGas,
-) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
     temperature_ratio = np.empty_like(mach)
     pressure_ratio = np.empty_like(mach)
     density_ratio = np.empty_like(mach)
     parameter = np.empty_like(mach)
+    static_temperature = np.empty_like(mach)
+    static_pressure = np.empty_like(mach)
     for index in np.ndindex(mach.shape):
         state = _real_flow_state(
             float(mach[index]),
@@ -600,7 +746,63 @@ def _real_flow_states(
         pressure_ratio[index] = state.total_pressure_ratio
         density_ratio[index] = state.total_density_ratio
         parameter[index] = state.mass_flow_parameter
-    return temperature_ratio, pressure_ratio, density_ratio, parameter
+        static_temperature[index] = state.static.temperature
+        static_pressure[index] = state.static.pressure
+    return (
+        temperature_ratio,
+        pressure_ratio,
+        density_ratio,
+        parameter,
+        static_temperature,
+        static_pressure,
+    )
+
+
+def _check_real_mach_states(
+    gas: BeattieBridgemanGas,
+    total_outside: bool,
+    mach: FloatArray,
+    total_temperature: FloatArray,
+    total_pressure: FloatArray,
+    *,
+    allow_extrapolation: bool,
+) -> None:
+    """Validate final static states without warning during root iterations."""
+    _, _, _, _, static_temperature, static_pressure = _real_flow_states(
+        mach, total_temperature, total_pressure, gas
+    )
+    _check_real_static_conditions(
+        gas,
+        total_outside,
+        static_temperature,
+        static_pressure,
+        allow_extrapolation=allow_extrapolation,
+    )
+
+
+def _check_real_area_states(
+    gas: BeattieBridgemanGas,
+    total_outside: bool,
+    mach: FloatArray,
+    total_temperature: FloatArray,
+    total_pressure: FloatArray,
+    *,
+    allow_extrapolation: bool,
+) -> None:
+    """Validate requested and critical states with one aggregate warning."""
+    _, _, _, _, static_temperature, static_pressure = _real_flow_states(
+        mach, total_temperature, total_pressure, gas
+    )
+    _, _, _, _, critical_temperature, critical_pressure = _real_flow_states(
+        np.ones_like(mach), total_temperature, total_pressure, gas
+    )
+    _check_real_static_conditions(
+        gas,
+        total_outside,
+        np.concatenate((static_temperature.ravel(), critical_temperature.ravel())),
+        np.concatenate((static_pressure.ravel(), critical_pressure.ravel())),
+        allow_extrapolation=allow_extrapolation,
+    )
 
 
 def isentropic_ratios(
@@ -625,14 +827,26 @@ def isentropic_ratios(
             total_pressure,
             value_name="mach",
         )
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
             allow_extrapolation=allow_extrapolation,
         )
-        temperature_ratio, pressure_ratio, density_ratio, _ = _real_flow_states(
-            values, temperatures, pressures, gas
+        (
+            temperature_ratio,
+            pressure_ratio,
+            density_ratio,
+            _,
+            static_temperature,
+            static_pressure,
+        ) = _real_flow_states(values, temperatures, pressures, gas)
+        _check_real_static_conditions(
+            gas,
+            total_outside,
+            static_temperature,
+            static_pressure,
+            allow_extrapolation=allow_extrapolation,
         )
     elif isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
         assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
@@ -719,7 +933,7 @@ def mach_from_total_temperature_ratio(
             total_pressure,
             value_name="total_temperature_ratio",
         )
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
@@ -734,6 +948,14 @@ def mach_from_total_temperature_ratio(
                 gas,
                 basis="temperature",
             )
+        _check_real_mach_states(
+            gas,
+            total_outside,
+            result,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
         return return_float(result, scalar=scalar)
 
     assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
@@ -901,7 +1123,7 @@ def mach_from_total_pressure_ratio(
             total_pressure,
             value_name="total_pressure_ratio",
         )
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
@@ -916,6 +1138,14 @@ def mach_from_total_pressure_ratio(
                 gas,
                 basis="pressure",
             )
+        _check_real_mach_states(
+            gas,
+            total_outside,
+            result,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
         return return_float(result, scalar=scalar)
 
     assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
@@ -961,7 +1191,7 @@ def mach_from_total_density_ratio(
             total_pressure,
             value_name="total_density_ratio",
         )
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
@@ -976,6 +1206,14 @@ def mach_from_total_density_ratio(
                 gas,
                 basis="density",
             )
+        _check_real_mach_states(
+            gas,
+            total_outside,
+            result,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
         return return_float(result, scalar=scalar)
 
     assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
@@ -1061,7 +1299,7 @@ def area_ratio(
             total_pressure,
             value_name="mach",
         )
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
@@ -1075,6 +1313,14 @@ def area_ratio(
                 float(pressures[index]),
                 gas,
             )
+        _check_real_area_states(
+            gas,
+            total_outside,
+            values,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
         return return_float(result, scalar=scalar)
 
     assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
@@ -1262,7 +1508,7 @@ def mach_from_area_ratio(
             total_pressure,
             value_name="area_ratio",
         )
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
@@ -1277,6 +1523,14 @@ def mach_from_area_ratio(
                 float(pressures[index]),
                 gas,
             )
+        _check_real_area_states(
+            gas,
+            total_outside,
+            result,
+            temperatures,
+            pressures,
+            allow_extrapolation=allow_extrapolation,
+        )
         return return_float(result, scalar=scalar)
 
     assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
@@ -1328,7 +1582,7 @@ def critical_ratios(
             total_pressure,
             value_name="critical state",
         )
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
@@ -1339,7 +1593,16 @@ def critical_ratios(
             real_pressure_ratio,
             real_density_ratio,
             _,
+            static_temperature,
+            static_pressure,
         ) = _real_flow_states(np.ones_like(mach), temperatures, pressures, gas)
+        _check_real_static_conditions(
+            gas,
+            total_outside,
+            static_temperature,
+            static_pressure,
+            allow_extrapolation=allow_extrapolation,
+        )
         return CriticalRatios(
             total_temperature_ratio=return_float(real_temperature_ratio, scalar=scalar),
             total_pressure_ratio=return_float(real_pressure_ratio, scalar=scalar),
@@ -1399,13 +1662,22 @@ def mass_flow_parameter(
             total_pressure,
             value_name="mach",
         )
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
             allow_extrapolation=allow_extrapolation,
         )
-        _, _, _, result = _real_flow_states(values, temperatures, pressures, gas)
+        _, _, _, result, static_temperature, static_pressure = _real_flow_states(
+            values, temperatures, pressures, gas
+        )
+        _check_real_static_conditions(
+            gas,
+            total_outside,
+            static_temperature,
+            static_pressure,
+            allow_extrapolation=allow_extrapolation,
+        )
         return return_float(result, scalar=scalar)
 
     assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
@@ -1454,17 +1726,24 @@ def mass_flux(
         raise ValueError("total_temperature must be greater than zero")
 
     if isinstance(gas, BeattieBridgemanGas):
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             np.asarray(temperature, dtype=np.float64),
             np.asarray(pressure, dtype=np.float64),
             allow_extrapolation=allow_extrapolation,
         )
-        _, _, _, parameter = _real_flow_states(
+        _, _, _, parameter, static_temperature, static_pressure = _real_flow_states(
             np.asarray(mach_values, dtype=np.float64),
             np.asarray(temperature, dtype=np.float64),
             np.asarray(pressure, dtype=np.float64),
             gas,
+        )
+        _check_real_static_conditions(
+            gas,
+            total_outside,
+            np.asarray(static_temperature, dtype=np.float64),
+            np.asarray(static_pressure, dtype=np.float64),
+            allow_extrapolation=allow_extrapolation,
         )
     elif isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
         assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
@@ -1550,7 +1829,7 @@ def isentropic_state(
     sound_speed = np.empty_like(mach_values)
 
     if isinstance(gas, BeattieBridgemanGas):
-        _check_real_total_conditions(
+        total_outside = _check_real_total_conditions(
             gas,
             temperatures,
             pressures,
@@ -1569,6 +1848,13 @@ def isentropic_state(
             static_density[index] = real_state.static.density
             velocity[index] = real_state.velocity
             sound_speed[index] = real_state.static.speed_of_sound
+        _check_real_static_conditions(
+            gas,
+            total_outside,
+            static_temperature,
+            static_pressure,
+            allow_extrapolation=allow_extrapolation,
+        )
     elif isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
         assert isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas))
         if isinstance(gas, HarmonicOscillatorGas):

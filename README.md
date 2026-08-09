@@ -104,9 +104,13 @@ print(state.static_pressure, state.velocity)
 `AIR_BEATTIE_BRIDGEMAN` uses the Beattie–Bridgeman equation of state with
 Randall air constants. JAXA-RR-06-011 supplies the wind-tunnel implementation,
 constants, and reference calculations; JAXA did not originate either model.
-The documented reservoir ranges are 400–2000 K for both presets and 1–10 MPa
-for Beattie–Bridgeman air. Neither includes dissociation, chemical equilibrium,
-ionization, condensation, or phase change.
+The harmonic-oscillator preset's documented reservoir range is 400–2000 K.
+For Beattie–Bridgeman air, the documented range is the R. E. Randall,
+*AEDC-TR-57-8* (1957) tabulated air-property range: 70–2200 degR
+(38.8889–1222.2222 K) and 0.025–4000 psia (172.369 Pa–27.5790 MPa). This is
+a tabulation range, not an inherent physical-validity limit of the equation of
+state; extrapolation warns, while strict mode rejects it. Neither model includes
+dissociation, chemical equilibrium, ionization, condensation, or phase change.
 
 ## Models and references
 

@@ -295,7 +295,8 @@ harmonic-oscillator ideal gas.
 
 ``AIR_BEATTIE_BRIDGEMAN`` uses the Randall/JAXA air constants and separate
 N2 and O2 vibrational modes.  For a specified :math:`T_0,p_0,M`, the solver
-selects the lowest-density mechanically stable gas root and solves
+restricts the entropy solve to the low-density mechanically stable gas branch
+(below the first :math:`(\partial p/\partial\rho)_T=0` spinodal) and solves
 
 .. math::
 
@@ -328,8 +329,12 @@ root raise :class:`~aerophysics.exceptions.ModelRangeError`.
 >>> round(real.velocity, 3)
 1056.954
 
-The air preset's documented reservoir range is 400--2000 K and 1--10 MPa.
-The isentropic API emits one
+The harmonic-oscillator air preset's documented reservoir range is 400--2000 K.
+The Beattie--Bridgeman air preset instead records the R. E. Randall,
+*AEDC-TR-57-8* (1957) tabulated air-property range: 70--2200 degR
+(38.8889--1222.2222 K) and 0.025--4000 psia (172.369 Pa--27.5790 MPa).
+That is a tabulation range, not an inherent physical-validity limit of the
+equation of state.  The isentropic API emits one
 :class:`~aerophysics.exceptions.ApplicabilityWarning` per public call outside
 that range, or raises in strict mode.  These are frozen-composition models:
 dissociation, chemical equilibrium, ionisation, condensation, and phase

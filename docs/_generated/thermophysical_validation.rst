@@ -107,7 +107,7 @@ Thermodynamic invariants
      - Pass
    * - Beattie-Bridgeman pressure closure
      - relative <= 1e-12
-     - 2.442e-14
+     - 1.421e-14
      - Pass
    * - NASA7 isentropic total enthalpy
      - relative <= 1e-12
@@ -135,9 +135,9 @@ Thermodynamic invariants
      - Pass
    * - Beattie-Bridgeman isentropic total enthalpy
      - relative <= 1e-12
-     - 2.22e-16
+     - 1.887e-15
      - Pass
    * - Beattie-Bridgeman isentropic entropy
      - relative <= 1e-12
-     - 0
+     - 7.819e-16
      - Pass

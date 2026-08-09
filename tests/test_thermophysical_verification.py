@@ -97,7 +97,7 @@ def test_nasa_polynomial_identities_and_derivative() -> None:
 
 def test_beattie_bridgeman_density_roots_are_stable_and_close_pressure() -> None:
     for pressure in np.linspace(1.0e6, 10.0e6, 7):
-        for temperature in np.linspace(400.0, 2000.0, 11):
+        for temperature in np.linspace(400.0, 1200.0, 11):
             density = float(AIR_BEATTIE_BRIDGEMAN.density(temperature, pressure))
             delta = density * 1.0e-5
             lower = float(AIR_BEATTIE_BRIDGEMAN.pressure(temperature, density - delta))
