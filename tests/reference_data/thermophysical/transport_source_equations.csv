@@ -1,0 +1,28 @@
+model,temperature_K,quantity,value_SI,source
+Sutherland viscosity,200,dynamic_viscosity_Pa_s,1.32857351787171e-05,"Sutherland (1893), equation and USSA sea-level normalization"
+Sutherland viscosity,250,dynamic_viscosity_Pa_s,1.59914388351563e-05,"Sutherland (1893), equation and USSA sea-level normalization"
+Sutherland viscosity,288.15,dynamic_viscosity_Pa_s,1.7894e-05,"Sutherland (1893), equation and USSA sea-level normalization"
+Sutherland viscosity,300,dynamic_viscosity_Pa_s,1.84602186457503e-05,"Sutherland (1893), equation and USSA sea-level normalization"
+Sutherland viscosity,500,dynamic_viscosity_Pa_s,2.67056278164699e-05,"Sutherland (1893), equation and USSA sea-level normalization"
+Sutherland viscosity,1000,dynamic_viscosity_Pa_s,4.15224391656363e-05,"Sutherland (1893), equation and USSA sea-level normalization"
+Sutherland viscosity,1500,dynamic_viscosity_Pa_s,5.25975405731042e-05,"Sutherland (1893), equation and USSA sea-level normalization"
+Keyes viscosity,79,dynamic_viscosity_Pa_s,5.66172537418989e-06,"Bova et al. SAND2010-1168C, reproduced dry-air equation"
+Keyes viscosity,100,dynamic_viscosity_Pa_s,7.12569487848409e-06,"Bova et al. SAND2010-1168C, reproduced dry-air equation"
+Keyes viscosity,200,dynamic_viscosity_Pa_s,1.33495156249079e-05,"Bova et al. SAND2010-1168C, reproduced dry-air equation"
+Keyes viscosity,300,dynamic_viscosity_Pa_s,1.85193270283716e-05,"Bova et al. SAND2010-1168C, reproduced dry-air equation"
+Keyes viscosity,500,dynamic_viscosity_Pa_s,2.68622487532031e-05,"Bova et al. SAND2010-1168C, reproduced dry-air equation"
+Keyes viscosity,1000,dynamic_viscosity_Pa_s,4.19867882877727e-05,"Bova et al. SAND2010-1168C, reproduced dry-air equation"
+Keyes viscosity,1845,dynamic_viscosity_Pa_s,5.99706521350288e-05,"Bova et al. SAND2010-1168C, reproduced dry-air equation"
+Blottner/Wilke viscosity,1000,dynamic_viscosity_Pa_s,4.13757469861617e-05,Blottner et al. SC-RR-70-754 coefficients; Wilke mixing equation
+Blottner/Wilke viscosity,1500,dynamic_viscosity_Pa_s,5.42534675433817e-05,Blottner et al. SC-RR-70-754 coefficients; Wilke mixing equation
+Blottner/Wilke viscosity,2000,dynamic_viscosity_Pa_s,6.61464106665562e-05,Blottner et al. SC-RR-70-754 coefficients; Wilke mixing equation
+Blottner/Wilke viscosity,5000,dynamic_viscosity_Pa_s,0.000128535764209418,Blottner et al. SC-RR-70-754 coefficients; Wilke mixing equation
+Blottner/Wilke viscosity,10000,dynamic_viscosity_Pa_s,0.000219709924021331,Blottner et al. SC-RR-70-754 coefficients; Wilke mixing equation
+Blottner/Wilke viscosity,30000,dynamic_viscosity_Pa_s,0.000545332376271592,Blottner et al. SC-RR-70-754 coefficients; Wilke mixing equation
+USSA conductivity,200,thermal_conductivity_W_m_K,0.0180915384335557,U.S. Standard Atmosphere 1976 corrected equation and constants
+USSA conductivity,250,thermal_conductivity_W_m_K,0.022270032078536,U.S. Standard Atmosphere 1976 corrected equation and constants
+USSA conductivity,288.15,thermal_conductivity_W_m_K,0.025325884264264,U.S. Standard Atmosphere 1976 corrected equation and constants
+USSA conductivity,300,thermal_conductivity_W_m_K,0.0262520007809386,U.S. Standard Atmosphere 1976 corrected equation and constants
+USSA conductivity,500,thermal_conductivity_W_m_K,0.0404085785292817,U.S. Standard Atmosphere 1976 corrected equation and constants
+USSA conductivity,1000,thermal_conductivity_W_m_K,0.0675587805276717,U.S. Standard Atmosphere 1976 corrected equation and constants
+USSA conductivity,1500,thermal_conductivity_W_m_K,0.0883100323644353,U.S. Standard Atmosphere 1976 corrected equation and constants

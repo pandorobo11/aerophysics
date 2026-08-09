@@ -1,0 +1,73 @@
+{
+  "role": "independent direct evaluation of published equations and constants",
+  "command": "python docs/scripts/build_transport_reference.py",
+  "models": {
+    "Sutherland viscosity": {
+      "constants": {
+        "mu0_Pa_s": 1.7894e-05,
+        "T0_K": 288.15,
+        "S_K": 110.4
+      },
+      "source": "Sutherland (1893); normalization from USSA 1976"
+    },
+    "Keyes viscosity": {
+      "constants": {
+        "coefficient": 1.488e-06,
+        "A_K": 122.1,
+        "B_K": 5.0
+      },
+      "source": "Bova et al., SAND2010-1168C"
+    },
+    "Blottner/Wilke viscosity": {
+      "species_order": [
+        "N2",
+        "O2",
+        "Ar",
+        "CO2"
+      ],
+      "blottner_coefficients": [
+        [
+          0.0268142,
+          0.3177838,
+          -11.3155513
+        ],
+        [
+          0.044929,
+          -0.0826158,
+          -9.2019475
+        ],
+        [
+          -0.02201,
+          1.01,
+          -13.42
+        ],
+        [
+          -0.041372,
+          1.3293,
+          -15.016
+        ]
+      ],
+      "mole_fractions_before_normalization": [
+        0.78084,
+        0.209476,
+        0.00934,
+        0.000314
+      ],
+      "molar_masses_kg_mol": [
+        0.0280134,
+        0.0319988,
+        0.039948,
+        0.0440095
+      ],
+      "source": "SC-RR-70-754; Wilke (1950); Ar/CO2 audit source in references"
+    },
+    "USSA conductivity": {
+      "constants": {
+        "coefficient": 0.00264638,
+        "A_K": 245.4,
+        "B_K": 12.0
+      },
+      "source": "U.S. Standard Atmosphere 1976 corrected equation"
+    }
+  }
+}

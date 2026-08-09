@@ -1,0 +1,21 @@
+{
+  "coefficient_mapping": {
+    "NASA7": "Cantera nasa_gas.yaml; coefficients traced to NASA TM-4513",
+    "NASA9": "aerophysics pinned CEA coefficients evaluated by Cantera Nasa9PolyMultiTempRegion"
+  },
+  "command": "uv run --isolated --with cantera==3.2.0 python docs/scripts/capture_cantera_reference.py",
+  "composition": {
+    "Ar": 0.009340280208406252,
+    "CO2": 0.00031400942028260843,
+    "N2": 0.780863425902777,
+    "O2": 0.20948228446853404
+  },
+  "entropy_reference": "Cantera values normalized from 1 atm to the NASA 1 bar standard pressure",
+  "source": "Cantera ideal-gas thermodynamic evaluator",
+  "version": "3.2.0",
+  "wheel": {
+    "filename": "cantera-3.2.0-cp312-cp312-macosx_11_0_arm64.whl",
+    "hash_source": "https://pypi.org/pypi/cantera/3.2.0/json",
+    "sha256": "d58dd40112741423a4b9b95fbbd7789575250af1fa13c77d60fab47f472f694d"
+  }
+}

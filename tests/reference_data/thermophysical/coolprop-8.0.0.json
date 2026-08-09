@@ -1,0 +1,11 @@
+{
+  "command": "uv run --isolated --with CoolProp==8.0.0 python docs/scripts/capture_coolprop_reference.py",
+  "comparison_role": "observation only; CoolProp and aerophysics use different transport correlations",
+  "source": "CoolProp Air",
+  "version": "8.0.0",
+  "wheel": {
+    "filename": "coolprop-8.0.0-cp312-abi3-macosx_11_0_arm64.whl",
+    "hash_source": "https://pypi.org/pypi/CoolProp/8.0.0/json",
+    "sha256": "46de36f51330ce8c7f8384a7360e1058739d20604736158aac6bd2abf6ae26bd"
+  }
+}
