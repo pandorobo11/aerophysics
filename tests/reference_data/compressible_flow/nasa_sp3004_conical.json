@@ -1,0 +1,27 @@
+{
+  "source": "NASA SP-3004, Tables for Supersonic Flow Around Right Circular Cones at Zero Angle of Attack",
+  "year": 1964,
+  "gamma": 1.4,
+  "cone_angles_deg": [
+    2.5,
+    5.0,
+    7.5,
+    10.0,
+    12.5,
+    15.0,
+    17.5,
+    20.0,
+    22.5,
+    25.0,
+    27.5,
+    30.0
+  ],
+  "mach_numbers": [
+    1.5,
+    2.0,
+    3.0,
+    5.0
+  ],
+  "method": "PDF text-layer cells selected and decoded from the report's compact notation",
+  "command": "python docs/scripts/capture_sp3004_reference.py"
+}

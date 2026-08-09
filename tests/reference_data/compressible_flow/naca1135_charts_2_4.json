@@ -1,0 +1,11 @@
+{
+  "source": "NACA Report 1135, Charts 2, 3, and 4",
+  "printed_pages": [654, 656, 658],
+  "method": "Representative weak-branch points read from the plotted curves",
+  "tolerances": {
+    "shock_angle_deg": "0.25 degree, approximately half a minor chart division",
+    "pressure_coefficient": "0.01, approximately half a minor chart division",
+    "downstream_mach": "0.03, including line thickness and interpolation"
+  },
+  "role": "chart-resolution observation; exact equation closures remain the strict test"
+}

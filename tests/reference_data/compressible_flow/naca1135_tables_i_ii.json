@@ -1,0 +1,10 @@
+{
+  "source": "NACA Report 1135, Tables I and II",
+  "report_year": 1953,
+  "printed_pages": "633-651",
+  "gamma": 1.4,
+  "row_count": 1744,
+  "method": "Every published Mach abscissa was reconstructed with the equations printed in Report 1135 and rounded to the displayed table precision; the endpoints and page transitions were visually audited against the scan.",
+  "acceptance": "max(one printed unit, 1e-4 relative)",
+  "command": "python docs/scripts/build_naca1135_reference.py"
+}

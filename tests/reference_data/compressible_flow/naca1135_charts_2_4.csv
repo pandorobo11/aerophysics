@@ -1,0 +1,6 @@
+upstream_mach,deflection_angle_deg,branch,shock_angle_deg,shock_angle_abs_tolerance_deg,pressure_coefficient,pressure_coefficient_abs_tolerance,downstream_mach,downstream_mach_abs_tolerance,chart_pages
+1.5,5.0,weak,47.9,0.25,0.18,0.01,1.33,0.03,"654,656,658"
+2.0,10.0,weak,39.3,0.25,0.25,0.01,1.64,0.03,"654,656,658"
+2.5,15.0,weak,36.9,0.25,0.34,0.01,1.87,0.03,"654,656,658"
+3.0,20.0,weak,37.8,0.25,0.44,0.01,1.99,0.03,"654,656,658"
+5.0,25.0,weak,35.8,0.25,0.50,0.01,2.57,0.03,"654,656,658"

@@ -60,10 +60,11 @@
 | 38 | Wind-tunnel gas models | 2007 | Watari, M. | Air Models Used in Flow Calculations for the JAXA Hypersonic Wind Tunnel | 取得済み | `2007_Watari_Air-Models-JAXA-Hypersonic-Wind-Tunnel.pdf` | [JAXA](https://jaxa.repo.nii.ac.jp/records/2224) | 50ページ。JAXA-RR-06-011。空気定数、統一式、風洞計算手順、FORTRANコードを収録。モデルの発明元ではない。 |
 | 39 | Wind-tunnel gas models | 2007 | Watari, M. | Air Models Used in the JAXA Hypersonic Wind Tunnels | 取得済み | `2007_Watari_Air-Models-JAXA-Hypersonic-Wind-Tunnels-Conference.pdf` | [JAXA](https://jaxa.repo.nii.ac.jp/records/5839) | 4ページ。JAXA-SP-06-020会議論文。完全版との関係確認用。 |
 | 40 | Thermally perfect flow | 1994 | Witte, D. W.; Tatum, K. E. | Computer Code for Determination of Thermally Perfect Gas Properties | 取得済み | `1994_Witte_Computer-Code-Thermally-Perfect-Gas-Properties.pdf` | [NASA NTRS](https://ntrs.nasa.gov/citations/19950005582) | 80ページ。NASA TP-3447。熱的完全気体流れの独立検証資料であり、調和振動子モデルの原典ではない。 |
+| 41 | Conical flow | 1964 | Sims, J. L. | Tables for Supersonic Flow Around Right Circular Cones at Zero Angle of Attack | 取得済み | `1964_Sims_Tables-Supersonic-Flow-Right-Circular-Cones.pdf` | [NASA NTRS](https://ntrs.nasa.gov/api/citations/19640009035/downloads/19640009035.pdf) | 430ページ。NASA SP-3004。γ=1.4のTaylor–Maccoll表を円錐衝撃波検証へ使用。 |
 
 ## 集計
 
-- 対象: 40件
-- 取得済み: 25件
+- 対象: 41件
+- 取得済み: 26件
 - 未取得: 15件
 - 最終確認日: 2026-08-05
