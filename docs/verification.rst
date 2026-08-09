@@ -4,7 +4,9 @@ Verification
 This chapter records reproducible checks of the equations implemented by
 ``aerophysics``.  A verification result establishes agreement with a stated
 reference or mathematical property; it is not a substitute for experimental
-validation.  The first record covers
+validation.  Detailed records now cover :doc:`verification_compressible_flow`,
+:doc:`verification_thermophysical`, and :doc:`verification_viscous_flow` in
+addition to the first record for
 :func:`aerophysics.atmosphere.standard_atmosphere` and all fifteen fields of
 :class:`aerophysics.atmosphere.AtmosphereState`.
 
@@ -123,3 +125,8 @@ The external snapshot is intentionally refreshed only by an explicit command
 in an isolated environment::
 
    uv run --isolated --with fluids==1.3.1 python docs/scripts/capture_fluids_reference.py
+
+All verification artifacts can be regenerated or checked together with::
+
+   python docs/scripts/generate_verification.py
+   python docs/scripts/generate_verification.py --check

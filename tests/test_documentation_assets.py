@@ -25,6 +25,15 @@ ATMOSPHERE_SVGS = (
     PROJECT_ROOT / "docs/_static/standard_atmosphere_profiles.svg",
     PROJECT_ROOT / "docs/_static/standard_atmosphere_comparison.svg",
 )
+VERIFICATION_GENERATOR = PROJECT_ROOT / "docs/scripts/generate_verification.py"
+VERIFICATION_SVGS = (
+    PROJECT_ROOT / "docs/_static/compressible_flow_profiles.svg",
+    PROJECT_ROOT / "docs/_static/compressible_flow_differences.svg",
+    PROJECT_ROOT / "docs/_static/thermophysical_properties.svg",
+    PROJECT_ROOT / "docs/_static/thermophysical_transport_differences.svg",
+    PROJECT_ROOT / "docs/_static/viscous_skin_friction.svg",
+    PROJECT_ROOT / "docs/_static/protrusion_shielding.svg",
+)
 
 
 def _expected_row(temperature: float, candidate: DynamicViscosityModel) -> str:
@@ -96,3 +105,23 @@ def test_standard_atmosphere_svgs_have_accessible_labels() -> None:
         assert '<title id="svg-title">' in svg
         assert '<desc id="svg-desc">' in svg
         assert "Geometric altitude (km)" in svg
+
+
+def test_all_verification_assets_are_current() -> None:
+    subprocess.run(
+        [sys.executable, str(VERIFICATION_GENERATOR), "--check"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_new_verification_svgs_have_accessible_labels() -> None:
+    for path in VERIFICATION_SVGS:
+        svg = path.read_text(encoding="utf-8")
+        assert 'role="img"' in svg
+        assert 'aria-labelledby="title desc"' in svg
+        assert '<title id="title">' in svg
+        assert '<desc id="desc">' in svg
+        assert "[-]" in svg or "[K]" in svg

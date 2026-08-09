@@ -5,6 +5,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Added
+
+- Add reproducible verification records for compressible flow,
+  thermophysical and real-gas properties, boundary layers, velocity profiles,
+  and protrusion integration using primary references, pinned Cantera and
+  CoolProp snapshots, generated figures, and offline invariant tests.
+
 ## [0.4.0] - 2026-08-05
 
 ### Added

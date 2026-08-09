@@ -50,6 +50,9 @@ flight conditions, and explicit unit conversions.
    :caption: Verification
 
    verification
+   verification_compressible_flow
+   verification_thermophysical
+   verification_viscous_flow
 
 .. toctree::
    :maxdepth: 2
