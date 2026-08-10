@@ -27,15 +27,18 @@ Display units and the SI core
 -----------------------------
 
 The public Python calculation APIs use SI units and radians. The GUI sidebar
-can instead display selected aviation units for length, speed, pressure,
-temperature, density, and angle. GUI inputs are converted to SI before calling
-the calculation core, and results are converted from SI only for presentation
-and CSV export. Changing a sidebar unit preserves the represented physical
-input rather than reinterpreting its numeric value.
+can instead display selected aviation units for length, area, speed, pressure,
+temperature, density, force, inverse length, and angle. Choices include
+millimetres and inches, feet per second, kilopascals, hectopascals, pounds-force
+per square foot, Celsius, Rankine, and pounds mass per cubic foot. GUI inputs
+are converted to SI before calling the calculation core, and results are
+converted from SI only for presentation and CSV export. Changing a sidebar
+unit preserves the represented physical input rather than reinterpreting its
+numeric value.
 
-Model parameters that are intrinsically SI, such as dynamic viscosity in
-``Pa s``, remain labelled as such. Always use the unit shown beside an input or
-table column.
+Quantities without a sidebar selector, such as mass flux, drag per unit width,
+and dynamic viscosity in ``Pa s``, remain labelled as such. Always use the unit
+shown beside an input or table column.
 
 Case handoff
 ------------

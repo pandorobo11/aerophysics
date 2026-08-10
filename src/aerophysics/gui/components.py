@@ -159,32 +159,50 @@ def render_unit_sidebar() -> UnitPreferences:
     with st.sidebar.expander("単位設定", expanded=False):
         length = st.selectbox(
             "長さ",
-            ("m", "ft"),
+            ("m", "mm", "ft", "in"),
             key="unit_length",
+            on_change=_convert_display_input_state,
+        )
+        area = st.selectbox(
+            "面積",
+            ("m²", "ft²", "in²"),
+            key="unit_area",
             on_change=_convert_display_input_state,
         )
         speed = st.selectbox(
             "速度",
-            ("m/s", "kt"),
+            ("m/s", "kt", "ft/s"),
             key="unit_speed",
             on_change=_convert_display_input_state,
         )
         pressure = st.selectbox(
             "圧力",
-            ("Pa", "psi"),
+            ("Pa", "kPa", "hPa", "psi", "psf"),
             key="unit_pressure",
             on_change=_convert_display_input_state,
         )
         temperature = st.selectbox(
             "温度",
-            ("K", "°F"),
+            ("K", "°C", "°F", "°R"),
             key="unit_temperature",
             on_change=_convert_display_input_state,
         )
         density = st.selectbox(
             "密度",
-            ("kg/m³", "slug/ft³"),
+            ("kg/m³", "slug/ft³", "lbm/ft³"),
             key="unit_density",
+            on_change=_convert_display_input_state,
+        )
+        force = st.selectbox(
+            "力",
+            ("N", "lbf"),
+            key="unit_force",
+            on_change=_convert_display_input_state,
+        )
+        inverse_length = st.selectbox(
+            "逆長さ",
+            ("1/m", "1/ft", "1/in"),
+            key="unit_inverse_length",
             on_change=_convert_display_input_state,
         )
         angle = st.selectbox(
@@ -196,10 +214,13 @@ def render_unit_sidebar() -> UnitPreferences:
     st.sidebar.caption("計算コアへ渡す前にSIへ明示変換します。")
     preferences = UnitPreferences(
         length=length,
+        area=area,
         speed=speed,
         pressure=pressure,
         temperature=temperature,
         density=density,
+        force=force,
+        inverse_length=inverse_length,
         angle=angle,
     )
     st.session_state[_UNIT_STATE_KEY] = preferences.to_dict()

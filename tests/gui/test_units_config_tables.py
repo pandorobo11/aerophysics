@@ -33,11 +33,25 @@ from aerophysics.gui.units import (
     ("kind", "unit", "values"),
     [
         ("length", "ft", [0.0, 3.0, 10.0]),
+        ("length", "mm", [0.0, 3.0, 10.0]),
+        ("length", "in", [0.0, 3.0, 10.0]),
+        ("area", "ft²", [0.0, 3.0, 10.0]),
+        ("area", "in²", [0.0, 3.0, 10.0]),
         ("speed", "kt", [0.0, 100.0]),
+        ("speed", "ft/s", [0.0, 100.0]),
         ("pressure", "psi", [0.0, 14.7]),
+        ("pressure", "psf", [0.0, 2116.0]),
+        ("pressure", "kPa", [0.0, 101.325]),
+        ("pressure", "hPa", [0.0, 1013.25]),
         ("density", "slug/ft³", [0.0, 0.00237]),
+        ("density", "lbm/ft³", [0.0, 0.0765]),
+        ("force", "lbf", [0.0, 100.0]),
+        ("inverse_length", "1/ft", [0.0, 100.0]),
+        ("inverse_length", "1/in", [0.0, 100.0]),
         ("angle", "deg", [0.0, 10.0, 90.0]),
+        ("temperature", "°C", [-40.0, 0.0, 100.0]),
         ("temperature", "°F", [-40.0, 32.0, 100.0]),
+        ("temperature", "°R", [0.0, 491.67, 671.67]),
     ],
 )
 def test_display_unit_round_trip(kind: str, unit: str, values: list[float]) -> None:
@@ -88,6 +102,22 @@ def test_configuration_round_trip() -> None:
     assert restored == configuration
     assert restored["schema_version"] == CONFIG_SCHEMA_VERSION
     assert json.loads(serialized)["display_units"]["length"] == "ft"
+
+
+def test_legacy_display_unit_configuration_uses_new_defaults() -> None:
+    legacy = {
+        "length": "ft",
+        "speed": "kt",
+        "pressure": "psi",
+        "temperature": "°F",
+        "density": "slug/ft³",
+        "angle": "deg",
+    }
+    preferences = UnitPreferences.from_dict(legacy)
+    assert preferences.length == "ft"
+    assert preferences.area == "m²"
+    assert preferences.force == "N"
+    assert preferences.inverse_length == "1/m"
 
 
 def test_detached_shock_configuration_table_and_shape_csv() -> None:
@@ -198,6 +228,40 @@ def test_display_table_and_csv() -> None:
         rows_to_csv([])
     with pytest.raises(ValueError, match="unsupported"):
         columns_for("missing")
+
+
+def test_display_table_converts_new_quantity_kinds() -> None:
+    flight: tuple[Row, ...] = (
+        {
+            "reynolds_number_per_length": 1000.0,
+        },
+    )
+    flight_table = display_rows(
+        "flight", flight, UnitPreferences(inverse_length="1/ft")
+    )
+    assert flight_table[0]["Reynolds数/長さ [1/ft]"] == pytest.approx(304.8)
+
+    isentropic: tuple[Row, ...] = ({"static_density": 1.225},)
+    isentropic_table = display_rows(
+        "isentropic", isentropic, UnitPreferences(density="lbm/ft³")
+    )
+    density_heading = next(
+        column.heading(UnitPreferences(density="lbm/ft³"))
+        for column in columns_for("isentropic")
+        if column.key == "static_density"
+    )
+    assert isentropic_table[0][density_heading] == pytest.approx(0.07647, rel=1e-4)
+
+    protrusion: tuple[Row, ...] = (
+        {"direct_drag": 4.4482216152605, "frontal_area": 0.09290304},
+    )
+    protrusion_table = display_rows(
+        "protrusion_drag",
+        protrusion,
+        UnitPreferences(force="lbf", area="ft²"),
+    )
+    assert protrusion_table[0]["直接抗力 D [lbf]"] == pytest.approx(1.0)
+    assert protrusion_table[0]["前面面積 [ft²]"] == pytest.approx(1.0)
 
 
 def test_conical_shock_table_converts_angles() -> None:

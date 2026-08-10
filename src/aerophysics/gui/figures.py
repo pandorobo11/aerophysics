@@ -100,8 +100,10 @@ def flight_figures(
         ),
         (
             "reynolds_number_per_length",
-            _numeric(rows, "reynolds_number_per_length"),
-            "1/m",
+            _converted(
+                rows, "reynolds_number_per_length", "inverse_length", preferences
+            ),
+            preferences.inverse_length,
         ),
     )
     for index, (name, values, unit) in enumerate(flight_values):
@@ -883,7 +885,13 @@ def protrusion_figures(
         x_title = "Mach M" if sweep_field == "mach" else "抗力係数 C_D"
     loads = make_subplots(rows=1, cols=2, subplot_titles=("直接抗力", "実効動圧"))
     loads.add_trace(
-        go.Scatter(x=x, y=_numeric(rows, "direct_drag"), name="D"), row=1, col=1
+        go.Scatter(
+            x=x,
+            y=_converted(rows, "direct_drag", "force", preferences),
+            name="D",
+        ),
+        row=1,
+        col=1,
     )
     loads.add_trace(
         go.Scatter(
@@ -895,7 +903,7 @@ def protrusion_figures(
         col=2,
     )
     loads.update_xaxes(title_text=x_title)
-    loads.update_yaxes(title_text="N", row=1, col=1)
+    loads.update_yaxes(title_text=preferences.force, row=1, col=1)
     loads.update_yaxes(title_text=preferences.pressure, row=1, col=2)
     shielding = go.Figure()
     shielding.add_trace(

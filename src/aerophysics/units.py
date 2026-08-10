@@ -16,12 +16,14 @@ from numpy.typing import ArrayLike
 from aerophysics._array import FloatResult, as_float_array, return_float
 
 FOOT_TO_METER: Final = 0.3048
+INCH_TO_METER: Final = 0.0254
 KNOT_TO_METER_PER_SECOND: Final = 1_852.0 / 3_600.0
 POUND_MASS_TO_KILOGRAM: Final = 0.45359237
 POUND_FORCE_TO_NEWTON: Final = 4.4482216152605
 PSI_TO_PASCAL: Final = POUND_FORCE_TO_NEWTON / 0.0254**2
 PSF_TO_PASCAL: Final = PSI_TO_PASCAL / 144.0
 SLUG_TO_KILOGRAM: Final = POUND_FORCE_TO_NEWTON / FOOT_TO_METER
+RANKINE_TO_KELVIN: Final = 5.0 / 9.0
 
 
 def _scale(value: ArrayLike, *, factor: float, name: str) -> FloatResult:
@@ -37,6 +39,16 @@ def feet_to_meters(value: ArrayLike) -> FloatResult:
 def meters_to_feet(value: ArrayLike) -> FloatResult:
     """Convert metres to international feet."""
     return _scale(value, factor=1.0 / FOOT_TO_METER, name="meters")
+
+
+def inches_to_meters(value: ArrayLike) -> FloatResult:
+    """Convert international inches to metres."""
+    return _scale(value, factor=INCH_TO_METER, name="inches")
+
+
+def meters_to_inches(value: ArrayLike) -> FloatResult:
+    """Convert metres to international inches."""
+    return _scale(value, factor=1.0 / INCH_TO_METER, name="meters")
 
 
 def knots_to_meters_per_second(value: ArrayLike) -> FloatResult:
@@ -69,6 +81,38 @@ def kelvin_to_fahrenheit(value: ArrayLike) -> FloatResult:
         raise ValueError("kelvin must not be below zero")
     result = (array - 273.15) * (9.0 / 5.0) + 32.0
     return return_float(result, scalar=scalar)
+
+
+def celsius_to_kelvin(value: ArrayLike) -> FloatResult:
+    """Convert degrees Celsius to kelvin."""
+    array, scalar = as_float_array(value, name="celsius")
+    if np.any(array < -273.15):
+        raise ValueError("celsius must not be below absolute zero")
+    return return_float(np.maximum(array + 273.15, 0.0), scalar=scalar)
+
+
+def kelvin_to_celsius(value: ArrayLike) -> FloatResult:
+    """Convert kelvin to degrees Celsius."""
+    array, scalar = as_float_array(value, name="kelvin")
+    if np.any(array < 0.0):
+        raise ValueError("kelvin must not be below zero")
+    return return_float(array - 273.15, scalar=scalar)
+
+
+def rankine_to_kelvin(value: ArrayLike) -> FloatResult:
+    """Convert degrees Rankine to kelvin."""
+    array, scalar = as_float_array(value, name="rankine")
+    if np.any(array < 0.0):
+        raise ValueError("rankine must not be below zero")
+    return return_float(array * RANKINE_TO_KELVIN, scalar=scalar)
+
+
+def kelvin_to_rankine(value: ArrayLike) -> FloatResult:
+    """Convert kelvin to degrees Rankine."""
+    array, scalar = as_float_array(value, name="kelvin")
+    if np.any(array < 0.0):
+        raise ValueError("kelvin must not be below zero")
+    return return_float(array / RANKINE_TO_KELVIN, scalar=scalar)
 
 
 def psi_to_pascals(value: ArrayLike) -> FloatResult:
@@ -115,6 +159,16 @@ def kilograms_to_slugs(value: ArrayLike) -> FloatResult:
     return _scale(value, factor=1.0 / SLUG_TO_KILOGRAM, name="kilograms")
 
 
+def pounds_force_to_newtons(value: ArrayLike) -> FloatResult:
+    """Convert pounds-force to newtons."""
+    return _scale(value, factor=POUND_FORCE_TO_NEWTON, name="pounds_force")
+
+
+def newtons_to_pounds_force(value: ArrayLike) -> FloatResult:
+    """Convert newtons to pounds-force."""
+    return _scale(value, factor=1.0 / POUND_FORCE_TO_NEWTON, name="newtons")
+
+
 def degrees_to_radians(value: ArrayLike) -> FloatResult:
     """Convert degrees to radians."""
     return _scale(value, factor=np.pi / 180.0, name="degrees")
@@ -127,26 +181,36 @@ def radians_to_degrees(value: ArrayLike) -> FloatResult:
 
 __all__ = [
     "FOOT_TO_METER",
+    "INCH_TO_METER",
     "KNOT_TO_METER_PER_SECOND",
     "POUND_FORCE_TO_NEWTON",
     "POUND_MASS_TO_KILOGRAM",
     "PSF_TO_PASCAL",
     "PSI_TO_PASCAL",
+    "RANKINE_TO_KELVIN",
     "SLUG_TO_KILOGRAM",
+    "celsius_to_kelvin",
     "degrees_to_radians",
     "fahrenheit_to_kelvin",
     "feet_to_meters",
+    "inches_to_meters",
+    "kelvin_to_celsius",
     "kelvin_to_fahrenheit",
+    "kelvin_to_rankine",
     "kilograms_to_pounds_mass",
     "kilograms_to_slugs",
     "knots_to_meters_per_second",
     "meters_per_second_to_knots",
     "meters_to_feet",
+    "meters_to_inches",
+    "newtons_to_pounds_force",
     "pascals_to_psf",
     "pascals_to_psi",
+    "pounds_force_to_newtons",
     "pounds_mass_to_kilograms",
     "psf_to_pascals",
     "psi_to_pascals",
     "radians_to_degrees",
+    "rankine_to_kelvin",
     "slugs_to_kilograms",
 ]

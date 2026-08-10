@@ -67,10 +67,13 @@ def test_flight_figures_have_expected_panels() -> None:
         points=3,
         characteristic_length=1.0,
     )
-    figures = flight_figures(result.rows, UnitPreferences(length="ft"))
+    figures = flight_figures(
+        result.rows, UnitPreferences(length="ft", inverse_length="1/ft")
+    )
     assert set(figures) == {"大気状態", "飛行状態", "全状態量"}
     assert len(figures["大気状態"].data) == 4
     assert "ft" in str(figures["大気状態"].layout.xaxis.title.text)
+    assert "1/ft" in str(figures["飛行状態"].layout.yaxis4.title.text)
     motion_figures = flight_figures(
         result.rows,
         UnitPreferences(),
@@ -290,10 +293,19 @@ def test_boundary_profile_and_protrusion_figures() -> None:
         boundary_layer_thickness=0.05,
     )
     trends = protrusion_figures(
-        sweep.rows, UnitPreferences(length="ft"), sweep_field="height"
+        sweep.rows,
+        UnitPreferences(length="ft", force="lbf"),
+        sweep_field="height",
     )
     assert set(trends) == {"抗力・動圧", "遮蔽"}
     assert "ft" in str(trends["抗力・動圧"].layout.xaxis.title.text)
+    assert "lbf" in str(trends["抗力・動圧"].layout.yaxis.title.text)
+    expected_drag: list[float] = []
+    for row in sweep.rows:
+        direct_drag = row["direct_drag"]
+        assert isinstance(direct_drag, float)
+        expected_drag.append(direct_drag / 4.4482216152605)
+    assert list(trends["抗力・動圧"].data[0].y) == pytest.approx(expected_drag)
     coefficient = protrusion_figures(
         sweep.rows, UnitPreferences(), sweep_field="drag_coefficient"
     )

@@ -19,12 +19,21 @@ Conversion equations
    * - International feet to metres
      - :math:`x_\mathrm{m}=0.3048x_\mathrm{ft}`
      - ``feet_to_meters``
+   * - International inches to metres
+     - :math:`x_\mathrm{m}=0.0254x_\mathrm{in}`
+     - ``inches_to_meters``
    * - Knots to metres per second
      - :math:`V_\mathrm{m/s}=(1852/3600)V_\mathrm{kt}`
      - ``knots_to_meters_per_second``
    * - Degrees Fahrenheit to kelvin
      - :math:`T_\mathrm{K}=(T_\mathrm{^\circ F}-32)(5/9)+273.15`
      - ``fahrenheit_to_kelvin``
+   * - Degrees Celsius to kelvin
+     - :math:`T_\mathrm{K}=T_\mathrm{^\circ C}+273.15`
+     - ``celsius_to_kelvin``
+   * - Degrees Rankine to kelvin
+     - :math:`T_\mathrm{K}=(5/9)T_\mathrm{^\circ R}`
+     - ``rankine_to_kelvin``
    * - Pounds-force per square inch to pascals
      - :math:`p_\mathrm{Pa}=6894.757293168p_\mathrm{psi}`
      - ``psi_to_pascals``
@@ -37,6 +46,9 @@ Conversion equations
    * - Slugs to kilograms
      - :math:`m_\mathrm{kg}=14.5939029372m_\mathrm{slug}`
      - ``slugs_to_kilograms``
+   * - Pounds-force to newtons
+     - :math:`F_\mathrm{N}=4.4482216152605F_\mathrm{lbf}`
+     - ``pounds_force_to_newtons``
    * - Degrees to radians
      - :math:`\theta_\mathrm{rad}=(\pi/180)\theta_\mathrm{deg}`
      - ``degrees_to_radians``
@@ -48,7 +60,8 @@ uses the affine inverse
 
    T_\mathrm{^\circ F}=(T_\mathrm{K}-273.15)(9/5)+32.
 
-Values below absolute zero are rejected by the temperature converters.
+Values below absolute zero are rejected by the temperature converters. These
+functions convert absolute temperatures, not temperature intervals.
 
 Examples
 --------

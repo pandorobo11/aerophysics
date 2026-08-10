@@ -5,6 +5,17 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-11
+
+### Added
+
+- Extend explicit unit conversions with inches, Celsius, Rankine, and
+  pounds-force, and expand GUI display choices with millimetres, feet per
+  second, engineering pressure units, and pounds mass per cubic foot.
+- Add selectable area, force, and inverse-length display units, and apply unit
+  preferences to Reynolds number per length, static density, direct drag, and
+  frontal area in GUI tables and plots.
+
 ### Changed
 
 - Add section landing pages and a complete top-level documentation map so the
@@ -125,7 +136,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Typed public APIs, cross-platform CI, Sphinx documentation, and validated
   examples.
 
-[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/pandorobo11/aerophysics/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.5.0
 [0.4.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.4.0
 [0.3.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.3.0
