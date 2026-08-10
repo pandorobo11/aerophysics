@@ -24,6 +24,8 @@ relations are
 
 ``AIR`` uses :math:`R=8314.32/28.9644\ \mathrm{J/(kg\,K)}` and
 :math:`\gamma=1.4`. All temperatures must be positive.
+The constants follow :ref:`U.S. Standard Atmosphere 1976
+<ref-us-standard-atmosphere-1976>`.
 
 .. list-table:: Gas-property symbols
    :header-rows: 1
@@ -77,6 +79,9 @@ nonequilibrium.
 
 U.S. Standard Atmosphere 1976
 -----------------------------
+
+The layer definitions, constants, and equations follow
+:ref:`U.S. Standard Atmosphere 1976 <ref-us-standard-atmosphere-1976>`.
 
 :func:`aerophysics.atmosphere.standard_atmosphere` accepts geometric altitude
 :math:`h` and converts it to geopotential altitude :math:`H`:

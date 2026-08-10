@@ -4,7 +4,9 @@ Flight conditions
 :class:`aerophysics.flight.FlightCondition` combines a standard-atmosphere
 state with either a Mach number or a velocity. It is the convenient entry
 point when one consistent ambient, dynamic, Reynolds-number, and total state
-is needed.
+is needed. Atmospheric properties follow :ref:`U.S. Standard Atmosphere 1976
+<ref-us-standard-atmosphere-1976>`, and the calorically perfect total-state
+relations follow :ref:`NACA Report 1135 <ref-naca-report-1135>`.
 
 Relations
 ---------
@@ -40,7 +42,7 @@ Define :math:`F(M)=1+(\gamma-1)M^2/2`. The isentropic total conditions are
 
 The atmosphere supplies :math:`T`, :math:`p`, :math:`\rho`, :math:`a`, and
 :math:`\mu`; see :doc:`gas_and_atmosphere`. The total-state convention and
-factor are described in :doc:`compressible_flow`.
+factor are described in :doc:`isentropic_flow`.
 
 .. list-table:: Flight-condition symbols
    :header-rows: 1

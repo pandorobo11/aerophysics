@@ -8,12 +8,16 @@ This record covers ``PerfectGas``, NASA seven- and nine-coefficient frozen-air
 thermochemistry, Sutherland, Keyes, Blottner/Wilke and USSA transport models,
 the harmonic-oscillator gas, and the Beattie--Bridgeman air model.
 
-NASA7 coefficients are pinned to the Cantera ``nasa_gas.yaml`` revision
-identified in ``aerophysics._nasa_data`` and trace to NASA TM-4513.  NASA9
-coefficients are pinned to NASA CEA and trace to NASA/TP-2002-211556.  The
-harmonic-oscillator and Beattie--Bridgeman constants follow the air models and
-FORTRAN listings in JAXA-RR-06-011.  Formula provenance for Sutherland, Keyes,
-Blottner, Wilke, and USSA conductivity is listed in :doc:`references`.
+NASA7 coefficients are pinned to the :ref:`Cantera NASA gas data
+<ref-cantera-nasa-gas-data>` and trace to :ref:`NASA TM-4513
+<ref-mcbride-gordon-reno-1993>`. NASA9 coefficients are pinned to
+:ref:`NASA CEA <ref-nasa-cea-data>` and trace to :ref:`NASA/TP-2002-211556
+<ref-mcbride-zehe-gordon-2002>`. The harmonic-oscillator and
+Beattie--Bridgeman constants follow :ref:`Watari (2007)
+<ref-watari-2007-report>` and the original sources :ref:`Kennard (1938)
+<ref-kennard-1938>` and :ref:`Beattie and Bridgeman (1928)
+<ref-beattie-bridgeman-1928>`. Transport provenance is linked directly from
+:doc:`../models/transport_properties`.
 
 Independent software snapshots
 ------------------------------
@@ -34,13 +38,13 @@ SHA-256 are committed beside each static CSV.
 Results
 -------
 
-.. include:: _generated/thermophysical_validation.rst
+.. include:: ../_generated/thermophysical_validation.rst
 
-.. image:: _static/thermophysical_properties.svg
+.. image:: ../_static/thermophysical_properties.svg
    :alt: NASA7 and NASA9 frozen dry-air heat capacity from 200 to 6000 kelvin.
    :align: center
 
-.. image:: _static/thermophysical_transport_differences.svg
+.. image:: ../_static/thermophysical_transport_differences.svg
    :alt: Observation-only viscosity and conductivity differences from CoolProp Air.
    :align: center
 

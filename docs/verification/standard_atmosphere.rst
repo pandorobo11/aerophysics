@@ -1,24 +1,19 @@
-Verification
-============
-
-This chapter records reproducible checks of the equations implemented by
-``aerophysics``.  A verification result establishes agreement with a stated
-reference or mathematical property; it is not a substitute for experimental
-validation.  Detailed records now cover :doc:`verification_compressible_flow`,
-:doc:`verification_thermophysical`, and :doc:`verification_viscous_flow` in
-addition to the first record for
-:func:`aerophysics.atmosphere.standard_atmosphere` and all fifteen fields of
-:class:`aerophysics.atmosphere.AtmosphereState`.
-
 U.S. Standard Atmosphere 1976
------------------------------
+=============================
+
+This record verifies
+:func:`aerophysics.atmosphere.standard_atmosphere` and all fifteen fields of
+:class:`aerophysics.atmosphere.AtmosphereState`. Agreement with a stated
+reference or mathematical property is verification, not a substitute for
+experimental validation.
 
 Scope and sources
 ^^^^^^^^^^^^^^^^^
 
-The primary source is *U.S. Standard Atmosphere, 1976*, NOAA-S/T 76-1562,
-NASA-TM-X-74335.  The source PDF is kept locally for review but is not tracked
-by Git.  Values needed by offline tests are independently transcribed to
+The primary source is :ref:`U.S. Standard Atmosphere 1976
+<ref-us-standard-atmosphere-1976>`. The source PDF is kept locally for review
+but is not tracked by Git. Values needed by offline tests are independently
+transcribed to
 ``tests/reference_data/standard_atmosphere/official_1976.csv`` with their
 table number, printed page, coordinate type, SI value, and absolute
 tolerance.
@@ -77,7 +72,7 @@ The full implemented range is also sampled at 1 m spacing.  The tests require:
 Results
 ^^^^^^^
 
-.. include:: _generated/standard_atmosphere_validation.rst
+.. include:: ../_generated/standard_atmosphere_validation.rst
 
 Physical interpretation
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -88,7 +83,7 @@ balance, gravity falls gradually with distance from the Earth's centre, and
 kinematic viscosity rises because density falls much faster than dynamic
 viscosity changes.
 
-.. image:: _static/standard_atmosphere_profiles.svg
+.. image:: ../_static/standard_atmosphere_profiles.svg
    :alt: Six physical profiles of the U.S. Standard Atmosphere from minus 5 to 86 kilometres.
    :align: center
 
@@ -97,7 +92,7 @@ from differences normalized by each official cell's printed-digit tolerance.
 The horizontal line at one in the official panel is the stricter diagnostic
 boundary; it is not the overall acceptance boundary.
 
-.. image:: _static/standard_atmosphere_comparison.svg
+.. image:: ../_static/standard_atmosphere_comparison.svg
    :alt: Relative differences from fluids and normalized differences from official tables.
    :align: center
 

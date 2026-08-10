@@ -26,6 +26,9 @@ does not provide a laminar or transition model or a universal treatment of
 roughness, three-dimensionality, pressure gradients, separation, or
 thermochemical nonequilibrium.
 
+For a task-oriented path from a flat-plate estimate to a mean profile and
+protrusion-drag calculation, see :doc:`../guides/boundary_layers`.
+
 Common notation
 ---------------
 
@@ -74,7 +77,9 @@ The following models are distinct and should not be interchanged:
   momentum-thickness correlations.  The
   :class:`~aerophysics.boundary_layer.CompressibilityCorrection`\ ``.VAN_DRIEST_II``
   option implements an engineering form of that skin-friction correction; it
-  does not return a transformed mean velocity profile.
+  does not return a transformed mean velocity profile. See :ref:`Hopkins and
+  Inouye (1971) <ref-hopkins-inouye-1971>` and :ref:`Hopkins (1972)
+  <ref-hopkins-1972>`.
 * The **Van Driest damping function** from 1956 modifies a near-wall
   mixing-length or eddy-viscosity model.  It is neither of the two
   transformations above.

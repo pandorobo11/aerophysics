@@ -4,6 +4,7 @@ Unit conversions
 The functions in :mod:`aerophysics.units` make customary-to-SI conversions
 explicit at the package boundary. Aerodynamic calculation APIs otherwise use
 SI units. Forward and inverse functions share the same exact constants.
+The factors follow :ref:`NIST Special Publication 811 <ref-nist-sp-811>`.
 
 Conversion equations
 --------------------

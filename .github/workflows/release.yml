@@ -97,12 +97,38 @@ jobs:
           with ZipFile(expected[-1]) as archive:
               names = set(archive.namelist())
           required_docs = {
-              f"{prefix}/gas_and_atmosphere.html",
-              f"{prefix}/compressible_flow.html",
-              f"{prefix}/boundary_layers.html",
-              f"{prefix}/flight_conditions.html",
-              f"{prefix}/unit_conversions.html",
               f"{prefix}/index.html",
+              f"{prefix}/getting_started/installation.html",
+              f"{prefix}/getting_started/quickstart.html",
+              f"{prefix}/getting_started/conventions.html",
+              f"{prefix}/guides/atmosphere_flight.html",
+              f"{prefix}/guides/compressible_flow.html",
+              f"{prefix}/guides/boundary_layers.html",
+              f"{prefix}/guides/vectorization_errors.html",
+              f"{prefix}/guides/gui.html",
+              f"{prefix}/models/gas_and_atmosphere.html",
+              f"{prefix}/models/transport_properties.html",
+              f"{prefix}/models/thermochemistry.html",
+              f"{prefix}/models/isentropic_flow.html",
+              f"{prefix}/models/shock_waves.html",
+              f"{prefix}/models/expansion_waves.html",
+              f"{prefix}/models/flat_plate_boundary_layer.html",
+              f"{prefix}/models/compressible_velocity_transformations.html",
+              f"{prefix}/models/protrusion_drag.html",
+              f"{prefix}/models/flight_conditions.html",
+              f"{prefix}/models/unit_conversions.html",
+              f"{prefix}/verification/index.html",
+              f"{prefix}/verification/standard_atmosphere.html",
+              f"{prefix}/verification/compressible_flow.html",
+              f"{prefix}/verification/thermophysical.html",
+              f"{prefix}/verification/viscous_flow.html",
+              f"{prefix}/api/index.html",
+              f"{prefix}/api/thermophysical.html",
+              f"{prefix}/api/compressible_flow.html",
+              f"{prefix}/api/viscous_flow.html",
+              f"{prefix}/api/flight_units.html",
+              f"{prefix}/api/errors.html",
+              f"{prefix}/references.html",
               f"{prefix}/searchindex.js",
               f"{prefix}/_static/basic.css",
           }
@@ -110,6 +136,27 @@ jobs:
           if missing_docs:
               raise SystemExit(
                   f"Missing documentation files: {', '.join(missing_docs)}"
+              )
+          legacy_docs = {
+              f"{prefix}/quickstart.html",
+              f"{prefix}/gas_and_atmosphere.html",
+              f"{prefix}/transport_properties.html",
+              f"{prefix}/thermochemistry.html",
+              f"{prefix}/compressible_flow.html",
+              f"{prefix}/boundary_layers.html",
+              f"{prefix}/compressible_velocity_transformations.html",
+              f"{prefix}/flight_conditions.html",
+              f"{prefix}/unit_conversions.html",
+              f"{prefix}/verification.html",
+              f"{prefix}/verification_compressible_flow.html",
+              f"{prefix}/verification_thermophysical.html",
+              f"{prefix}/verification_viscous_flow.html",
+              f"{prefix}/api.html",
+          }
+          unexpected_docs = sorted(legacy_docs & names)
+          if unexpected_docs:
+              raise SystemExit(
+                  f"Legacy documentation files remain: {', '.join(unexpected_docs)}"
               )
           PY
 

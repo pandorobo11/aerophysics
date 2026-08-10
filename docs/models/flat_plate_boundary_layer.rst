@@ -1,18 +1,25 @@
-Boundary-layer engineering models
-=================================
+.. _flat-plate-boundary-layer-model:
 
-This page describes the flat-plate boundary-layer and immersed-protrusion
-models, including their equations, variables, applicability, and API mapping.
-The separate :doc:`compressible_velocity_transformations` page covers
-mean-velocity profile transformations in greater depth.
+Flat-plate boundary-layer model
+===============================
 
-Flat-plate model
-----------------
+This page describes the smooth flat-plate boundary-layer correlations,
+including their equations, variables, applicability, and API mapping. For
+task-oriented examples, see :doc:`../guides/boundary_layers`. Mean-velocity
+profile transformations are documented separately in
+:doc:`compressible_velocity_transformations`.
+
+Correlation definition
+----------------------
 
 :func:`aerophysics.boundary_layer.flat_plate_boundary_layer` models one side
 of a smooth flat plate with a sharp leading edge, zero pressure gradient, and
 constant edge conditions. Distance :math:`x` is measured from the leading
 edge, and drag is reported per unit spanwise width.
+
+The standard incompressible definitions and correlations used below are
+summarized by :ref:`Schlichting and Gersten (2000)
+<ref-schlichting-gersten-2000>` and :ref:`White (2006) <ref-white-2006>`.
 
 The caller selects
 :class:`~aerophysics.boundary_layer.BoundaryLayerRegime` ``LAMINAR``,
@@ -241,7 +248,8 @@ For ``CompressibilityCorrection.ECKERT``,
 Here :math:`\mu^*=\mu(T^*)` is evaluated with the selected dynamic-viscosity
 model.
 The incompressible thickness and friction correlations are evaluated at
-:math:`Re_x^*`.
+:math:`Re_x^*`. The implemented reference-temperature expression is recorded
+by :ref:`Glass and Hunt (1988) <ref-glass-hunt-1988>`.
 
 Van Driest II method
 ~~~~~~~~~~~~~~~~~~~~
@@ -280,6 +288,12 @@ floating-point excursions at the endpoints. The transformation factors are
    \qquad
    Re_{x,i}=F_xRe_x.
 
+These transformation factors follow the form stated by :ref:`Gnoffo, Berry,
+and Van Norman (2011) <ref-gnoffo-berry-van-norman-2011>`. The method and its
+flat-plate skin-friction application are documented by :ref:`Lee and Faget
+(1956) <ref-lee-faget-1956>`, :ref:`Hopkins and Inouye (1971)
+<ref-hopkins-inouye-1971>`, and :ref:`Hopkins (1972) <ref-hopkins-1972>`.
+
 The equivalent incompressible local coefficient is the positive solution of
 
 .. math::
@@ -288,6 +302,9 @@ The equivalent incompressible local coefficient is the positive solution of
    =0.41+\log_{10}(Re_{x,i}C_{f,i}),
    \qquad
    C_f=\frac{C_{f,i}}{F_C}.
+
+The local implicit relation is also given by :ref:`Willems and Gülhan
+(2013) <ref-willems-gulhan-2013>`.
 
 The average coefficient uses the corresponding equation without the local
 intercept:
@@ -376,134 +393,11 @@ gives :math:`Re_x=6.84587\times10^6`, :math:`C_{f,x}=0.002670314`,
 The result object is
 :class:`aerophysics.boundary_layer.FlatPlateBoundaryLayerResult`.
 
-Mean-property profiles
-----------------------
-
-:func:`aerophysics.boundary_layer_profile.compressible_turbulent_boundary_layer_profile`
-predicts a smooth-wall, zero-pressure-gradient mean profile from supplied edge
-conditions, :math:`\delta_{99}`, and wall shear stress. It combines Spalding's
-wall law and the Coles wake with either a Van Driest or Volpiani inverse
-transformation. GRA is the default temperature--velocity closure; Walz is
-selectable. The result includes velocity and thermodynamic arrays plus
-profile-integrated displacement and momentum thicknesses.
-
-This profile API is independent of ``flat_plate_boundary_layer``. The latter
-can estimate :math:`\delta_{99}` and wall shear, but the caller passes them
-explicitly. The model is limited to fully turbulent, smooth, approximately
-zero-pressure-gradient flow. See
-:ref:`compressible-velocity-transformations` for equations and examples.
-
-Boundary-layer-immersed protrusions
------------------------------------
-
-:func:`aerophysics.protrusion.protrusion_drag` estimates direct drag on one
-isolated protrusion by integrating the undisturbed local dynamic pressure over
-its frontal area. For height :math:`h` and projected width :math:`b(y)`,
-
-.. math::
-
-   A_f=\int_0^hb(y)\,\mathrm{d}y,
-   \qquad
-   q_\mathrm{eff}
-   =\frac{1}{A_f}\int_0^h
-    \frac{1}{2}\rho(y)U(y)^2b(y)\,\mathrm{d}y.
-
-The direct drag and shielding factor are
-
-.. math::
-
-   D=C_Dq_\mathrm{eff}A_f,
-   \qquad
-   \eta_q=\frac{q_\mathrm{eff}}{q_e},
-   \qquad
-   q_e=\frac{1}{2}\rho_eU_e^2.
-
-The default turbulent velocity approximation is
-
-.. math::
-
-   \frac{U}{U_e}
-   =\min\left[\left(\frac{y}{\delta}\right)^{1/7},1\right].
-
-For constant width and density with :math:`h\le\delta`,
-
-.. math::
-
-   \eta_q=\frac{7}{9}\left(\frac{h}{\delta}\right)^{2/7}.
-
-Measured or computed velocity and density profiles may be supplied instead.
-For the optional compressible approximation, the Walz relation is
-
-.. math::
-
-   T(y)=T_w+(T_r-T_w)\frac{U}{U_e}
-        +(T_e-T_r)\left(\frac{U}{U_e}\right)^2,
-
-.. math::
-
-   T_r=T_e\left[1+Pr^{1/3}\frac{\gamma-1}{2}M_e^2\right],
-   \qquad
-   \frac{\rho(y)}{\rho_e}=\frac{T_e}{T(y)}.
-
-.. list-table:: Protrusion symbols
-   :header-rows: 1
-   :widths: 16 29 39 16
-
-   * - Symbol
-     - API name
-     - Meaning
-     - SI unit
-   * - :math:`h`
-     - ``height``
-     - Protrusion height
-     - m
-   * - :math:`b(y)`
-     - ``frontal_width`` or profile input
-     - Projected width at wall-normal position
-     - m
-   * - :math:`A_f`
-     - ``frontal_area``
-     - Projected frontal area
-     - m²
-   * - :math:`C_D`
-     - ``drag_coefficient``
-     - Supplied free-stream drag coefficient
-     - dimensionless
-   * - :math:`D`
-     - ``direct_drag``
-     - Estimated protrusion direct drag
-     - N
-   * - :math:`\eta_q`
-     - ``shielding_factor``
-     - Effective-to-edge dynamic-pressure ratio
-     - dimensionless
-
-This approximation does not solve the flow around the protrusion. It excludes
-wall interference, horseshoe vortices, roughness-induced transition,
-downstream skin-friction changes, multiple-element interference, and
-shock/protrusion interaction. A transonic case with a single supplied drag
-coefficient emits :class:`~aerophysics.exceptions.ApplicabilityWarning`.
-
->>> from aerophysics import protrusion_drag
->>> drag = protrusion_drag(
-...     1.1,
-...     height=0.02,
-...     frontal_width=0.01,
-...     edge_velocity=100.0,
-...     edge_density=1.225,
-...     boundary_layer_thickness=0.1,
-... )
->>> round(drag.shielding_factor, 6)
-0.491073
->>> round(drag.direct_drag, 6)
-0.661721
-
-Overall applicability
----------------------
+Applicability
+-------------
 
 The flat-plate model excludes surface roughness, streamwise pressure
 gradients, separation, suction, blowing, and natural-transition prediction.
 The gas remains calorically perfect and compressible transport properties use
-the supplied dynamic-viscosity model. The thickness correlations and protrusion
-corrections are engineering estimates rather than resolved profile or
-three-dimensional flow solutions.
+the supplied dynamic-viscosity model. The thickness correlations are
+engineering estimates rather than resolved profile solutions.

@@ -7,6 +7,11 @@ heat capacity a function of temperature while retaining the ideal-gas equation
 of state. They do not add chemical equilibrium or thermodynamic
 nonequilibrium.
 
+The seven-coefficient form and data are documented by
+:ref:`McBride, Gordon, and Reno (1993) <ref-mcbride-gordon-reno-1993>`; the
+nine-coefficient form is documented by :ref:`McBride, Zehe, and Gordon (2002)
+<ref-mcbride-zehe-gordon-2002>`.
+
 NASA polynomial forms
 ---------------------
 
@@ -85,6 +90,10 @@ Built-in frozen dry air
 ``AIR_NASA7`` and ``AIR_NASA9`` use normalized U.S. Standard Atmosphere dry-air
 mole fractions for N2, O2, Ar, and CO2. Both coefficient sets have a common
 fitted range of 200--6000 K:
+
+``AIR_NASA7`` uses the :ref:`Cantera NASA gas data
+<ref-cantera-nasa-gas-data>` and ``AIR_NASA9`` uses the
+:ref:`NASA CEA data <ref-nasa-cea-data>` pinned by the package.
 
 >>> from aerophysics import AIR_NASA9
 >>> round(AIR_NASA9.cp(300.0), 3)

@@ -21,13 +21,13 @@ equation and limit checks remain the tighter implementation tests.
 Results
 -------
 
-.. include:: _generated/viscous_flow_validation.rst
+.. include:: ../_generated/viscous_flow_validation.rst
 
-.. image:: _static/viscous_skin_friction.svg
+.. image:: ../_static/viscous_skin_friction.svg
    :alt: Blasius, one-fifth-power, and Schlichting local skin-friction coefficients.
    :align: center
 
-.. image:: _static/protrusion_shielding.svg
+.. image:: ../_static/protrusion_shielding.svg
    :alt: Analytic boundary-layer shielding factor for a constant-width protrusion.
    :align: center
 

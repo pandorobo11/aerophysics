@@ -49,7 +49,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_version() -> None:
-    assert __version__ == "0.4.0"
+    assert __version__ == "0.5.0"
 
 
 def test_public_diagnostics() -> None:
@@ -155,13 +155,56 @@ def test_wheel_bundles_docs_and_installed_gui_finds_them(tmp_path: Path) -> None
         names = set(archive.namelist())
         required_docs = {
             "aerophysics/_docs/index.html",
+            "aerophysics/_docs/getting_started/installation.html",
+            "aerophysics/_docs/getting_started/quickstart.html",
+            "aerophysics/_docs/getting_started/conventions.html",
+            "aerophysics/_docs/guides/atmosphere_flight.html",
+            "aerophysics/_docs/guides/compressible_flow.html",
+            "aerophysics/_docs/guides/boundary_layers.html",
+            "aerophysics/_docs/guides/vectorization_errors.html",
+            "aerophysics/_docs/guides/gui.html",
+            "aerophysics/_docs/models/gas_and_atmosphere.html",
+            "aerophysics/_docs/models/transport_properties.html",
+            "aerophysics/_docs/models/thermochemistry.html",
+            "aerophysics/_docs/models/isentropic_flow.html",
+            "aerophysics/_docs/models/shock_waves.html",
+            "aerophysics/_docs/models/expansion_waves.html",
+            "aerophysics/_docs/models/flat_plate_boundary_layer.html",
+            "aerophysics/_docs/models/compressible_velocity_transformations.html",
+            "aerophysics/_docs/models/protrusion_drag.html",
+            "aerophysics/_docs/models/flight_conditions.html",
+            "aerophysics/_docs/models/unit_conversions.html",
+            "aerophysics/_docs/verification/index.html",
+            "aerophysics/_docs/verification/standard_atmosphere.html",
+            "aerophysics/_docs/verification/compressible_flow.html",
+            "aerophysics/_docs/verification/thermophysical.html",
+            "aerophysics/_docs/verification/viscous_flow.html",
+            "aerophysics/_docs/api/index.html",
+            "aerophysics/_docs/api/thermophysical.html",
+            "aerophysics/_docs/api/compressible_flow.html",
+            "aerophysics/_docs/api/viscous_flow.html",
+            "aerophysics/_docs/api/flight_units.html",
+            "aerophysics/_docs/api/errors.html",
+            "aerophysics/_docs/references.html",
+        }
+        legacy_docs = {
             "aerophysics/_docs/quickstart.html",
             "aerophysics/_docs/gas_and_atmosphere.html",
+            "aerophysics/_docs/transport_properties.html",
+            "aerophysics/_docs/thermochemistry.html",
             "aerophysics/_docs/compressible_flow.html",
             "aerophysics/_docs/boundary_layers.html",
+            "aerophysics/_docs/compressible_velocity_transformations.html",
+            "aerophysics/_docs/flight_conditions.html",
+            "aerophysics/_docs/unit_conversions.html",
+            "aerophysics/_docs/verification.html",
+            "aerophysics/_docs/verification_compressible_flow.html",
+            "aerophysics/_docs/verification_thermophysical.html",
+            "aerophysics/_docs/verification_viscous_flow.html",
             "aerophysics/_docs/api.html",
         }
         assert required_docs <= names
+        assert legacy_docs.isdisjoint(names)
         archive.extractall(tmp_path / "installed")
 
     environment = dict(os.environ)
@@ -175,7 +218,9 @@ def test_wheel_bundles_docs_and_installed_gui_finds_them(tmp_path: Path) -> None
                 "directory = _documentation_directory(); "
                 "assert directory is not None; "
                 "assert (directory / 'index.html').is_file(); "
-                "assert (directory / 'compressible_flow.html').is_file(); "
+                "assert (directory / 'models' / 'shock_waves.html').is_file(); "
+                "assert (directory / 'guides' / 'gui.html').is_file(); "
+                "assert not (directory / 'compressible_flow.html').exists(); "
                 "print(directory)"
             ),
         ],

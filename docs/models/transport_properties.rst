@@ -29,7 +29,8 @@ Sutherland model
 :math:`\mu_\mathrm{ref}=1.7894\times10^{-5}\ \mathrm{Pa\,s}`,
 :math:`T_\mathrm{ref}=288.15\ \mathrm{K}`, and :math:`S=110.4\ \mathrm{K}`.
 It remains the model used by the standard atmosphere and flight-condition
-calculations.
+calculations. The correlation follows :ref:`Sutherland (1893)
+<ref-sutherland-1893>`.
 
 >>> from aerophysics.transport import AIR_VISCOSITY
 >>> f"{AIR_VISCOSITY.dynamic_viscosity(300.0):.7e}"
@@ -48,6 +49,8 @@ Keyes model
 ``AIR_KEYES_VISCOSITY`` uses :math:`a_0=1.488\times10^{-6}`,
 :math:`a_1=122.1\ \mathrm{K}`, and :math:`a_2=5\ \mathrm{K}`. Its nominal
 temperature range is 79--1845 K.
+See :ref:`Keyes (1951) <ref-keyes-1951>` and the SI reproduction by
+:ref:`Bova, Bond, and Kirk (2010) <ref-bova-bond-kirk-2010>`.
 
 >>> from aerophysics.transport import AIR_KEYES_VISCOSITY
 >>> f"{AIR_KEYES_VISCOSITY.dynamic_viscosity(300.0):.7e}"
@@ -63,7 +66,9 @@ Blottner species and mixture models
    \mu_s(T)=0.1\exp\left[(A_s\ln T+B_s)\ln T+C_s\right].
 
 The nominal fitted range is 1000--30000 K. The built-in frozen dry-air model
-uses the following coefficients.
+uses coefficients from :ref:`Blottner, Johnson, and Ellis (1971)
+<ref-blottner-johnson-ellis-1971>` and :ref:`Doraiswamy (2010)
+<ref-doraiswamy-2010>`.
 
 .. list-table:: Built-in Blottner coefficients
    :header-rows: 1
@@ -91,7 +96,7 @@ uses the following coefficients.
 
 :class:`~aerophysics.transport.WilkeMixtureViscosityModel` combines species
 viscosities using mole fractions :math:`x_i`, molar masses :math:`M_i`, and
-Wilke's rule:
+Wilke's rule from :ref:`Wilke (1950) <ref-wilke-1950>`:
 
 .. math::
 
@@ -123,7 +128,7 @@ experimental measurements. Each curve and table entry is restricted to the
 nominal range of the fitted model being compared: 79--1845 K for Keyes and
 1000--30000 K for Blottner. No Keyes or Blottner extrapolation is included.
 
-.. figure:: _static/viscosity_model_comparison.svg
+.. figure:: ../_static/viscosity_model_comparison.svg
    :alt: Four-panel comparison of Sutherland, Keyes, and frozen-composition
          Blottner/Wilke dry-air dynamic-viscosity models
    :width: 100%
@@ -134,7 +139,7 @@ nominal range of the fitted model being compared: 79--1845 K for Keyes and
    fractions; it does not represent dissociating or reacting high-temperature
    air.
 
-.. include:: _generated/viscosity_model_comparison.rst
+.. include:: ../_generated/viscosity_model_comparison.rst
 
 The interval 1000--1845 K is common to all three nominal ranges. Across its
 endpoints, Keyes is 1.118--1.489% above Sutherland. Blottner/Wilke changes
@@ -164,5 +169,5 @@ Standard Atmosphere correlation
 with :math:`c_k=2.64638\times10^{-3}`, :math:`A_k=245.4\ \mathrm{K}`, and
 :math:`B_k=12\ \mathrm{K}` for ``AIR_CONDUCTIVITY``. The result is in W/(m K).
 
-The model equations, coefficients, and source reports are listed in
-:doc:`references`.
+The conductivity equation and coefficients follow
+:ref:`U.S. Standard Atmosphere 1976 <ref-us-standard-atmosphere-1976>`.

@@ -14,8 +14,8 @@ validation of an inviscid-flow approximation.
 Primary references
 ------------------
 
-The primary one-dimensional and shock reference is NACA Report 1135,
-*Equations, Tables, and Charts for Compressible Flow* (1953).  The fixture
+The primary one-dimensional and shock reference is
+:ref:`NACA Report 1135 <ref-naca-report-1135>`. The fixture
 contains every Mach abscissa printed in Table I (Mach 0--1) and Table II
 (Mach 1--100), the printed page, rounded table values, and the final printed
 unit.  Because the public scan contains imperfect OCR, the large table was
@@ -23,20 +23,22 @@ reconstructed independently from the equations printed beside the tables and
 rounded to the displayed precision.  Page transitions and representative
 cells were visually checked against the scan.
 
-Axisymmetric flow is compared with NASA SP-3004, *Tables for Supersonic Flow
-Around Right Circular Cones at Zero Angle of Attack* (1964).  The committed
+Axisymmetric flow is compared with :ref:`NASA SP-3004 <ref-sims-1964>`. The committed
 fixture covers every published cone half-angle from 2.5 to 30 degrees for
 Mach 1.5, 2, 3, and 5 where the report provides an attached-flow solution.
 The source's compact numeric notation is decoded from the PDF text layer;
 damaged OCR cells are recovered at the report's eight-significant-digit
 precision and checked against adjacent state relations.
 
-Detached-shock formulas are checked directly against Ambrosio--Wortman,
-Billig, and Seiff at Mach 2, 4, and 8 for both supported geometries where
+Detached-shock formulas are checked directly against
+:ref:`Ambrosio--Wortman <ref-ambrosio-wortman-1962>`,
+:ref:`Billig <ref-billig-1967>`, and :ref:`Seiff <ref-seiff-1964>` at Mach 2,
+4, and 8 for both supported geometries where
 applicable.  The coefficients, expected values, citations, coordinate
 convention, and NASA TN D-2780 independent Seiff interval are committed in
 ``tests/reference_data/compressible_flow/detached_shock_sources.json``.  Those
-formula-generated cases are supplemented by Inouye's independently tabulated
+formula-generated cases are supplemented by :ref:`Inouye's
+<ref-inouye-1965>` independently tabulated
 air sphere solution in NASA TN D-2780, Table I (printed page 10, PDF page 12):
 at :math:`M_\infty=8.949`, the numerical solution reports
 :math:`\rho_\infty/\rho_2=0.1253` and :math:`\Delta/R_b=0.0994`.  Equation (4)
@@ -58,7 +60,7 @@ inverse numerical relations use ``rtol=1e-10``.
 Results
 -------
 
-.. include:: _generated/compressible_flow_validation.rst
+.. include:: ../_generated/compressible_flow_validation.rst
 
 Physical interpretation
 -----------------------
@@ -71,11 +73,11 @@ total pressure.  Detached-shock standoff decreases toward the finite
 high-Mach correlation limit, and the Billig shape is symmetric about its
 vertex axis.  Prandtl--Meyer angle increases monotonically with Mach.
 
-.. image:: _static/compressible_flow_profiles.svg
+.. image:: ../_static/compressible_flow_profiles.svg
    :alt: Static-to-total pressure, density, and temperature ratios versus Mach number.
    :align: center
 
-.. image:: _static/compressible_flow_differences.svg
+.. image:: ../_static/compressible_flow_differences.svg
    :alt: NACA Report 1135 differences divided by the adopted printed-table tolerances.
    :align: center
 
@@ -87,7 +89,7 @@ their recorded chart-resolution tolerances.  The stricter oblique-shock test
 uses the exact theta--beta--Mach equation and normal-component closure.  The
 SP-3004 comparison is limited to the four planned Mach numbers.  Thermally
 perfect and real-gas property verification is recorded separately in
-:doc:`verification_thermophysical`.
+:doc:`thermophysical`.
 
 Regenerate this section with::
 

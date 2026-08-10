@@ -5,12 +5,31 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-11
+
 ### Added
 
 - Add reproducible verification records for compressible flow,
   thermophysical and real-gas properties, boundary layers, velocity profiles,
   and protrusion integration using primary references, pinned Cantera and
   CoolProp snapshots, generated figures, and offline invariant tests.
+- Bundle the complete offline HTML manual in wheels and release archives, and
+  add a local GUI documentation browser.
+
+### Changed
+
+- Reorganize the English manual into getting-started, task-guide,
+  model-and-equation, verification, and domain API sections; update the local
+  GUI and release artifacts to use the new document paths, simplify the
+  English and Japanese README entry points, and move maintainer procedures to
+  ``DEVELOPMENT.md``.
+- Reuse Beattie--Bridgeman flow states in GUI calculations to reduce repeated
+  nonlinear solves.
+
+### Fixed
+
+- Improve Beattie--Bridgeman isentropic branch solving and detached-shock
+  numerical robustness near difficult geometries and solver limits.
 
 ## [0.4.0] - 2026-08-05
 
@@ -98,7 +117,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Typed public APIs, cross-platform CI, Sphinx documentation, and validated
   examples.
 
-[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.5.0
 [0.4.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.4.0
 [0.3.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.3.0
 [0.2.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.2.0

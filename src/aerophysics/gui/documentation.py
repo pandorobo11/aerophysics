@@ -12,18 +12,22 @@ RELEASES_URL = "https://github.com/pandorobo11/aerophysics/releases/latest"
 
 DOCUMENTATION_TOPICS = {
     "概要": "index.html",
-    "クイックスタート": "quickstart.html",
-    "気体・標準大気": "gas_and_atmosphere.html",
-    "輸送物性": "transport_properties.html",
-    "熱化学": "thermochemistry.html",
-    "圧縮性流れ": "compressible_flow.html",
-    "境界層・突起抗力": "boundary_layers.html",
-    "圧縮性速度変換": "compressible_velocity_transformations.html",
-    "飛行条件": "flight_conditions.html",
-    "単位変換": "unit_conversions.html",
-    "検証": "verification.html",
-    "APIリファレンス": "api.html",
+    "クイックスタート": "getting_started/quickstart.html",
+    "気体・標準大気": "models/gas_and_atmosphere.html",
+    "輸送物性": "models/transport_properties.html",
+    "熱化学": "models/thermochemistry.html",
+    "等エントロピー流れ": "models/isentropic_flow.html",
+    "衝撃波": "models/shock_waves.html",
+    "膨張波": "models/expansion_waves.html",
+    "平板境界層": "models/flat_plate_boundary_layer.html",
+    "突起抗力": "models/protrusion_drag.html",
+    "圧縮性速度変換": "models/compressible_velocity_transformations.html",
+    "飛行条件": "models/flight_conditions.html",
+    "単位変換": "models/unit_conversions.html",
+    "検証": "verification/index.html",
+    "APIリファレンス": "api/index.html",
     "参考文献": "references.html",
+    "GUIガイド": "guides/gui.html",
 }
 
 
@@ -36,11 +40,11 @@ def documentation_base_url() -> str | None:
     return value.rstrip("/") + "/"
 
 
-def documentation_topic_url(filename: str, base_url: str) -> str:
+def documentation_topic_url(relative_path: str, base_url: str) -> str:
     """Return one documentation page below a trusted base URL."""
-    if filename not in DOCUMENTATION_TOPICS.values():
+    if relative_path not in DOCUMENTATION_TOPICS.values():
         raise ValueError("unsupported documentation topic")
-    return urljoin(base_url, filename)
+    return urljoin(base_url, relative_path)
 
 
 def render_documentation() -> None:
