@@ -58,3 +58,22 @@ uv sync --all-groups --all-extras --locked
 
 Do not weaken the existing Python/OS test matrix, coverage threshold, strict
 lint/type settings, or documentation warnings-as-errors policy.
+
+## Release readiness
+
+After completing a user-facing feature, behavior change, or important fix and
+after the completion gate passes, briefly evaluate whether the accumulated
+changes since the latest version tag form a suitable release. Use the Git
+history, public API changes, the `CHANGELOG.md` Unreleased section, and the
+state of tests, verification, and documentation. Do not judge readiness from
+commit counts or generated-file line counts alone.
+
+Recommend a release only when the accumulated changes form a coherent,
+user-visible release theme or contain an important calculation, public-API,
+or distribution fix. When recommending one, state the suggested Semantic
+Versioning bump, the reasons, and any remaining release work. If a release is
+not warranted, do not mention release readiness in the final response.
+
+This is an advisory check only. Never change the package version, create a
+release commit or tag, push, or publish a GitHub Release unless the user
+explicitly requests it.
