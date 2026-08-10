@@ -11,6 +11,7 @@ DIRECTORY = Path(__file__).resolve().parent
 GENERATORS = (
     "generate_standard_atmosphere_validation.py",
     "generate_compressible_flow_validation.py",
+    "generate_nist_transport_reference.py",
     "generate_thermophysical_validation.py",
     "generate_viscous_flow_validation.py",
 )

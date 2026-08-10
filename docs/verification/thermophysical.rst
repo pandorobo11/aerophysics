@@ -19,8 +19,8 @@ Beattie--Bridgeman constants follow :ref:`Watari (2007)
 <ref-beattie-bridgeman-1928>`. Transport provenance is linked directly from
 :doc:`../models/transport_properties`.
 
-Independent software snapshots
-------------------------------
+Cross-implementation thermochemistry
+------------------------------------
 
 `Cantera 3.2.0 <https://pypi.org/project/cantera/3.2.0/>`_ evaluates the same
 frozen composition at 13 temperatures from 200 to 6000 K.  The snapshot stores
@@ -28,12 +28,32 @@ frozen composition at 13 temperatures from 200 to 6000 K.  The snapshot stores
 Cantera entropy is normalized from its 1-atm standard state to the NASA 1-bar
 reference used by the package.  The acceptance threshold is ``rtol=2e-6``.
 
-`CoolProp 8.0.0 <https://pypi.org/project/CoolProp/8.0.0/>`_ supplies an
-observation-only comparison for air viscosity and conductivity from 250 to
-1500 K at 1 atm.  It is not a pass/fail reference because CoolProp and
-``aerophysics`` implement different correlations.  Neither tool is a runtime
-or CI dependency; version, capture command, variable mapping, and wheel
-SHA-256 are committed beside each static CSV.
+Cantera is not a runtime or CI dependency.  Its version, capture command,
+variable mapping, and wheel SHA-256 are committed beside the static CSV.
+
+Primary transport references
+----------------------------
+
+Sutherland viscosity is checked against the transcribed Table III cells from
+:ref:`U.S. Standard Atmosphere 1976 <ref-us-standard-atmosphere-1976>`.  The
+USSA conductivity equation is checked against the sea-level value printed in
+the report's appended errata.  The Table III conductivity column is not used:
+the errata identifies its exponent as a factor-of-1000 error, and its sea-level
+mantissa also disagrees with Equation (53).  Direct reproductions of the
+published Sutherland, Keyes, Blottner/Wilke, and corrected USSA equations
+provide multi-temperature implementation checks.
+
+Evaluated physical-accuracy reference
+-------------------------------------
+
+:ref:`Lemmon and Jacobsen (2004) <ref-lemmon-jacobsen-2004>` provide NIST
+evaluated correlations for dry-air viscosity and thermal conductivity.  The
+committed reference values reproduce their dilute-gas Equations (2) and (5)
+at zero density from 250 to 1500 K.  The generator is anchored to the 100 K
+and 300 K air values printed in Table V.  This comparison assesses the
+physical accuracy of the simpler package correlations; it is deliberately
+excluded from the pass/fail decision.  The NIST source estimates 1% uncertainty
+for dilute-air viscosity above 200 K and 2% for dilute-gas conductivity.
 
 Results
 -------
@@ -44,8 +64,8 @@ Results
    :alt: NASA7 and NASA9 frozen dry-air heat capacity from 200 to 6000 kelvin.
    :align: center
 
-.. image:: ../_static/thermophysical_transport_differences.svg
-   :alt: Observation-only viscosity and conductivity differences from CoolProp Air.
+.. image:: ../_static/thermophysical_transport_accuracy.svg
+   :alt: Sutherland viscosity and USSA conductivity differences from NIST evaluated dilute air.
    :align: center
 
 Physical checks and limitations
@@ -56,9 +76,10 @@ continuity, isentropic entropy and total-enthalpy conservation, positive
 Beattie--Bridgeman isothermal stiffness, and pressure-root closure.  Fixed
 source-equation values separately audit the Sutherland, Keyes,
 Blottner/Wilke, and corrected USSA conductivity formulas and constants.  The
-CoolProp differences describe model choice rather than a defect.  The real-gas
-checks cover the documented 400--2000 K and 1--10 MPa range; they do not claim
-equilibrium chemistry or experimental validation.
+NIST differences describe physical model accuracy rather than implementation
+correctness.  The real-gas checks cover the documented 400--2000 K and
+1--10 MPa range; they do not claim equilibrium chemistry or comprehensive
+experimental validation.
 
 Regenerate with::
 
@@ -68,7 +89,10 @@ Rebuild the transport source-equation fixture with::
 
    python docs/scripts/build_transport_reference.py
 
+Regenerate the NIST evaluated-reference fixture with::
+
+   python docs/scripts/generate_nist_transport_reference.py
+
 Refresh external snapshots only in isolated environments::
 
    uv run --isolated --with cantera==3.2.0 python docs/scripts/capture_cantera_reference.py
-   uv run --isolated --with CoolProp==8.0.0 python docs/scripts/capture_coolprop_reference.py

@@ -1,4 +1,4 @@
-"""Build independent source-equation values for dry-air transport models."""
+"""Build direct source-equation values for dry-air transport models."""
 
 from __future__ import annotations
 
@@ -106,7 +106,10 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(rows)
     metadata = {
-        "role": "independent direct evaluation of published equations and constants",
+        "role": (
+            "direct reproduction of published equations and constants in a "
+            "separate implementation"
+        ),
         "command": "python docs/scripts/build_transport_reference.py",
         "models": {
             "Sutherland viscosity": {

@@ -171,3 +171,6 @@ with :math:`c_k=2.64638\times10^{-3}`, :math:`A_k=245.4\ \mathrm{K}`, and
 
 The conductivity equation and coefficients follow
 :ref:`U.S. Standard Atmosphere 1976 <ref-us-standard-atmosphere-1976>`.
+Primary-source implementation checks and the separate physical-accuracy
+assessment against the NIST evaluated dilute-air correlation are recorded in
+:doc:`../verification/thermophysical`.

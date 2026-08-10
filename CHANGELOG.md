@@ -23,6 +23,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
   section navigation panel.
 - Force complete Sphinx rebuilds in the local validation gate so navigation
   hierarchy changes cannot leave stale sidebars in previously generated HTML.
+- Replace the thermophysical CoolProp snapshot with U.S. Standard Atmosphere
+  acceptance values and a reproducible, non-gating NIST dilute-air
+  physical-accuracy assessment derived directly from Lemmon--Jacobsen.
 
 ## [0.5.0] - 2026-08-11
 

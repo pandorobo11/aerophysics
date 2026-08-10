@@ -1,0 +1,57 @@
+{
+  "doi": "10.1023/B:IJOT.0000022327.04529.F3",
+  "estimated_relative_uncertainty": {
+    "dynamic_viscosity_above_200_K": 0.01,
+    "thermal_conductivity_dilute_gas": 0.02
+  },
+  "generation": {
+    "command": "python docs/scripts/generate_nist_transport_reference.py",
+    "equation_constants": {
+      "collision_integral_coefficients": [
+        0.431,
+        -0.4623,
+        0.08406,
+        0.005341,
+        -0.00331
+      ],
+      "conductivity_coefficients": [
+        1.308,
+        1.405,
+        -1.1,
+        -1.036,
+        -0.3
+      ],
+      "critical_temperature_K": 132.6312,
+      "lennard_jones_energy_K": 103.3,
+      "lennard_jones_size_nm": 0.36,
+      "molar_mass_g_mol": 28.9586
+    }
+  },
+  "paper_anchors": [
+    {
+      "dynamic_viscosity_microPa_s": 7.09559,
+      "molar_density_mol_dm3": 0.0,
+      "temperature_K": 100.0,
+      "thermal_conductivity_mW_m_K": 9.35902
+    },
+    {
+      "dynamic_viscosity_microPa_s": 18.523,
+      "molar_density_mol_dm3": 0.0,
+      "temperature_K": 300.0,
+      "thermal_conductivity_mW_m_K": 26.3529
+    }
+  ],
+  "pdf_sha256": "985428589472f6316af725b12d5ce1aaf3fed08cd29ff175ddf13e606da5d46e",
+  "role": "non-gating evaluated-reference physical-accuracy assessment",
+  "source": "Lemmon and Jacobsen (2004), Viscosity and Thermal Conductivity Equations for Nitrogen, Oxygen, Argon, and Air",
+  "source_locations": [
+    "Equations (2) and (5)",
+    "Tables I, II, IV, and V"
+  ],
+  "state": "dilute dry air at the zero-density limit",
+  "units": {
+    "dynamic_viscosity": "Pa s",
+    "thermal_conductivity": "W/(m K)"
+  },
+  "url": "https://trc.nist.gov/refprop/FAQ/NAO.PDF"
+}

@@ -1,5 +1,5 @@
 {
-  "role": "independent direct evaluation of published equations and constants",
+  "role": "direct reproduction of published equations and constants in a separate implementation",
   "command": "python docs/scripts/build_transport_reference.py",
   "models": {
     "Sutherland viscosity": {

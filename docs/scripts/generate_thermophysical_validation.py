@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -14,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "tests/reference_data/thermophysical"
 TABLE_PATH = ROOT / "docs/_generated/thermophysical_validation.rst"
 PROPERTY_PATH = ROOT / "docs/_static/thermophysical_properties.svg"
-TRANSPORT_PATH = ROOT / "docs/_static/thermophysical_transport_differences.svg"
+TRANSPORT_PATH = ROOT / "docs/_static/thermophysical_transport_accuracy.svg"
+OFFICIAL_USSA = ROOT / "tests/reference_data/standard_atmosphere/official_1976.csv"
 
 
 def _api() -> tuple[object, ...]:
@@ -250,8 +252,10 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
     return results
 
 
-def _coolprop(api: tuple[object, ...]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    rows = _rows(REFERENCE / "coolprop-8.0.0.csv")
+def _nist_assessment(
+    api: tuple[object, ...],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    rows = _rows(REFERENCE / "nist-lemmon-jacobsen-2004.csv")
     temperature = np.asarray([float(row["temperature_K"]) for row in rows])
     viscosity = np.asarray([float(row["dynamic_viscosity_Pa_s"]) for row in rows])
     conductivity = np.asarray(
@@ -266,7 +270,60 @@ def _coolprop(api: tuple[object, ...]) -> tuple[np.ndarray, np.ndarray, np.ndarr
     return temperature, viscosity_difference, conductivity_difference
 
 
-def _transport_results(api: tuple[object, ...]) -> dict[str, tuple[float, float]]:
+def _ussa_results(
+    api: tuple[object, ...],
+) -> list[tuple[str, str, float, float, bool]]:
+    maximum_relative_difference = 0.0
+    maximum_temperature = 0.0
+    viscosity_passed = True
+    for row in _rows(OFFICIAL_USSA):
+        if not row["dynamic_viscosity_Pa_s"]:
+            continue
+        temperature = float(row["temperature_K"])
+        expected = float(row["dynamic_viscosity_Pa_s"])
+        printed_tolerance = float(row["dynamic_viscosity_abs_tolerance_Pa_s"])
+        actual = float(api[4].dynamic_viscosity(temperature))
+        difference = abs(actual - expected)
+        tolerance = max(2.0 * printed_tolerance, 1.0e-4 * abs(expected))
+        guard = 1.0e-14 * max(1.0, abs(expected))
+        viscosity_passed &= difference <= tolerance + guard
+        relative = difference / abs(expected)
+        if relative > maximum_relative_difference:
+            maximum_relative_difference = relative
+            maximum_temperature = temperature
+
+    metadata = json.loads(
+        (REFERENCE / "ussa-1976-transport.json").read_text(encoding="utf-8")
+    )
+    conductivity_reference = metadata["thermal_conductivity"]
+    conductivity_temperature = float(conductivity_reference["temperature_K"])
+    conductivity_expected = float(conductivity_reference["value_W_m_K"])
+    conductivity_tolerance = float(
+        conductivity_reference["printed_abs_tolerance_W_m_K"]
+    )
+    conductivity_actual = float(api[7].thermal_conductivity(conductivity_temperature))
+    conductivity_difference = abs(conductivity_actual - conductivity_expected)
+    return [
+        (
+            "Sutherland / USSA Table III",
+            "within 2 printed half-digits or 1e-4 relative",
+            maximum_relative_difference,
+            maximum_temperature,
+            viscosity_passed,
+        ),
+        (
+            "USSA conductivity / Equation (53) errata example",
+            "absolute <= 5e-7 W/(m K)",
+            conductivity_difference,
+            conductivity_temperature,
+            conductivity_difference <= conductivity_tolerance,
+        ),
+    ]
+
+
+def _source_equation_results(
+    api: tuple[object, ...],
+) -> dict[str, tuple[float, float]]:
     models = {
         "Sutherland viscosity": api[4].dynamic_viscosity,
         "Keyes viscosity": api[5].dynamic_viscosity,
@@ -287,16 +344,18 @@ def _transport_results(api: tuple[object, ...]) -> dict[str, tuple[float, float]
 
 def _rst(
     cantera: dict[str, tuple[float, float]],
+    ussa: list[tuple[str, str, float, float, bool]],
     transport: dict[str, tuple[float, float]],
     invariants: list[tuple[str, str, float, bool]],
-    observation: tuple[float, float],
+    assessment: tuple[float, float],
 ) -> str:
     passed = (
         all(value[0] <= 2.0e-6 for value in cantera.values())
+        and all(item[4] for item in ussa)
         and all(value[0] <= 1.0e-12 for value in transport.values())
         and all(item[3] for item in invariants)
     )
-    status = "Verified with observations" if passed else "Needs revision"
+    status = "Verified" if passed else "Needs revision"
     lines = [
         f"**Overall status: {status}.**",
         "",
@@ -323,11 +382,37 @@ def _rst(
     lines.extend(
         [
             "",
+            "Primary transport references",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            "",
+            ".. list-table:: Comparisons with U.S. Standard Atmosphere 1976",
+            "   :header-rows: 1",
+            "",
+            "   * - Reference",
+            "     - Criterion",
+            "     - Maximum difference",
+            "     - Temperature [K]",
+            "     - Result",
+        ]
+    )
+    for label, criterion, difference, temperature, item_passed in ussa:
+        lines.extend(
+            [
+                f"   * - {label}",
+                f"     - {criterion}",
+                f"     - {difference:.4g}",
+                f"     - {temperature:g}",
+                f"     - {'Pass' if item_passed else 'Fail'}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
             "Published transport equations",
             "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
             "",
-            ".. list-table:: Maximum relative differences from independently "
-            "evaluated source equations",
+            ".. list-table:: Maximum relative differences from direct "
+            "source-equation reproductions",
             "   :header-rows: 1",
             "",
             "   * - Model",
@@ -348,15 +433,18 @@ def _rst(
     lines.extend(
         [
             "",
-            "CoolProp 8.0.0 observation",
-            "~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            "NIST physical-accuracy assessment",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
             "",
             (
-                "CoolProp uses different transport-property correlations, so this "
-                "is not an acceptance test. Across the common snapshot range the "
-                "largest absolute relative differences are "
-                f"``{observation[0]:.3%}`` for viscosity and "
-                f"``{observation[1]:.3%}`` for conductivity."
+                "The Lemmon--Jacobsen evaluated dilute-air correlation is an "
+                "independent physical-accuracy reference, not an acceptance test "
+                "for the intentionally simpler Sutherland and USSA correlations. "
+                "Across 250--1500 K at zero density, the largest absolute relative "
+                f"differences are ``{assessment[0]:.3%}`` for viscosity and "
+                f"``{assessment[1]:.3%}`` for conductivity. The NIST source "
+                "estimates dilute-gas uncertainties of 1% and 2%, respectively, "
+                "over this range."
             ),
             "",
             "Thermodynamic invariants",
@@ -386,10 +474,11 @@ def _rst(
 def generate(*, check: bool) -> bool:
     api = _api()
     cantera = _cantera_results(api)
-    transport_results = _transport_results(api)
+    ussa_results = _ussa_results(api)
+    transport_results = _source_equation_results(api)
     invariants = _invariants(api)
-    temperature, viscosity_difference, conductivity_difference = _coolprop(api)
-    observation = (
+    temperature, viscosity_difference, conductivity_difference = _nist_assessment(api)
+    assessment = (
         float(np.max(np.abs(viscosity_difference))),
         float(np.max(np.abs(conductivity_difference))),
     )
@@ -408,13 +497,14 @@ def generate(*, check: bool) -> bool:
         series=(("NASA7", "#0072B2", cp7), ("NASA9", "#D55E00", cp9)),
     )
     transport = line_chart_svg(
-        title="Transport-model differences from CoolProp Air",
+        title="Transport-model differences from NIST evaluated dilute air",
         description=(
-            "Observation-only relative differences for the Sutherland viscosity "
-            "and USSA conductivity correlations."
+            "Non-gating physical-accuracy differences for the Sutherland viscosity "
+            "and USSA conductivity correlations relative to Lemmon and Jacobsen's "
+            "evaluated dilute-air reference."
         ),
         x_label="Temperature [K]",
-        y_label="aerophysics / CoolProp - 1 [-]",
+        y_label="aerophysics / NIST reference - 1 [-]",
         x=temperature,
         series=(
             ("Viscosity", "#009E73", viscosity_difference),
@@ -424,7 +514,7 @@ def generate(*, check: bool) -> bool:
     current = True
     current &= write_or_check(
         TABLE_PATH,
-        _rst(cantera, transport_results, invariants, observation),
+        _rst(cantera, ussa_results, transport_results, invariants, assessment),
         check=check,
     )
     current &= write_or_check(PROPERTY_PATH, properties, check=check)

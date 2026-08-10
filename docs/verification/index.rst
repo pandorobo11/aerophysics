@@ -2,9 +2,10 @@ Verification
 ============
 
 These records provide reproducible checks of equations, reference tables,
-independent software snapshots, and physical or mathematical invariants. A
-verified result establishes agreement with the stated evidence; it is not a
-substitute for experimental validation of every intended application.
+cross-implementation results, and physical or mathematical invariants. A
+verified result establishes agreement with the stated acceptance evidence.
+Non-gating physical-accuracy assessments are reported separately and do not
+change that status.
 
 Current status
 --------------
@@ -26,8 +27,8 @@ Current status
      - NACA Report 1135, NASA SP-3004, source equations and invariants
      - :doc:`compressible_flow`
    * - Thermophysical properties
-     - Verified with observations
-     - Cantera and CoolProp snapshots, published equations and invariants
+     - Verified
+     - USSA values, published equations, Cantera, NIST assessment, invariants
      - :doc:`thermophysical`
    * - Viscous flow
      - Verified

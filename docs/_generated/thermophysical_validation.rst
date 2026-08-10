@@ -1,4 +1,4 @@
-**Overall status: Verified with observations.**
+**Overall status: Verified.**
 
 Cantera 3.2.0 comparison
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -31,10 +31,32 @@ Cantera 3.2.0 comparison
      - 1000
      - Pass
 
+Primary transport references
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table:: Comparisons with U.S. Standard Atmosphere 1976
+   :header-rows: 1
+
+   * - Reference
+     - Criterion
+     - Maximum difference
+     - Temperature [K]
+     - Result
+   * - Sutherland / USSA Table III
+     - within 2 printed half-digits or 1e-4 relative
+     - 4.202e-05
+     - 255.676
+     - Pass
+   * - USSA conductivity / Equation (53) errata example
+     - absolute <= 5e-7 W/(m K)
+     - 1.157e-07
+     - 288.15
+     - Pass
+
 Published transport equations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. list-table:: Maximum relative differences from independently evaluated source equations
+.. list-table:: Maximum relative differences from direct source-equation reproductions
    :header-rows: 1
 
    * - Model
@@ -58,10 +80,10 @@ Published transport equations
      - 200
      - Pass
 
-CoolProp 8.0.0 observation
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+NIST physical-accuracy assessment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-CoolProp uses different transport-property correlations, so this is not an acceptance test. Across the common snapshot range the largest absolute relative differences are ``6.619%`` for viscosity and ``3.782%`` for conductivity.
+The Lemmon--Jacobsen evaluated dilute-air correlation is an independent physical-accuracy reference, not an acceptance test for the intentionally simpler Sutherland and USSA correlations. Across 250--1500 K at zero density, the largest absolute relative differences are ``6.613%`` for viscosity and ``3.777%`` for conductivity. The NIST source estimates dilute-gas uncertainties of 1% and 2%, respectively, over this range.
 
 Thermodynamic invariants
 ~~~~~~~~~~~~~~~~~~~~~~~~

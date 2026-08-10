@@ -29,7 +29,7 @@ VERIFICATION_SVGS = (
     PROJECT_ROOT / "docs/_static/compressible_flow_profiles.svg",
     PROJECT_ROOT / "docs/_static/compressible_flow_differences.svg",
     PROJECT_ROOT / "docs/_static/thermophysical_properties.svg",
-    PROJECT_ROOT / "docs/_static/thermophysical_transport_differences.svg",
+    PROJECT_ROOT / "docs/_static/thermophysical_transport_accuracy.svg",
     PROJECT_ROOT / "docs/_static/viscous_skin_friction.svg",
     PROJECT_ROOT / "docs/_static/protrusion_shielding.svg",
 )
@@ -121,3 +121,13 @@ def test_new_verification_svgs_have_accessible_labels() -> None:
         assert '<title id="title">' in svg
         assert '<desc id="desc">' in svg
         assert "[-]" in svg or "[K]" in svg
+
+
+def test_thermophysical_record_separates_verification_and_accuracy() -> None:
+    fragment = (
+        PROJECT_ROOT / "docs/_generated/thermophysical_validation.rst"
+    ).read_text(encoding="utf-8")
+    assert "**Overall status: Verified.**" in fragment
+    assert "Primary transport references" in fragment
+    assert "NIST physical-accuracy assessment" in fragment
+    assert "not an acceptance test" in fragment

@@ -60,6 +60,17 @@ Physics, 18(4), 517--519, 1950.
 
 https://doi.org/10.1063/1.1747673
 
+.. _ref-lemmon-jacobsen-2004:
+
+Lemmon, E. W. and Jacobsen, R. T. *Viscosity and Thermal Conductivity
+Equations for Nitrogen, Oxygen, Argon, and Air*. International Journal of
+Thermophysics, 25(1), 21--69, 2004.  The dilute-air equations and program-
+verification values provide the evaluated physical-accuracy reference.
+
+https://doi.org/10.1023/B:IJOT.0000022327.04529.F3
+
+https://trc.nist.gov/refprop/FAQ/NAO.PDF
+
 Thermochemistry
 ---------------
 

@@ -1,0 +1,18 @@
+{
+  "document_id": "NOAA-S/T 76-1562; NASA-TM-X-74335",
+  "dynamic_viscosity": {
+    "acceptance_criterion": "maximum of two printed half-digits or 1e-4 relative",
+    "fixture": "../standard_atmosphere/official_1976.csv",
+    "source": "Table III, printed pages 99-117"
+  },
+  "role": "primary-source acceptance reference",
+  "source": "U.S. Standard Atmosphere, 1976",
+  "thermal_conductivity": {
+    "note": "Table III has the appended errata's factor-of-1000 exponent error; use Equation (53) and the errata example instead of the table column.",
+    "printed_abs_tolerance_W_m_K": 5e-07,
+    "source": "Equation (53), printed page 19, and the appended errata example",
+    "temperature_K": 288.15,
+    "value_W_m_K": 0.025326
+  },
+  "url": "https://ntrs.nasa.gov/citations/19770009539"
+}
