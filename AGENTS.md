@@ -21,6 +21,31 @@ local gate and keep the dedicated generated-assets CI job on Ubuntu with
 Python 3.12. If an asset check fails, the failing file paths must remain
 visible in the output.
 
+### Generated-asset failure procedure
+
+When a generated or verification asset check fails, follow this procedure:
+
+1. Regenerate the assets with the existing generator that owns them. For the
+   complete verification set, use:
+
+   ```console
+   uv run python docs/scripts/generate_verification.py
+   ```
+
+   Run the applicable individual `generate_*.py` script when only one asset
+   family is involved.
+2. Inspect the Git diff after regeneration. Confirm that every numerical
+   value, table, and SVG change is intentional and supported by the source or
+   model change being made.
+3. If any change is unexpected, investigate the generator, dependencies,
+   platform, or source data. Do not mechanically commit regenerated files just
+   to make CI pass.
+4. If the diff is understood and correct, rerun `scripts/check.sh` and confirm
+   that every check succeeds before considering the work complete.
+
+Never hand-edit generated files to make CI pass. Fix the owning generator or
+its inputs, regenerate the assets, and review the resulting diff instead.
+
 CI must never run a formatter in write mode. CI uses `ruff format --check .`
 and must not commit or otherwise apply automatic source changes.
 
