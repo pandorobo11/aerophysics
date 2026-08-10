@@ -42,6 +42,8 @@ export result CSV files and versioned calculation-configuration JSON files.
 Turbulent flat-plate cases can be handed to the profile predictor, and generated
 profiles can be handed to the protrusion calculator without leaving SI. Profile
 and projected-shape CSV inputs are supported by the protrusion page.
+The wheel includes the Sphinx HTML manual, so the Documentation page works
+offline immediately after this installation; no separate docs build is needed.
 
 ## Quick start
 
@@ -149,6 +151,10 @@ scripts/check.sh
 write mode, then checks Ruff, formatting, mypy, tests, generated verification
 assets, documentation, and package builds. Use
 `scripts/check.sh --check-only` when source files must not be modified.
+
+The wheel build renders the HTML manual with Sphinx and stores it under
+`aerophysics/_docs/`. The development `docs/_build/html` tree remains useful
+for previewing and for the standalone release documentation ZIP.
 
 ## Releases
 

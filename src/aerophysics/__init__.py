@@ -1,6 +1,8 @@
 """Traceable engineering models for atmospheric and aerodynamic physics."""
 
-from importlib.metadata import version
+import tomllib
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 
 from aerophysics.atmosphere import AtmosphereState, standard_atmosphere
 from aerophysics.boundary_layer import (
@@ -55,7 +57,20 @@ from aerophysics.thermochemistry import (
     ThermallyPerfectGas,
 )
 
-__version__ = version("aerophysics")
+
+def _package_version() -> str:
+    try:
+        return version("aerophysics")
+    except PackageNotFoundError:
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        if not pyproject.is_file():
+            return "unknown"
+        with pyproject.open("rb") as stream:
+            project = tomllib.load(stream)["project"]
+        return str(project["version"])
+
+
+__version__ = _package_version()
 
 __all__ = [
     "AIR",

@@ -62,6 +62,15 @@ docs = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/aerophysics"]
 
+[tool.hatch.build.targets.wheel.hooks.custom]
+dependencies = [
+  "numpy>=2.0",
+  "scipy>=1.14",
+  "numpydoc>=1.8",
+  "pydata-sphinx-theme>=0.16",
+  "sphinx>=8.1",
+]
+
 [tool.pytest.ini_options]
 addopts = [
   "--strict-config",

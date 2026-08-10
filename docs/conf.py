@@ -1,10 +1,24 @@
 """Sphinx configuration for aerophysics."""
 
+import tomllib
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
+from pathlib import Path
+
+
+def _project_version() -> str:
+    try:
+        return package_version("aerophysics")
+    except PackageNotFoundError:
+        pyproject = Path(__file__).parents[1] / "pyproject.toml"
+        with pyproject.open("rb") as stream:
+            project = tomllib.load(stream)["project"]
+        return str(project["version"])
+
 
 project = "aerophysics"
 copyright = "2026, aerophysics contributors"
-release = package_version("aerophysics")
+release = _project_version()
 version = release
 
 extensions = [

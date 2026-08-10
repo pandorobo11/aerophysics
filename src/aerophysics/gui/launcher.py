@@ -9,9 +9,11 @@ import sys
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from importlib import resources
 from pathlib import Path
 
 DOCS_URL_ENV = "AEROPHYSICS_DOCS_URL"
+DOCS_DIR_ENV = "AEROPHYSICS_DOCS_DIR"
 
 
 class _QuietDocumentationHandler(SimpleHTTPRequestHandler):
@@ -22,13 +24,18 @@ class _QuietDocumentationHandler(SimpleHTTPRequestHandler):
 
 
 def _documentation_directory() -> Path | None:
-    configured = os.environ.get("AEROPHYSICS_DOCS_DIR")
+    configured = os.environ.get(DOCS_DIR_ENV)
     candidates = [] if configured is None else [Path(configured).expanduser()]
     candidates.append(Path(__file__).resolve().parents[3] / "docs" / "_build" / "html")
     for candidate in candidates:
         resolved = candidate.resolve()
         if resolved.is_dir() and (resolved / "index.html").is_file():
             return resolved
+
+    bundled = resources.files("aerophysics").joinpath("_docs")
+    if bundled.is_dir() and bundled.joinpath("index.html").is_file():
+        with resources.as_file(bundled) as resolved:
+            return resolved.resolve()
     return None
 
 

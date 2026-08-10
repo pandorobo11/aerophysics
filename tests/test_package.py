@@ -1,5 +1,11 @@
 """Package-level smoke tests."""
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+from zipfile import ZipFile
+
 import pytest
 
 from aerophysics import (
@@ -38,6 +44,8 @@ from aerophysics.exceptions import (
     ModelRangeError,
     NoAttachedShockError,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_version() -> None:
@@ -123,3 +131,58 @@ def test_compressible_boundary_layer_profile_api_is_exported() -> None:
 def test_primary_protrusion_drag_api_is_exported() -> None:
     result = protrusion_drag(1.0, 0.01, 0.005, 10.0, 1.0, 0.02)
     assert result.direct_drag > 0.0
+
+
+def test_wheel_bundles_docs_and_installed_gui_finds_them(tmp_path: Path) -> None:
+    wheel_directory = tmp_path / "wheel"
+    wheel_directory.mkdir()
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--wheel",
+            "--outdir",
+            str(wheel_directory),
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
+    )
+
+    wheels = sorted(wheel_directory.glob("aerophysics-*.whl"))
+    assert len(wheels) == 1
+    with ZipFile(wheels[0]) as archive:
+        names = set(archive.namelist())
+        required_docs = {
+            "aerophysics/_docs/index.html",
+            "aerophysics/_docs/quickstart.html",
+            "aerophysics/_docs/gas_and_atmosphere.html",
+            "aerophysics/_docs/compressible_flow.html",
+            "aerophysics/_docs/boundary_layers.html",
+            "aerophysics/_docs/api.html",
+        }
+        assert required_docs <= names
+        archive.extractall(tmp_path / "installed")
+
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(tmp_path / "installed")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from aerophysics.gui.launcher import _documentation_directory; "
+                "directory = _documentation_directory(); "
+                "assert directory is not None; "
+                "assert (directory / 'index.html').is_file(); "
+                "assert (directory / 'compressible_flow.html').is_file(); "
+                "print(directory)"
+            ),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "_docs" in result.stdout

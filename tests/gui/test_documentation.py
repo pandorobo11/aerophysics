@@ -12,6 +12,7 @@ from aerophysics.gui.documentation import (
     documentation_topic_url,
 )
 from aerophysics.gui.launcher import (
+    DOCS_DIR_ENV,
     _documentation_directory,
     _start_documentation_server,
 )
@@ -65,7 +66,7 @@ def test_local_documentation_server(tmp_path: Path) -> None:
 def test_documentation_directory_override(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("AEROPHYSICS_DOCS_DIR", str(tmp_path))
+    monkeypatch.setenv(DOCS_DIR_ENV, str(tmp_path))
     assert _documentation_directory() != tmp_path
     (tmp_path / "index.html").write_text("docs", encoding="utf-8")
     assert _documentation_directory() == tmp_path.resolve()
