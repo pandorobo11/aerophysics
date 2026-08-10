@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+worktree_root="$(git rev-parse --show-toplevel)"
+common_git_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+primary_root="$(dirname -- "$common_git_dir")"
+
+if [[ "$worktree_root" == "$primary_root" ]]; then
+    exit 0
+fi
+
+source_dir="$primary_root/literature"
+target_dir="$worktree_root/literature"
+
+if [[ ! -d "$source_dir" ]]; then
+    exit 0
+fi
+
+mkdir -p -- "$target_dir"
+copied=0
+
+while IFS= read -r -d '' source_pdf; do
+    target_pdf="$target_dir/$(basename -- "$source_pdf")"
+    if [[ ! -e "$target_pdf" ]]; then
+        cp -p -- "$source_pdf" "$target_pdf"
+        ((copied += 1))
+    fi
+done < <(find "$source_dir" -maxdepth 1 -type f -name '*.pdf' -print0)
+
+if ((copied > 0)); then
+    printf 'Copied %d literature PDF(s) from %s\n' "$copied" "$source_dir"
+fi

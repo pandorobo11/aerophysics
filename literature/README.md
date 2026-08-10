@@ -16,6 +16,16 @@
 - ファイル名は `年_筆頭著者または機関_短縮題名.pdf` とし、ASCII文字、ハイフン区切り、空白なしを基本とする。
 - 出版社版を取得できず、正規に公開された著者版・プレプリントを取得した場合はメモ欄に版を記載する。
 
+## Git worktreeへの引き継ぎ
+
+このリポジトリで次の設定を一度実行すると、`git worktree add` で作成した
+worktreeへ、メインworktreeの `literature/*.pdf` が自動的にコピーされる。
+既に同名のファイルがある場合は上書きしない。
+
+```console
+git config core.hooksPath "$(git rev-parse --show-toplevel)/.githooks"
+```
+
 ## 収集結果
 
 | No. | 分野 | 年 | 著者・機関 | 題名 | 状態 | ローカルファイル名 | 入手元URL | メモ |
