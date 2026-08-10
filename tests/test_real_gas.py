@@ -269,6 +269,30 @@ def test_beattie_bridgeman_pressure_combines_temperature_and_pressure_range(
         gas.pressure(1300.0, density, allow_extrapolation=False)
 
 
+def test_beattie_bridgeman_pressure_rejects_temperature_before_eos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = BeattieBridgemanGas._pressure_scalar
+    calls = 0
+
+    def counted_pressure(
+        self: BeattieBridgemanGas, temperature: float, density: float
+    ) -> float:
+        nonlocal calls
+        calls += 1
+        return original(self, temperature, density)
+
+    monkeypatch.setattr(BeattieBridgemanGas, "_pressure_scalar", counted_pressure)
+    with pytest.raises(ModelRangeError, match="temperature"):
+        AIR_BEATTIE_BRIDGEMAN.pressure(10.0, 0.001, allow_extrapolation=False)
+    assert calls == 0
+
+    with pytest.warns(ApplicabilityWarning) as captured:
+        AIR_BEATTIE_BRIDGEMAN.pressure(10.0, 0.001, allow_extrapolation=True)
+    assert calls == 1
+    assert len(captured) == 1
+
+
 def test_beattie_bridgeman_exact_total_temperature_endpoint() -> None:
     state = isentropic_state(
         1.0e-10,
@@ -689,12 +713,22 @@ def test_beattie_bridgeman_mach_ten_regression_and_static_range_handling() -> No
     static = AIR_BEATTIE_BRIDGEMAN._scalar_state_from_density(
         float(state.static_temperature), float(state.static_density)
     )
-    assert np.isfinite(state.static_temperature)
+    total = AIR_BEATTIE_BRIDGEMAN.state(900.0, 1.0e7)
+    assert state.static_temperature == pytest.approx(44.483424529, rel=2e-8)
+    assert state.static_pressure == pytest.approx(235.81843565, rel=2e-8)
+    assert state.static_density == pytest.approx(0.018477378781, rel=2e-8)
+    assert state.velocity == pytest.approx(1336.6566881, rel=2e-8)
     assert state.static_pressure > 0.0
     assert state.static_density > 0.0
-    assert static.speed_of_sound > 0.0
+    assert static.cp > 0.0
+    assert static.cv > 0.0
+    assert static.speed_of_sound**2 > 0.0
     assert (
         AIR_BEATTIE_BRIDGEMAN._dp_drho_scalar(static.temperature, static.density) > 0.0
+    )
+    assert static.entropy == pytest.approx(total.entropy, abs=2e-8)
+    assert static.enthalpy + 0.5 * state.velocity**2 == pytest.approx(
+        total.enthalpy, rel=2e-13
     )
 
     with pytest.raises(ModelRangeError, match="temperature"):

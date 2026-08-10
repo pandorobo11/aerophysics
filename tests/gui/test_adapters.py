@@ -3,7 +3,8 @@
 import numpy as np
 import pytest
 
-from aerophysics import FlightCondition
+import aerophysics.gui.adapters as adapters
+from aerophysics import BeattieBridgemanGas, FlightCondition
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -251,6 +252,83 @@ def test_beattie_bridgeman_adapter_requires_total_state() -> None:
             gas_model="BEATTIE_BRIDGEMAN",
             total_temperature=1200.0,
         )
+
+
+def test_beattie_bridgeman_adapter_reuses_single_and_critical_states(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = adapters._real_flow_state  # type: ignore[attr-defined]
+    calls: list[float] = []
+
+    def counted_state(
+        mach: float,
+        total_temperature: float,
+        total_pressure: float,
+        gas: BeattieBridgemanGas,
+    ) -> object:
+        calls.append(mach)
+        return original(mach, total_temperature, total_pressure, gas)
+
+    monkeypatch.setattr(adapters, "_real_flow_state", counted_state)
+    result = isentropic_condition(
+        input_value=10.0,
+        input_basis="mach",
+        gas_model="BEATTIE_BRIDGEMAN",
+        total_temperature=900.0,
+        total_pressure=1.0e7,
+        allow_extrapolation=False,
+    )
+    row = result.rows[0]
+    assert calls == [1.0, 10.0]
+    assert row["static_temperature"] == pytest.approx(44.483424529, rel=2e-8)
+    assert row["static_pressure"] == pytest.approx(235.81843565, rel=2e-8)
+    assert row["static_density"] == pytest.approx(0.018477378781, rel=2e-8)
+    assert row["velocity"] == pytest.approx(1336.6566881, rel=2e-8)
+    assert not result.warnings
+
+
+def test_beattie_bridgeman_adapter_sweep_reuses_one_critical_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = adapters._real_flow_state  # type: ignore[attr-defined]
+    calls: list[float] = []
+
+    def counted_state(
+        mach: float,
+        total_temperature: float,
+        total_pressure: float,
+        gas: BeattieBridgemanGas,
+    ) -> object:
+        calls.append(mach)
+        return original(mach, total_temperature, total_pressure, gas)
+
+    monkeypatch.setattr(adapters, "_real_flow_state", counted_state)
+    result = isentropic_sweep(
+        input_basis="mach",
+        branch=MachBranch.SUPERSONIC,
+        start=1.5,
+        stop=2.5,
+        points=3,
+        gas_model="BEATTIE_BRIDGEMAN",
+        total_temperature=1200.0,
+        total_pressure=6.0e6,
+        allow_extrapolation=False,
+    )
+    assert len(result.rows) == 3
+    assert calls == [1.0, 1.5, 2.0, 2.5]
+    assert not result.warnings
+
+
+def test_beattie_bridgeman_adapter_deduplicates_range_warning() -> None:
+    result = isentropic_condition(
+        input_value=np.asarray([11.0, 12.0]),
+        input_basis="mach",
+        gas_model="BEATTIE_BRIDGEMAN",
+        total_temperature=900.0,
+        total_pressure=1.0e7,
+        allow_extrapolation=True,
+    )
+    assert len(result.warnings) == 1
 
 
 def test_normal_shock_adapter_and_sweep() -> None:

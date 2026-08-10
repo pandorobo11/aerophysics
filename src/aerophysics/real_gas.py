@@ -692,6 +692,14 @@ class BeattieBridgemanGas:
         temperatures, densities, scalar = _broadcast_temperature_density(
             temperature, density
         )
+        _warn_or_raise_outside(
+            temperatures,
+            self.applicable_temperature_range,
+            name="temperature",
+            unit="K",
+            allow_extrapolation=allow_extrapolation,
+            warn=False,
+        )
         result = np.empty_like(temperatures)
         for index in np.ndindex(result.shape):
             result[index] = self._pressure_scalar(

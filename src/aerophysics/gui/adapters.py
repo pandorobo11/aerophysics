@@ -36,6 +36,9 @@ from aerophysics.expansion import (
 from aerophysics.gas import AIR, PerfectGas
 from aerophysics.isentropic import (
     MachBranch,
+    _check_real_static_conditions,
+    _check_real_total_conditions,
+    _real_flow_state,
     area_ratio,
     choked_mass_flux,
     critical_ratios,
@@ -305,12 +308,35 @@ def isentropic_condition(
     rows: list[Row] = []
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
-        critical = critical_ratios(
-            gas,
-            total_temperature=total_temperature,
-            total_pressure=total_pressure,
-            allow_extrapolation=allow_extrapolation,
-        )
+        real_critical = None
+        real_total_outside = False
+        real_static_temperatures: list[float] = []
+        real_static_pressures: list[float] = []
+        if isinstance(gas, BeattieBridgemanGas):
+            assert total_temperature is not None
+            assert total_pressure is not None
+            real_total_outside = _check_real_total_conditions(
+                gas,
+                np.asarray(total_temperature, dtype=np.float64),
+                np.asarray(total_pressure, dtype=np.float64),
+                allow_extrapolation=allow_extrapolation,
+            )
+            real_critical = _real_flow_state(
+                1.0, total_temperature, total_pressure, gas
+            )
+            critical_temperature_ratio = real_critical.total_temperature_ratio
+            critical_pressure_ratio = real_critical.total_pressure_ratio
+            critical_density_ratio = real_critical.total_density_ratio
+        else:
+            critical = critical_ratios(
+                gas,
+                total_temperature=total_temperature,
+                total_pressure=total_pressure,
+                allow_extrapolation=allow_extrapolation,
+            )
+            critical_temperature_ratio = float(critical.total_temperature_ratio)
+            critical_pressure_ratio = float(critical.total_pressure_ratio)
+            critical_density_ratio = float(critical.total_density_ratio)
         for raw_value in _array(input_value):
             value = float(raw_value)
             mach = _mach_from_isentropic_input(
@@ -322,49 +348,150 @@ def isentropic_condition(
                 total_pressure,
                 allow_extrapolation=allow_extrapolation,
             )
-            ratios = isentropic_ratios(
-                mach,
-                gas,
-                total_temperature=total_temperature,
-                total_pressure=total_pressure,
-                allow_extrapolation=allow_extrapolation,
-            )
-            flux = (
-                float(
-                    mass_flux(
-                        total_pressure,
-                        total_temperature,
-                        mach,
-                        gas,
-                        allow_extrapolation=allow_extrapolation,
-                    )
+            static_temperature: float | None
+            static_pressure: float | None
+            static_density: float | None
+            velocity: float | None
+            speed_of_sound: float | None
+            dynamic_pressure: float | None
+            flux: float | None
+            choked: float | None
+            current_area_ratio: float | None
+            if real_critical is not None:
+                assert isinstance(gas, BeattieBridgemanGas)
+                assert total_temperature is not None
+                assert total_pressure is not None
+                real_state = (
+                    real_critical
+                    if mach == 1.0
+                    else _real_flow_state(mach, total_temperature, total_pressure, gas)
                 )
-                if total_pressure is not None and total_temperature is not None
-                else None
-            )
-            choked = (
-                float(
-                    choked_mass_flux(
-                        total_pressure,
-                        total_temperature,
-                        gas,
-                        allow_extrapolation=allow_extrapolation,
-                    )
+                real_static_temperatures.append(real_state.static.temperature)
+                real_static_pressures.append(real_state.static.pressure)
+                temperature_ratio = real_state.total_temperature_ratio
+                pressure_ratio = real_state.total_pressure_ratio
+                density_ratio = real_state.total_density_ratio
+                static_temperature = real_state.static.temperature
+                static_pressure = real_state.static.pressure
+                static_density = real_state.static.density
+                velocity = real_state.velocity
+                speed_of_sound = real_state.static.speed_of_sound
+                dynamic_pressure = 0.5 * static_density * velocity**2
+                parameter = real_state.mass_flow_parameter
+                flux = (
+                    total_pressure
+                    * parameter
+                    / np.sqrt(gas.specific_gas_constant * total_temperature)
                 )
-                if total_pressure is not None and total_temperature is not None
-                else None
-            )
-            absolute_state = (
-                isentropic_state(
+                choked = (
+                    total_pressure
+                    * real_critical.mass_flow_parameter
+                    / np.sqrt(gas.specific_gas_constant * total_temperature)
+                )
+                current_area_ratio = (
+                    real_critical.mass_flow_parameter / parameter
+                    if mach > 0.0
+                    else None
+                )
+            else:
+                ratios = isentropic_ratios(
                     mach,
                     gas,
                     total_temperature=total_temperature,
                     total_pressure=total_pressure,
                     allow_extrapolation=allow_extrapolation,
                 )
-                if total_pressure is not None and total_temperature is not None
-                else None
-            )
+                flux = (
+                    float(
+                        mass_flux(
+                            total_pressure,
+                            total_temperature,
+                            mach,
+                            gas,
+                            allow_extrapolation=allow_extrapolation,
+                        )
+                    )
+                    if total_pressure is not None and total_temperature is not None
+                    else None
+                )
+                choked = (
+                    float(
+                        choked_mass_flux(
+                            total_pressure,
+                            total_temperature,
+                            gas,
+                            allow_extrapolation=allow_extrapolation,
+                        )
+                    )
+                    if total_pressure is not None and total_temperature is not None
+                    else None
+                )
+                absolute_state = (
+                    isentropic_state(
+                        mach,
+                        gas,
+                        total_temperature=total_temperature,
+                        total_pressure=total_pressure,
+                        allow_extrapolation=allow_extrapolation,
+                    )
+                    if total_pressure is not None and total_temperature is not None
+                    else None
+                )
+                temperature_ratio = float(ratios.total_temperature_ratio)
+                pressure_ratio = float(ratios.total_pressure_ratio)
+                density_ratio = float(ratios.total_density_ratio)
+                static_temperature = (
+                    total_temperature / temperature_ratio
+                    if total_temperature is not None
+                    else None
+                )
+                static_pressure = (
+                    float(absolute_state.static_pressure)
+                    if absolute_state is not None
+                    else None
+                )
+                static_density = (
+                    float(absolute_state.static_density)
+                    if absolute_state is not None
+                    else None
+                )
+                velocity = (
+                    float(absolute_state.velocity)
+                    if absolute_state is not None
+                    else None
+                )
+                speed_of_sound = (
+                    float(absolute_state.speed_of_sound)
+                    if absolute_state is not None
+                    else None
+                )
+                dynamic_pressure = (
+                    float(absolute_state.dynamic_pressure)
+                    if absolute_state is not None
+                    else None
+                )
+                current_area_ratio = (
+                    float(
+                        area_ratio(
+                            mach,
+                            gas,
+                            total_temperature=total_temperature,
+                            total_pressure=total_pressure,
+                            allow_extrapolation=allow_extrapolation,
+                        )
+                    )
+                    if mach > 0.0
+                    else None
+                )
+                parameter = float(
+                    mass_flow_parameter(
+                        mach,
+                        gas,
+                        total_temperature=total_temperature,
+                        total_pressure=total_pressure,
+                        allow_extrapolation=allow_extrapolation,
+                    )
+                )
             rows.append(
                 {
                     "gas_model": gas_model,
@@ -372,71 +499,36 @@ def isentropic_condition(
                     "input_basis": input_basis,
                     "mach": mach,
                     "total_temperature": total_temperature,
-                    "static_temperature": (
-                        total_temperature / float(ratios.total_temperature_ratio)
-                        if total_temperature is not None
-                        else None
-                    ),
-                    "static_pressure": (
-                        float(absolute_state.static_pressure)
-                        if absolute_state is not None
-                        else None
-                    ),
-                    "static_density": (
-                        float(absolute_state.static_density)
-                        if absolute_state is not None
-                        else None
-                    ),
-                    "velocity": (
-                        float(absolute_state.velocity)
-                        if absolute_state is not None
-                        else None
-                    ),
-                    "speed_of_sound": (
-                        float(absolute_state.speed_of_sound)
-                        if absolute_state is not None
-                        else None
-                    ),
-                    "dynamic_pressure": (
-                        float(absolute_state.dynamic_pressure)
-                        if absolute_state is not None
-                        else None
-                    ),
-                    "total_temperature_ratio": float(ratios.total_temperature_ratio),
-                    "total_pressure_ratio": float(ratios.total_pressure_ratio),
-                    "total_density_ratio": float(ratios.total_density_ratio),
-                    "area_ratio": (
-                        float(
-                            area_ratio(
-                                mach,
-                                gas,
-                                total_temperature=total_temperature,
-                                total_pressure=total_pressure,
-                                allow_extrapolation=allow_extrapolation,
-                            )
-                        )
-                        if mach > 0.0
-                        else None
-                    ),
-                    "mass_flow_parameter": float(
-                        mass_flow_parameter(
-                            mach,
-                            gas,
-                            total_temperature=total_temperature,
-                            total_pressure=total_pressure,
-                            allow_extrapolation=allow_extrapolation,
-                        )
-                    ),
+                    "static_temperature": static_temperature,
+                    "static_pressure": static_pressure,
+                    "static_density": static_density,
+                    "velocity": velocity,
+                    "speed_of_sound": speed_of_sound,
+                    "dynamic_pressure": dynamic_pressure,
+                    "total_temperature_ratio": temperature_ratio,
+                    "total_pressure_ratio": pressure_ratio,
+                    "total_density_ratio": density_ratio,
+                    "area_ratio": current_area_ratio,
+                    "mass_flow_parameter": parameter,
                     "mass_flux": flux,
                     "choked_mass_flux": choked,
-                    "critical_temperature_ratio": float(
-                        critical.total_temperature_ratio
-                    ),
-                    "critical_pressure_ratio": float(critical.total_pressure_ratio),
-                    "critical_density_ratio": float(critical.total_density_ratio),
+                    "critical_temperature_ratio": float(critical_temperature_ratio),
+                    "critical_pressure_ratio": critical_pressure_ratio,
+                    "critical_density_ratio": critical_density_ratio,
                     "status": "ok",
                     "message": "",
                 }
+            )
+        if real_critical is not None:
+            assert isinstance(gas, BeattieBridgemanGas)
+            real_static_temperatures.append(real_critical.static.temperature)
+            real_static_pressures.append(real_critical.static.pressure)
+            _check_real_static_conditions(
+                gas,
+                real_total_outside,
+                np.asarray(real_static_temperatures, dtype=np.float64),
+                np.asarray(real_static_pressures, dtype=np.float64),
+                allow_extrapolation=allow_extrapolation,
             )
     messages = tuple(dict.fromkeys(str(item.message) for item in captured))
     return CalculationResult(tuple(rows), messages)
