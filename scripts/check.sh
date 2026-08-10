@@ -37,9 +37,9 @@ run_step "Mypy" uv run mypy
 run_step "Normal test suite" uv run pytest -m "not generated_assets"
 run_step "Generated and verification assets" bash scripts/check-generated.sh
 run_step "Build HTML documentation" \
-    uv run sphinx-build -W --keep-going -b html docs docs/_build/html
+    uv run sphinx-build -E -a -W --keep-going -b html docs docs/_build/html
 run_step "Run documentation doctests" \
-    uv run sphinx-build -W --keep-going -b doctest docs docs/_build/doctest
+    uv run sphinx-build -E -a -W --keep-going -b doctest docs docs/_build/doctest
 run_step "Build Python distributions" uv run python -m build
 
 exit "$status"

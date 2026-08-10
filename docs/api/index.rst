@@ -1,5 +1,5 @@
-API reference
-=============
+API and references
+==================
 
 The API reference is organized by calculation domain. Public objects are
 documented once, in their defining module. Frequently used classes and
@@ -22,3 +22,4 @@ rather than documented a second time.
    viscous_flow
    flight_units
    errors
+   ../references

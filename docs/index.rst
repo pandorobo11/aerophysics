@@ -29,49 +29,19 @@ complete vehicle aerodynamics, wing lift, interference drag, separated flow,
 chemical equilibrium, ionization, phase change, or weather. Individual model
 pages document narrower exclusions.
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Getting started
+Documentation map
+-----------------
 
-   getting_started/installation
-   getting_started/quickstart
-   getting_started/conventions
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Task guides
-
-   guides/atmosphere_flight
-   guides/compressible_flow
-   guides/boundary_layers
-   guides/vectorization_errors
-   guides/gui
+The complete manual is grouped into five sections. The same section hierarchy
+is shown in the left sidebar while reading a page; headings within the current
+page remain in the right sidebar.
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Models and equations
+   :maxdepth: 2
+   :titlesonly:
 
-   models/gas_and_atmosphere
-   models/transport_properties
-   models/thermochemistry
-   models/isentropic_flow
-   models/shock_waves
-   models/expansion_waves
-   models/flat_plate_boundary_layer
-   models/compressible_velocity_transformations
-   models/protrusion_drag
-   models/flight_conditions
-   models/unit_conversions
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Verification
-
+   getting_started/index
+   guides/index
+   models/index
    verification/index
-
-.. toctree::
-   :maxdepth: 1
-   :caption: API and references
-
    api/index
-   references

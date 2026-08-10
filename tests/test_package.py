@@ -155,14 +155,17 @@ def test_wheel_bundles_docs_and_installed_gui_finds_them(tmp_path: Path) -> None
         names = set(archive.namelist())
         required_docs = {
             "aerophysics/_docs/index.html",
+            "aerophysics/_docs/getting_started/index.html",
             "aerophysics/_docs/getting_started/installation.html",
             "aerophysics/_docs/getting_started/quickstart.html",
             "aerophysics/_docs/getting_started/conventions.html",
+            "aerophysics/_docs/guides/index.html",
             "aerophysics/_docs/guides/atmosphere_flight.html",
             "aerophysics/_docs/guides/compressible_flow.html",
             "aerophysics/_docs/guides/boundary_layers.html",
             "aerophysics/_docs/guides/vectorization_errors.html",
             "aerophysics/_docs/guides/gui.html",
+            "aerophysics/_docs/models/index.html",
             "aerophysics/_docs/models/gas_and_atmosphere.html",
             "aerophysics/_docs/models/transport_properties.html",
             "aerophysics/_docs/models/thermochemistry.html",

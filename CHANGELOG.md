@@ -5,6 +5,14 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Changed
+
+- Add section landing pages and a complete top-level documentation map so the
+  left sidebar consistently lists related pages instead of showing an empty
+  section navigation panel.
+- Force complete Sphinx rebuilds in the local validation gate so navigation
+  hierarchy changes cannot leave stale sidebars in previously generated HTML.
+
 ## [0.5.0] - 2026-08-11
 
 ### Added

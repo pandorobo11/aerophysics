@@ -57,7 +57,6 @@ and individual regeneration commands.
 
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    standard_atmosphere
    compressible_flow

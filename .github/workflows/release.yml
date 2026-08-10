@@ -98,14 +98,17 @@ jobs:
               names = set(archive.namelist())
           required_docs = {
               f"{prefix}/index.html",
+              f"{prefix}/getting_started/index.html",
               f"{prefix}/getting_started/installation.html",
               f"{prefix}/getting_started/quickstart.html",
               f"{prefix}/getting_started/conventions.html",
+              f"{prefix}/guides/index.html",
               f"{prefix}/guides/atmosphere_flight.html",
               f"{prefix}/guides/compressible_flow.html",
               f"{prefix}/guides/boundary_layers.html",
               f"{prefix}/guides/vectorization_errors.html",
               f"{prefix}/guides/gui.html",
+              f"{prefix}/models/index.html",
               f"{prefix}/models/gas_and_atmosphere.html",
               f"{prefix}/models/transport_properties.html",
               f"{prefix}/models/thermochemistry.html",
