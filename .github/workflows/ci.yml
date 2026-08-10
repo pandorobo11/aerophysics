@@ -22,14 +22,19 @@ jobs:
         include:
           - os: ubuntu-latest
             python: "3.12"
+            coverage: true
           - os: ubuntu-latest
             python: "3.13"
+            coverage: false
           - os: ubuntu-latest
             python: "3.14"
+            coverage: false
           - os: macos-latest
             python: "3.13"
+            coverage: false
           - os: windows-latest
             python: "3.13"
+            coverage: false
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -40,8 +45,14 @@ jobs:
           version: "0.9.13"
           enable-cache: true
       - run: uv sync --all-groups --all-extras --locked
-      - name: Run normal test suite
-        run: uv run pytest -m "not generated_assets"
+      - name: Run normal test suite with coverage
+        if: matrix.coverage == true
+        run: uv run pytest -m "not generated_assets and not package_artifact"
+      - name: Run normal test suite without coverage
+        if: matrix.coverage == false
+        run: >-
+          uv run pytest -m "not generated_assets and not package_artifact"
+          --no-cov
 
   lint:
     name: Ruff lint
@@ -123,7 +134,7 @@ jobs:
         run: uv run sphinx-build -W --keep-going -b doctest docs docs/_build/doctest
 
   package:
-    name: Python package build
+    name: Python package build and verification
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -136,3 +147,7 @@ jobs:
           enable-cache: true
       - run: uv sync --all-groups --all-extras --locked
       - run: uv run python -m build
+      - name: Verify built wheel
+        env:
+          AEROPHYSICS_TEST_WHEEL_DIRECTORY: dist
+        run: uv run pytest -m package_artifact --no-cov

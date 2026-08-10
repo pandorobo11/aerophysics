@@ -15,6 +15,18 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+def format_bounded_error(value: float, limit: float, *, digits: int = 4) -> str:
+    """Format a nonnegative error without exposing insignificant CPU noise."""
+    if not np.isfinite(value) or value < 0.0:
+        raise ValueError("error value must be finite and nonnegative")
+    if not np.isfinite(limit) or limit <= 0.0:
+        raise ValueError("error limit must be finite and positive")
+    reporting_floor = limit / 2.0
+    if value < reporting_floor:
+        return f"< {reporting_floor:.0e}"
+    return f"{value:.{digits}g}"
+
+
 def write_or_check(path: Path, content: str, *, check: bool) -> bool:
     """Write ``content`` or return whether an existing file is current."""
     normalized = content.rstrip() + "\n"

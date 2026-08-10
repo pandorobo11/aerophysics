@@ -64,20 +64,20 @@ Published transport equations
      - Temperature [K]
      - Result
    * - Sutherland viscosity
-     - 2.776e-15
-     - 250
+     - < 5e-13
+     - —
      - Pass
    * - Keyes viscosity
-     - 2.22e-15
-     - 300
+     - < 5e-13
+     - —
      - Pass
    * - Blottner/Wilke viscosity
-     - 8.882e-16
-     - 1000
+     - < 5e-13
+     - —
      - Pass
    * - USSA conductivity
-     - 1.887e-15
-     - 200
+     - < 5e-13
+     - —
      - Pass
 
 NIST physical-accuracy assessment
@@ -97,31 +97,31 @@ Thermodynamic invariants
      - Result
    * - NASA7 heat-capacity identities
      - relative <= 1e-12
-     - 0
+     - < 5e-13
      - Pass
    * - NASA7 dh/dT = cp
      - relative <= 1e-7
-     - 1.963e-10
+     - < 5e-08
      - Pass
    * - NASA7 1000 K region continuity
      - relative <= 1e-7
-     - 2.368e-09
+     - < 5e-08
      - Pass
    * - NASA9 heat-capacity identities
      - relative <= 1e-12
-     - 0
+     - < 5e-13
      - Pass
    * - NASA9 dh/dT = cp
      - relative <= 1e-7
-     - 1.61e-10
+     - < 5e-08
      - Pass
    * - NASA9 1000 K region continuity
      - relative <= 1e-7
-     - 3.552e-09
+     - < 5e-08
      - Pass
    * - Harmonic-oscillator cp-cv=R
      - relative <= 1e-12
-     - 3.96e-16
+     - < 5e-13
      - Pass
    * - Beattie-Bridgeman stable density root
      - minimum dp/drho > 0
@@ -129,37 +129,37 @@ Thermodynamic invariants
      - Pass
    * - Beattie-Bridgeman pressure closure
      - relative <= 1e-12
-     - 1.421e-14
+     - < 5e-13
      - Pass
    * - NASA7 isentropic total enthalpy
      - relative <= 1e-12
-     - 2.22e-16
+     - < 5e-13
      - Pass
    * - NASA7 isentropic entropy
      - relative <= 1e-12
-     - 2.112e-16
+     - < 5e-13
      - Pass
    * - NASA9 isentropic total enthalpy
      - relative <= 1e-12
-     - 8.882e-16
+     - < 5e-13
      - Pass
    * - NASA9 isentropic entropy
      - relative <= 1e-12
-     - 0
+     - < 5e-13
      - Pass
    * - Harmonic oscillator isentropic total enthalpy
      - relative <= 1e-12
-     - 2.22e-16
+     - < 5e-13
      - Pass
    * - Harmonic oscillator isentropic entropy
      - relative <= 1e-12
-     - 2.181e-16
+     - < 5e-13
      - Pass
    * - Beattie-Bridgeman isentropic total enthalpy
      - relative <= 1e-12
-     - 1.887e-15
+     - < 5e-13
      - Pass
    * - Beattie-Bridgeman isentropic entropy
      - relative <= 1e-12
-     - 7.819e-16
+     - < 5e-13
      - Pass

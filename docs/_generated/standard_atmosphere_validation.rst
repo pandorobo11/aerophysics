@@ -78,23 +78,23 @@ All verification acceptance criteria pass.  Differences that exceed the stricter
      - Pass
    * - Pressure
      - relative ≤ 2e-05
-     - 2.0532e-12
-     - 86000
+     - < 1e-05
+     - —
      - Pass
    * - Density
      - relative ≤ 2e-05
-     - 4.9046e-07
-     - 86000
+     - < 1e-05
+     - —
      - Pass
    * - Gravity
      - relative ≤ 2e-05
-     - 1.8601e-16
-     - 85000
+     - < 1e-05
+     - —
      - Pass
    * - Speed of sound
      - relative ≤ 2e-05
-     - 2.4523e-07
-     - 86000
+     - < 1e-05
+     - —
      - Pass
    * - Dynamic viscosity
      - relative ≤ 2e-05
@@ -108,8 +108,8 @@ All verification acceptance criteria pass.  Differences that exceed the stricter
      - Pass
    * - Thermal conductivity
      - relative ≤ 2e-05
-     - 4.6718e-07
-     - 86000
+     - < 1e-05
+     - —
      - Pass
 
 
@@ -139,23 +139,23 @@ All verification acceptance criteria pass.  Differences that exceed the stricter
      - Pass
    * - Seven layer temperature gradients
      - maximum absolute error ≤ 2e-12 K/km
-     - 2.5580e-13
+     - < 1e-12
      - Pass
    * - Layer-boundary continuity
      - maximum relative jump ≤ 1e-9
-     - 3.2917e-10
+     - < 5e-10
      - Pass
    * - Six state-equation closures
      - maximum relative error ≤ 1e-12
-     - 4.4409e-16
+     - < 5e-13
      - Pass
    * - Numerical hydrostatic derivative
      - maximum relative error ≤ 1e-7
-     - 3.1154e-10
+     - < 5e-08
      - Pass
    * - Altitude-coordinate round trip
      - maximum absolute error ≤ 1e-10 m
-     - 1.4552e-11
+     - < 5e-11
      - Pass
 
 

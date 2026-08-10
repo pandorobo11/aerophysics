@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from _verification_common import line_chart_svg, write_or_check
+from _verification_common import format_bounded_error, line_chart_svg, write_or_check
 
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "tests/reference_data/thermophysical"
@@ -81,10 +81,12 @@ def _cantera_results(api: tuple[object, ...]) -> dict[str, tuple[float, float]]:
     return maxima
 
 
-def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
+def _invariants(
+    api: tuple[object, ...],
+) -> list[tuple[str, str, float, bool, float | None]]:
     from aerophysics.isentropic import isentropic_state
 
-    results: list[tuple[str, str, float, bool]] = []
+    results: list[tuple[str, str, float, bool, float | None]] = []
     temperature = np.concatenate(
         (
             np.linspace(200.1, 999.0, 500),
@@ -126,18 +128,21 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
                     "relative <= 1e-12",
                     closure,
                     closure <= 1.0e-12,
+                    1.0e-12,
                 ),
                 (
                     f"{label} dh/dT = cp",
                     "relative <= 1e-7",
                     derivative_error,
                     derivative_error <= 1.0e-7,
+                    1.0e-7,
                 ),
                 (
                     f"{label} 1000 K region continuity",
                     "relative <= 1e-7",
                     continuity,
                     continuity <= 1.0e-7,
+                    1.0e-7,
                 ),
             ]
         )
@@ -159,6 +164,7 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
             "relative <= 1e-12",
             harmonic_closure,
             harmonic_closure <= 1.0e-12,
+            1.0e-12,
         )
     )
     real = api[3]
@@ -185,12 +191,14 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
                 "minimum dp/drho > 0",
                 minimum_dpdrho,
                 minimum_dpdrho > 0.0,
+                None,
             ),
             (
                 "Beattie-Bridgeman pressure closure",
                 "relative <= 1e-12",
                 maximum_state_closure,
                 maximum_state_closure <= 1.0e-12,
+                1.0e-12,
             ),
         ]
     )
@@ -240,12 +248,14 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
                     "relative <= 1e-12",
                     enthalpy_closure,
                     enthalpy_closure <= 1.0e-12,
+                    1.0e-12,
                 ),
                 (
                     f"{label} isentropic entropy",
                     "relative <= 1e-12",
                     entropy_closure,
                     entropy_closure <= 1.0e-12,
+                    1.0e-12,
                 ),
             ]
         )
@@ -346,7 +356,7 @@ def _rst(
     cantera: dict[str, tuple[float, float]],
     ussa: list[tuple[str, str, float, float, bool]],
     transport: dict[str, tuple[float, float]],
-    invariants: list[tuple[str, str, float, bool]],
+    invariants: list[tuple[str, str, float, bool, float | None]],
     assessment: tuple[float, float],
 ) -> str:
     passed = (
@@ -422,11 +432,12 @@ def _rst(
         ]
     )
     for label, (difference, temperature) in transport.items():
+        bounded = difference < 0.5e-12
         lines.extend(
             [
                 f"   * - {label}",
-                f"     - {difference:.4g}",
-                f"     - {temperature:g}",
+                f"     - {format_bounded_error(difference, 1.0e-12)}",
+                f"     - {'—' if bounded else f'{temperature:g}'}",
                 f"     - {'Pass' if difference <= 1.0e-12 else 'Fail'}",
             ]
         )
@@ -459,12 +470,15 @@ def _rst(
             "     - Result",
         ]
     )
-    for label, criterion, value, item_passed in invariants:
+    for label, criterion, value, item_passed, limit in invariants:
+        diagnostic = (
+            f"{value:.4g}" if limit is None else format_bounded_error(value, limit)
+        )
         lines.extend(
             [
                 f"   * - {label}",
                 f"     - {criterion}",
-                f"     - {value:.4g}",
+                f"     - {diagnostic}",
                 f"     - {'Pass' if item_passed else 'Fail'}",
             ]
         )

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import runpy
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -14,6 +17,7 @@ from aerophysics.transport import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.generated_assets
 GENERATOR = PROJECT_ROOT / "docs/scripts/generate_viscosity_comparison.py"
 TABLE_FRAGMENT = PROJECT_ROOT / "docs/_generated/viscosity_model_comparison.rst"
 SVG = PROJECT_ROOT / "docs/_static/viscosity_model_comparison.svg"
@@ -33,6 +37,17 @@ VERIFICATION_SVGS = (
     PROJECT_ROOT / "docs/_static/viscous_skin_friction.svg",
     PROJECT_ROOT / "docs/_static/protrusion_shielding.svg",
 )
+
+
+def test_bounded_error_format_hides_insignificant_cpu_noise() -> None:
+    namespace = runpy.run_path(
+        str(PROJECT_ROOT / "docs/scripts/_verification_common.py")
+    )
+    formatter = cast(Callable[[float, float], str], namespace["format_bounded_error"])
+    epsilon = sys.float_info.epsilon
+    assert formatter(2.0 * epsilon, 1.0e-12) == "< 5e-13"
+    assert formatter(8.0 * epsilon, 1.0e-12) == "< 5e-13"
+    assert formatter(5.0e-13, 1.0e-12) == "5e-13"
 
 
 def _expected_row(temperature: float, candidate: DynamicViscosityModel) -> str:
@@ -66,7 +81,6 @@ def _assert_generator_check_passes(generator: Path) -> None:
         )
 
 
-@pytest.mark.generated_assets
 def test_viscosity_comparison_assets_are_current() -> None:
     _assert_generator_check_passes(GENERATOR)
 
@@ -108,7 +122,6 @@ def test_standard_atmosphere_svgs_have_accessible_labels() -> None:
         assert "Geometric altitude (km)" in svg
 
 
-@pytest.mark.generated_assets
 def test_all_verification_assets_are_current() -> None:
     _assert_generator_check_passes(VERIFICATION_GENERATOR)
 

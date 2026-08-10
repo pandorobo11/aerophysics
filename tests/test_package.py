@@ -46,6 +46,30 @@ from aerophysics.exceptions import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+WHEEL_DIRECTORY_ENVIRONMENT_VARIABLE = "AEROPHYSICS_TEST_WHEEL_DIRECTORY"
+
+
+def _wheel_directory(tmp_path: Path) -> Path:
+    configured = os.environ.get(WHEEL_DIRECTORY_ENVIRONMENT_VARIABLE)
+    if configured is not None:
+        directory = Path(configured)
+        return directory if directory.is_absolute() else PROJECT_ROOT / directory
+
+    directory = tmp_path / "wheel"
+    directory.mkdir()
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--wheel",
+            "--outdir",
+            str(directory),
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
+    )
+    return directory
 
 
 def test_version() -> None:
@@ -133,23 +157,9 @@ def test_primary_protrusion_drag_api_is_exported() -> None:
     assert result.direct_drag > 0.0
 
 
+@pytest.mark.package_artifact
 def test_wheel_bundles_docs_and_installed_gui_finds_them(tmp_path: Path) -> None:
-    wheel_directory = tmp_path / "wheel"
-    wheel_directory.mkdir()
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "build",
-            "--wheel",
-            "--outdir",
-            str(wheel_directory),
-        ],
-        cwd=PROJECT_ROOT,
-        check=True,
-    )
-
-    wheels = sorted(wheel_directory.glob("aerophysics-*.whl"))
+    wheels = sorted(_wheel_directory(tmp_path).glob(f"aerophysics-{__version__}-*.whl"))
     assert len(wheels) == 1
     with ZipFile(wheels[0]) as archive:
         names = set(archive.namelist())

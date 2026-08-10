@@ -83,6 +83,7 @@ addopts = [
 testpaths = ["tests"]
 markers = [
   "generated_assets: checks deterministic generated documentation and verification assets",
+  "package_artifact: checks the built wheel and its installed runtime assets",
 ]
 
 [tool.coverage.run]

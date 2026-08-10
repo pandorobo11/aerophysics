@@ -37,7 +37,9 @@ jobs:
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest -m "not generated_assets and not package_artifact"
+      - name: Check generated and verification assets
+        run: bash scripts/check-generated.sh
       - name: Run Ruff
         run: |
           uv run ruff check .
@@ -50,6 +52,10 @@ jobs:
           uv run sphinx-build -W --keep-going -b doctest docs docs/_build/doctest
       - name: Build Python distributions
         run: uv run python -m build
+      - name: Verify built wheel
+        env:
+          AEROPHYSICS_TEST_WHEEL_DIRECTORY: dist
+        run: uv run pytest -m package_artifact --no-cov
 
       - name: Package HTML documentation
         env:

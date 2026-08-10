@@ -34,12 +34,15 @@ run_step "Format Python files" "${FORMAT_COMMAND[@]}"
 run_step "Ruff lint" uv run ruff check .
 run_step "Verify formatting" uv run ruff format --check .
 run_step "Mypy" uv run mypy
-run_step "Normal test suite" uv run pytest -m "not generated_assets"
+run_step "Normal test suite" \
+    uv run pytest -m "not generated_assets and not package_artifact"
 run_step "Generated and verification assets" bash scripts/check-generated.sh
 run_step "Build HTML documentation" \
     uv run sphinx-build -E -a -W --keep-going -b html docs docs/_build/html
 run_step "Run documentation doctests" \
     uv run sphinx-build -E -a -W --keep-going -b doctest docs docs/_build/doctest
 run_step "Build Python distributions" uv run python -m build
+run_step "Verify built wheel" env AEROPHYSICS_TEST_WHEEL_DIRECTORY=dist \
+    uv run pytest -m package_artifact --no-cov
 
 exit "$status"

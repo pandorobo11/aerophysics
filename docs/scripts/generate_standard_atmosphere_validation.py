@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
+from _verification_common import format_bounded_error
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -64,6 +65,7 @@ class ExternalResult:
     criterion: str
     maximum: float
     altitude_m: float
+    limit: float
     passed: bool
 
 
@@ -75,6 +77,7 @@ class PhysicalResult:
     criterion: str
     maximum: float
     passed: bool
+    limit: float | None = None
 
 
 @dataclass(frozen=True)
@@ -273,6 +276,7 @@ def external_results() -> list[ExternalResult]:
                 criterion=criterion,
                 maximum=maximum,
                 altitude_m=float(altitude[index]),
+                limit=threshold,
                 passed=maximum <= threshold,
             )
         )
@@ -334,6 +338,7 @@ def physical_results() -> list[PhysicalResult]:
             "maximum absolute error ≤ 2e-12 K/km",
             slope_error,
             slope_error <= 2.0e-12,
+            limit=2.0e-12,
         )
     )
 
@@ -369,6 +374,7 @@ def physical_results() -> list[PhysicalResult]:
             "maximum relative jump ≤ 1e-9",
             continuity_error,
             continuity_error <= 1.0e-9,
+            limit=1.0e-9,
         )
     )
 
@@ -403,6 +409,7 @@ def physical_results() -> list[PhysicalResult]:
             "maximum relative error ≤ 1e-12",
             closure_error,
             closure_error <= 1.0e-12,
+            limit=1.0e-12,
         )
     )
 
@@ -421,6 +428,7 @@ def physical_results() -> list[PhysicalResult]:
             "maximum relative error ≤ 1e-7",
             hydrostatic_error,
             hydrostatic_error <= 1.0e-7,
+            limit=1.0e-7,
         )
     )
 
@@ -434,6 +442,7 @@ def physical_results() -> list[PhysicalResult]:
             "maximum absolute error ≤ 1e-10 m",
             round_trip_error,
             round_trip_error <= 1.0e-10,
+            limit=1.0e-10,
         )
     )
     return results
@@ -493,12 +502,18 @@ def _external_summary(results: Sequence[ExternalResult]) -> list[str]:
         "     - Status",
     ]
     for result in results:
+        bounded = result.maximum < result.limit / 2.0
+        maximum = (
+            format_bounded_error(result.maximum, result.limit, digits=5)
+            if bounded
+            else _number(result.maximum)
+        )
         lines.extend(
             [
                 f"   * - {result.label}",
                 f"     - {result.criterion}",
-                f"     - {_number(result.maximum)}",
-                f"     - {result.altitude_m:.0f}",
+                f"     - {maximum}",
+                f"     - {'—' if bounded else f'{result.altitude_m:.0f}'}",
                 f"     - {'Pass' if result.passed else 'Fail'}",
             ]
         )
@@ -517,11 +532,16 @@ def _physical_summary(results: Sequence[PhysicalResult]) -> list[str]:
         "     - Status",
     ]
     for result in results:
+        diagnostic = (
+            _number(result.maximum)
+            if result.limit is None
+            else format_bounded_error(result.maximum, result.limit, digits=5)
+        )
         lines.extend(
             [
                 f"   * - {result.label}",
                 f"     - {result.criterion}",
-                f"     - {_number(result.maximum)}",
+                f"     - {diagnostic}",
                 f"     - {'Pass' if result.passed else 'Fail'}",
             ]
         )
