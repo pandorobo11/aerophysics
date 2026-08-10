@@ -24,6 +24,7 @@ from aerophysics.gui.tables import (
 from aerophysics.gui.units import (
     UnitPreferences,
     from_si,
+    inverse_length_unit,
     selected_unit,
     to_si,
 )
@@ -46,6 +47,7 @@ from aerophysics.gui.units import (
         ("density", "slug/ft³", [0.0, 0.00237]),
         ("density", "lbm/ft³", [0.0, 0.0765]),
         ("force", "lbf", [0.0, 100.0]),
+        ("inverse_length", "1/mm", [0.0, 100.0]),
         ("inverse_length", "1/ft", [0.0, 100.0]),
         ("inverse_length", "1/in", [0.0, 100.0]),
         ("angle", "deg", [0.0, 10.0, 90.0]),
@@ -70,9 +72,12 @@ def test_scalar_units_and_preferences_validation() -> None:
         angle="rad",
     )
     assert selected_unit("speed", preferences) == "kt"
+    assert inverse_length_unit("ft") == "1/ft"
     assert UnitPreferences.from_dict(preferences.to_dict()) == preferences
     with pytest.raises(ValueError, match="unsupported length"):
         UnitPreferences(length="yard")
+    with pytest.raises(ValueError, match="unsupported length"):
+        inverse_length_unit("yard")
     with pytest.raises(ValueError, match="units must"):
         UnitPreferences.from_dict([])
     with pytest.raises(ValueError, match="missing"):

@@ -5,6 +5,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Changed
+
+- Use one GUI selector for length and inverse-length display units so their
+  dimensional bases stay consistent.
+
 ## [0.6.0] - 2026-08-11
 
 ### Added

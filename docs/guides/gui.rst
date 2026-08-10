@@ -28,7 +28,9 @@ Display units and the SI core
 
 The public Python calculation APIs use SI units and radians. The GUI sidebar
 can instead display selected aviation units for length, area, speed, pressure,
-temperature, density, force, inverse length, and angle. Choices include
+temperature, density, force, inverse length, and angle. Length and inverse
+length share one selector, so choosing feet also displays inverse-length
+results per foot. Choices include
 millimetres and inches, feet per second, kilopascals, hectopascals, pounds-force
 per square foot, Celsius, Rankine, and pounds mass per cubic foot. GUI inputs
 are converted to SI before calling the calculation core, and results are

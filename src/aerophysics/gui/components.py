@@ -14,7 +14,13 @@ from aerophysics.gui.config import (
     load_configuration,
 )
 from aerophysics.gui.tables import display_rows, rows_to_csv
-from aerophysics.gui.units import QuantityKind, UnitPreferences, from_si, to_si
+from aerophysics.gui.units import (
+    QuantityKind,
+    UnitPreferences,
+    from_si,
+    inverse_length_unit,
+    to_si,
+)
 
 PLOTLY_CONFIG = {
     "displaylogo": False,
@@ -29,12 +35,12 @@ _UNIT_STATE_KEY = "_gui_display_units"
 def _current_unit_preferences() -> UnitPreferences:
     """Build preferences from widget state, including not-yet-rendered defaults."""
     defaults = UnitPreferences()
-    return UnitPreferences(
-        **{
-            name: str(st.session_state.get(f"unit_{name}", value))
-            for name, value in defaults.to_dict().items()
-        }
-    )
+    values = {
+        name: str(st.session_state.get(f"unit_{name}", value))
+        for name, value in defaults.to_dict().items()
+    }
+    values["inverse_length"] = inverse_length_unit(values["length"])
+    return UnitPreferences(**values)
 
 
 def _convert_state_value(
@@ -158,10 +164,11 @@ def render_unit_sidebar() -> UnitPreferences:
     st.sidebar.header("表示単位")
     with st.sidebar.expander("単位設定", expanded=False):
         length = st.selectbox(
-            "長さ",
+            "長さ・逆長さ",
             ("m", "mm", "ft", "in"),
             key="unit_length",
             on_change=_convert_display_input_state,
+            format_func=lambda unit: f"{unit} / 1/{unit}",
         )
         area = st.selectbox(
             "面積",
@@ -199,12 +206,6 @@ def render_unit_sidebar() -> UnitPreferences:
             key="unit_force",
             on_change=_convert_display_input_state,
         )
-        inverse_length = st.selectbox(
-            "逆長さ",
-            ("1/m", "1/ft", "1/in"),
-            key="unit_inverse_length",
-            on_change=_convert_display_input_state,
-        )
         angle = st.selectbox(
             "角度",
             ("deg", "rad"),
@@ -220,7 +221,7 @@ def render_unit_sidebar() -> UnitPreferences:
         temperature=temperature,
         density=density,
         force=force,
-        inverse_length=inverse_length,
+        inverse_length=inverse_length_unit(length),
         angle=angle,
     )
     st.session_state[_UNIT_STATE_KEY] = preferences.to_dict()
@@ -228,9 +229,11 @@ def render_unit_sidebar() -> UnitPreferences:
 
 
 def _set_unit_state(preferences: UnitPreferences) -> None:
-    for name, value in preferences.to_dict().items():
+    values = preferences.to_dict()
+    values["inverse_length"] = inverse_length_unit(preferences.length)
+    for name, value in values.items():
         st.session_state[f"unit_{name}"] = value
-    st.session_state[_UNIT_STATE_KEY] = preferences.to_dict()
+    st.session_state[_UNIT_STATE_KEY] = values
 
 
 def calculation_button(form_key: str) -> bool:

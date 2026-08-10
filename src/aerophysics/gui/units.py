@@ -38,9 +38,7 @@ _ANGLE_FACTORS = {"rad": 1.0, "deg": np.pi / 180.0}
 _AREA_FACTORS = {"m²": 1.0, "ft²": 0.3048**2, "in²": 0.0254**2}
 _FORCE_FACTORS = {"N": 1.0, "lbf": 4.4482216152605}
 _INVERSE_LENGTH_FACTORS = {
-    "1/m": 1.0,
-    "1/ft": 1.0 / 0.3048,
-    "1/in": 1.0 / 0.0254,
+    f"1/{unit}": 1.0 / factor for unit, factor in _LENGTH_FACTORS.items()
 }
 _TEMPERATURE_UNITS = {"K", "°C", "°F", "°R"}
 
@@ -99,6 +97,13 @@ class UnitPreferences:
         ):
             raise ValueError("units contain missing or unsupported fields")
         return cls(**values)
+
+
+def inverse_length_unit(length_unit: str) -> str:
+    """Return the inverse-length unit paired with a display length unit."""
+    if length_unit not in _LENGTH_FACTORS:
+        raise ValueError(f"unsupported length unit: {length_unit}")
+    return f"1/{length_unit}"
 
 
 def selected_unit(kind: QuantityKind, preferences: UnitPreferences) -> str:

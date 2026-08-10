@@ -135,10 +135,13 @@ finite_number(
 """
     app = AppTest.from_string(script, default_timeout=15).run()
     assert app.number_input(key="flight_altitude").value == pytest.approx(10_000.0)
+    assert "unit_inverse_length" not in {widget.key for widget in app.selectbox}
+    assert app.session_state["_gui_display_units"]["inverse_length"] == "1/m"
     app.selectbox(key="unit_length").set_value("ft").run()
     assert app.number_input(key="flight_altitude").value == pytest.approx(
         32_808.3989501
     )
+    assert app.session_state["_gui_display_units"]["inverse_length"] == "1/ft"
 
 
 def test_shock_page_calculation() -> None:
