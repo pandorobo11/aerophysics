@@ -1,8 +1,11 @@
 """Tests for pure GUI calculation adapters."""
 
+from unittest.mock import Mock
+
 import numpy as np
 import pytest
 
+import aerophysics.detached_shock as detached_shock
 import aerophysics.gui.adapters as adapters
 from aerophysics import BeattieBridgemanGas, FlightCondition
 from aerophysics.boundary_layer import (
@@ -33,7 +36,7 @@ from aerophysics.gui.adapters import (
     sweep_values,
 )
 from aerophysics.isentropic import MachBranch, isentropic_ratios
-from aerophysics.shocks import ShockBranch, conical_shock, oblique_shock
+from aerophysics.shocks import ShockBranch, conical_shock, normal_shock, oblique_shock
 
 
 def test_sweep_values_validation_and_spacing() -> None:
@@ -374,6 +377,26 @@ def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
     )
     assert shape.shock_x.shape == (401,)
     assert shape.shock_y[[0, -1]].tolist() == pytest.approx([-0.2, 0.2])
+
+
+@pytest.mark.parametrize(
+    ("selection", "expected_seiff_calls"),
+    (("ambrosio_wortman", 0), ("seiff", 1), ("comparison", 1)),
+)
+def test_detached_shock_adapter_only_computes_selected_models(
+    monkeypatch: pytest.MonkeyPatch,
+    selection: str,
+    expected_seiff_calls: int,
+) -> None:
+    counted_normal_shock = Mock(wraps=normal_shock)
+    monkeypatch.setattr(detached_shock, "normal_shock", counted_normal_shock)
+    detached_shock_condition(
+        upstream_mach=np.asarray([2.0, 4.0]),
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+        selection=selection,
+    )
+    assert counted_normal_shock.call_count == expected_seiff_calls
 
 
 def test_detached_shock_adapter_rejects_unsupported_requests() -> None:

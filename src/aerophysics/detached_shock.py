@@ -34,6 +34,8 @@ from aerophysics._array import FloatArray, FloatResult, as_float_array, return_f
 from aerophysics.gas import AIR, PerfectGas
 from aerophysics.shocks import normal_shock
 
+_FLOAT64_LOG_MAX = float(np.log(np.finfo(np.float64).max))
+
 
 class DetachedShockGeometry(StrEnum):
     """Blunt-nose geometry used by a detached-shock correlation."""
@@ -238,9 +240,37 @@ def billig_shock_shape(
     normalized = np.asarray(standoff.normalized_standoff_distance, dtype=np.float64)
     distance = np.asarray(standoff.standoff_distance, dtype=np.float64)
     if geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE:
-        curvature = 1.143 * radius * np.exp(0.54 / (mach - 1.0) ** 1.2)
+        curvature_exponent = 0.54 / (mach - 1.0) ** 1.2
+        curvature_factor = 1.143
     else:
-        curvature = 1.386 * radius * np.exp(1.8 / (mach - 1.0) ** 0.75)
+        curvature_exponent = 1.8 / (mach - 1.0) ** 0.75
+        curvature_factor = 1.386
+
+    # Evaluate the complete product in log space.  Near M=1 the exponential
+    # can overflow even though all physical inputs passed validation; log space
+    # also preserves representable results when the nose radius is very small.
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        log_curvature = np.log(curvature_factor) + np.log(radius) + curvature_exponent
+    if not np.all(np.isfinite(log_curvature)) or np.any(
+        log_curvature > _FLOAT64_LOG_MAX
+    ):
+        raise ValueError(
+            "Billig vertex curvature is not representable for the supplied "
+            "Mach and nose radius"
+        )
+    with np.errstate(over="ignore", under="ignore"):
+        curvature = np.exp(log_curvature)
+
+    if not np.all(np.isfinite(normalized)) or not np.all(np.isfinite(distance)):
+        raise ValueError(
+            "Billig standoff distance is non-finite for the supplied Mach and "
+            "nose radius"
+        )
+    if not np.all(np.isfinite(curvature)) or np.any(curvature <= 0.0):
+        raise ValueError(
+            "Billig vertex curvature is not representable for the supplied "
+            "Mach and nose radius"
+        )
 
     case_dimensions = (1,) * mach.ndim
     y = transverse.reshape((*case_dimensions, transverse.size))
@@ -250,15 +280,20 @@ def billig_shock_shape(
     radius_expanded = radius[..., np.newaxis]
     distance_expanded = distance[..., np.newaxis]
     curvature_expanded = curvature[..., np.newaxis]
-    beta = np.arcsin(1.0 / mach_expanded)
-    tangent = np.tan(beta)
-    shock_x = (
-        radius_expanded
-        + distance_expanded
-        - curvature_expanded
-        / tangent**2
-        * (np.sqrt(1.0 + shock_y**2 * tangent**2 / curvature_expanded**2) - 1.0)
-    )
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        beta = np.arcsin(1.0 / mach_expanded)
+        tangent = np.tan(beta)
+        z = shock_y * tangent / curvature_expanded
+        # Algebraically equal to sqrt(1 + z**2) - 1, but avoids catastrophic
+        # cancellation close to the vertex and hypot avoids squaring overflow.
+        hyperbola_increment = z * (z / (np.hypot(1.0, z) + 1.0))
+        shock_x = (
+            radius_expanded
+            + distance_expanded
+            - curvature_expanded / tangent**2 * hyperbola_increment
+        )
+    if not np.all(np.isfinite(shock_x)) or not np.all(np.isfinite(shock_y)):
+        raise ValueError("Billig shock coordinates are non-finite")
 
     return BilligShockShapeResult(
         upstream_mach=return_float(mach, scalar=scalar),

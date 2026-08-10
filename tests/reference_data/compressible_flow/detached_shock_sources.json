@@ -43,5 +43,17 @@
       "cylinder_curvature_over_rn": 2.1057768421472685,
       "seiff_delta_over_rn_gamma_1_4": 0.14015625
     }
+  ],
+  "independent_primary_values": [
+    {
+      "source": "Inouye, NASA TN D-2780, Table I, printed page 10 (PDF page 12), Air, first row",
+      "case": "Numerical sphere solution at M_infinity = 8.949",
+      "mach": 8.949,
+      "upstream_to_postshock_density_ratio": 0.1253,
+      "tabulated_delta_over_rn": 0.0994,
+      "seiff_equation_prediction": 0.097734,
+      "absolute_tolerance": 0.002,
+      "provenance": "The density ratio and standoff are independently printed numerical-solution columns, not values generated from equation (4); the table's Rb is the sphere nose radius Rn used by this API. The tolerance covers their 0.001666 difference plus the table's four-decimal rounding."
+    }
   ]
 }

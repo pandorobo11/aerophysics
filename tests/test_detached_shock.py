@@ -157,6 +157,40 @@ def test_billig_shape_case_axis_and_asymptote() -> None:
     assert far_slope == pytest.approx(-1.0 / np.tan(beta), rel=2e-7)
 
 
+@pytest.mark.parametrize("geometry", tuple(DetachedShockGeometry))
+def test_billig_shape_near_sonic_finite_case(
+    geometry: DetachedShockGeometry,
+) -> None:
+    result = billig_shock_shape(
+        1.01,
+        1.0,
+        [-1.0, 0.0, 1.0],
+        geometry=geometry,
+    )
+    assert np.isfinite(result.vertex_curvature_radius)
+    assert np.all(np.isfinite(result.shock_x))
+    assert result.shock_x[1] == pytest.approx(1.0 + float(result.standoff_distance))
+
+
+@pytest.mark.parametrize("geometry", tuple(DetachedShockGeometry))
+def test_billig_shape_rejects_unrepresentable_near_sonic_curvature(
+    geometry: DetachedShockGeometry,
+) -> None:
+    mach = np.nextafter(1.0, np.inf)
+    with pytest.raises(ValueError, match="curvature is not representable"):
+        billig_shock_shape(mach, 1.0, [0.0], geometry=geometry)
+
+
+def test_billig_shape_rejects_non_finite_coordinates() -> None:
+    with pytest.raises(ValueError, match="coordinates are non-finite"):
+        billig_shock_shape(
+            2.0,
+            1.0,
+            [np.finfo(np.float64).max],
+            geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+        )
+
+
 def test_comparison_differences() -> None:
     result = compare_standoff_distances([2.0, 4.0], 3.0)
     aw = np.asarray(result.ambrosio_wortman.normalized_standoff_distance)
@@ -164,6 +198,20 @@ def test_comparison_differences() -> None:
     assert_allclose(result.normalized_standoff_difference, seiff - aw)
     assert_allclose(result.relative_difference, (seiff - aw) / aw)
     assert_allclose(result.standoff_distance_difference, 3.0 * (seiff - aw))
+
+
+def test_seiff_matches_inouye_independent_sphere_solution() -> None:
+    reference = json.loads(REFERENCE_PATH.read_text())["independent_primary_values"][0]
+    result = seiff_standoff_distance(
+        1.0 / reference["upstream_to_postshock_density_ratio"], 1.0
+    )
+    assert result.normalized_standoff_distance == pytest.approx(
+        reference["seiff_equation_prediction"], abs=5.0e-7
+    )
+    assert result.normalized_standoff_distance == pytest.approx(
+        reference["tabulated_delta_over_rn"],
+        abs=reference["absolute_tolerance"],
+    )
 
 
 @pytest.mark.parametrize(

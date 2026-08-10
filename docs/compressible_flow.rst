@@ -602,7 +602,12 @@ the body vertex is at :math:`x=R_n`, and the shock vertex is at
 Ambrosio--Wortman value of :math:`\Delta`; changing the displayed Seiff model
 does not change that shape convention. A one-dimensional transverse
 coordinate array is appended as the final output axis, so broadcast Mach and
-radius cases retain their case axes.
+radius cases retain their case axes.  The implementation evaluates the
+curvature product in logarithmic form and uses a cancellation-resistant form
+of the hyperbola increment.  Because Billig's fitted curvature diverges as
+:math:`M\to1^+`, a mathematically admissible input can still exceed finite
+``float64`` representation; unrepresentable curvature or non-finite shock
+coordinates raise :class:`ValueError` rather than returning infinities.
 
 Seiff density-ratio standoff
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -631,6 +636,11 @@ a sufficiently explicit numerical Mach fit range to justify inventing an
 ``ApplicabilityWarning`` or ``ModelRangeError`` boundary. NASA TN D-2780's
 independent comparison over :math:`0.04<\rho_1/\rho_2<0.16` is recorded as a
 verification interval, not as the full validity range of Seiff's correlation.
+Its Table I air solution at :math:`M_\infty=8.949` independently tabulates
+:math:`\rho_1/\rho_2=0.1253` and :math:`\Delta/R_b=0.0994`, where the table's
+sphere nose radius :math:`R_b` is :math:`R_n` in this API.  The Seiff relation
+gives ``0.097734`` for that printed density ratio, within the committed
+``0.002`` absolute comparison tolerance.
 
 These engineering correlations assume continuum, steady, low-temperature
 flow. Their common use is for calorically perfect air; Billig's fitted curves

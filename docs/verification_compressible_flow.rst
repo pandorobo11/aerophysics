@@ -35,7 +35,15 @@ Detached-shock formulas are checked directly against Ambrosio--Wortman,
 Billig, and Seiff at Mach 2, 4, and 8 for both supported geometries where
 applicable.  The coefficients, expected values, citations, coordinate
 convention, and NASA TN D-2780 independent Seiff interval are committed in
-``tests/reference_data/compressible_flow/detached_shock_sources.json``.
+``tests/reference_data/compressible_flow/detached_shock_sources.json``.  Those
+formula-generated cases are supplemented by Inouye's independently tabulated
+air sphere solution in NASA TN D-2780, Table I (printed page 10, PDF page 12):
+at :math:`M_\infty=8.949`, the numerical solution reports
+:math:`\rho_\infty/\rho_2=0.1253` and :math:`\Delta/R_b=0.0994`.  Equation (4)
+predicts ``0.097734`` from the printed density ratio.  The ``0.002`` absolute
+tolerance includes their ``0.001666`` difference and the table's four-decimal
+rounding; the test therefore compares the correlation with a source result
+that was not generated from the implemented equation.
 
 Comparison and acceptance
 -------------------------

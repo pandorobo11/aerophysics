@@ -722,14 +722,14 @@ def render_detached_shock(preferences: UnitPreferences) -> None:
             "上流 Mach M∞",
             _number(inputs, "upstream_mach", 4.0),
             key="detached_shock_mach",
-            min_value=1.0,
+            min_value=1.0000001,
         )
         radius_si = _number(inputs, "nose_radius", 0.1)
         radius_display = finite_number(
             f"nose radius Rn [{preferences.length}]",
             _display(radius_si, "length", preferences.length),
             key="detached_shock_radius",
-            min_value=0.0,
+            min_value=1.0e-12,
         )
         radius = _si(radius_display, "length", preferences.length)
         start = stop = 0.0
@@ -741,14 +741,14 @@ def render_detached_shock(preferences: UnitPreferences) -> None:
                     "開始 Mach",
                     _number(sweep, "start", 1.5),
                     key="detached_shock_sweep_start",
-                    min_value=1.0,
+                    min_value=1.0000001,
                 )
             with right:
                 stop = finite_number(
                     "終了 Mach",
                     _number(sweep, "stop", 10.0),
                     key="detached_shock_sweep_stop",
-                    min_value=1.0,
+                    min_value=1.0000001,
                 )
             with count:
                 points = int(

@@ -24,9 +24,7 @@ from aerophysics.detached_shock import (
     BilligShockShapeResult,
     DetachedShockGeometry,
     billig_shock_shape,
-    compare_standoff_distances,
     seiff_standoff_distance_from_mach,
-    shock_standoff_distance,
 )
 from aerophysics.expansion import (
     maximum_prandtl_meyer_angle,
@@ -610,20 +608,19 @@ def detached_shock_condition(
     ):
         raise ValueError("Seiff and comparison are available only for sphere geometry")
 
-    aw = shock_standoff_distance(
-        upstream_mach,
-        nose_radius,
-        geometry=geometry,
-    )
+    # Billig's curvature is required for every displayed row and deliberately
+    # uses the Ambrosio--Wortman standoff.  Calling it once gives us the AW
+    # values and curvature together; avoid a second AW/normal-shock pass when
+    # the selected row also requests Seiff or a comparison.
     curvature = billig_shock_shape(
         upstream_mach,
         nose_radius,
         [0.0],
         geometry=geometry,
     )
-    mach_values = _array(aw.upstream_mach)
-    aw_normalized = _array(aw.normalized_standoff_distance)
-    aw_distance = _array(aw.standoff_distance)
+    mach_values = _array(curvature.upstream_mach)
+    aw_normalized = _array(curvature.normalized_standoff_distance)
+    aw_distance = _array(curvature.standoff_distance)
     curvature_radius = _array(curvature.vertex_curvature_radius)
 
     seiff_normalized: np.ndarray | None = None
@@ -633,14 +630,20 @@ def detached_shock_condition(
     distance_difference: np.ndarray | None = None
     relative_difference: np.ndarray | None = None
     if geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE:
-        seiff = seiff_standoff_distance_from_mach(upstream_mach, nose_radius)
-        seiff_normalized = _array(seiff.normalized_standoff_distance)
-        seiff_distance = _array(seiff.standoff_distance)
-        density_ratio = _array(seiff.density_ratio)
-        comparison = compare_standoff_distances(upstream_mach, nose_radius)
-        normalized_difference = _array(comparison.normalized_standoff_difference)
-        distance_difference = _array(comparison.standoff_distance_difference)
-        relative_difference = _array(comparison.relative_difference)
+        if selection in {"seiff", "comparison"}:
+            seiff = seiff_standoff_distance_from_mach(upstream_mach, nose_radius)
+        else:
+            seiff = None
+        if seiff is not None:
+            seiff_normalized = _array(seiff.normalized_standoff_distance)
+            seiff_distance = _array(seiff.standoff_distance)
+            density_ratio = _array(seiff.density_ratio)
+        if selection == "comparison":
+            assert seiff_normalized is not None
+            assert seiff_distance is not None
+            normalized_difference = seiff_normalized - aw_normalized
+            distance_difference = seiff_distance - aw_distance
+            relative_difference = normalized_difference / aw_normalized
 
     rows: list[Row] = []
     for index, mach in enumerate(mach_values):

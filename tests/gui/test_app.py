@@ -204,6 +204,8 @@ from aerophysics.gui.units import UnitPreferences
 render_detached_shock(UnitPreferences())
 """
     app = AppTest.from_string(script, default_timeout=15).run()
+    assert app.number_input(key="detached_shock_mach").min == pytest.approx(1.0000001)
+    assert app.number_input(key="detached_shock_radius").min == pytest.approx(1.0e-12)
     app.button(key="FormSubmitter:detached_shock_form-計算").click().run()
     assert not app.exception
     assert not app.error
@@ -212,6 +214,12 @@ render_detached_shock(UnitPreferences())
     assert len(app.download_button) == 3
 
     app.radio(key="detached_shock_mode").set_value("Machスイープ").run()
+    assert app.number_input(key="detached_shock_sweep_start").min == pytest.approx(
+        1.0000001
+    )
+    assert app.number_input(key="detached_shock_sweep_stop").min == pytest.approx(
+        1.0000001
+    )
     app.number_input(key="detached_shock_sweep_points").set_value(3).run()
     app.selectbox(key="detached_shock_selection").set_value(
         "Ambrosio–Wortman / Seiff 比較"  # noqa: RUF001

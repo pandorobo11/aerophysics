@@ -142,7 +142,10 @@ https://books.google.com/books?id=fygCAAAAIAAJ
 
 Inouye, M. *Blunt Body Solutions for Spheres and Ellipsoids in Equilibrium
 Gas Mixtures*. NASA TN D-2780, 1965. The report independently compares the
-Seiff relation over :math:`0.04<\rho_1/\rho_2<0.16`.
+Seiff relation over :math:`0.04<\rho_1/\rho_2<0.16`.  Detached-shock
+verification also uses the independently calculated air sphere entry in
+Table I, printed page 10 (PDF page 12): :math:`M_\infty=8.949`,
+:math:`\rho_\infty/\rho_2=0.1253`, and :math:`\Delta/R_b=0.0994`.
 
 https://ntrs.nasa.gov/citations/19650012766
 
