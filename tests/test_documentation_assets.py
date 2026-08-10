@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from aerophysics.transport import (
     AIR_BLOTTNER_VISCOSITY,
     AIR_KEYES_VISCOSITY,
@@ -15,9 +17,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = PROJECT_ROOT / "docs/scripts/generate_viscosity_comparison.py"
 TABLE_FRAGMENT = PROJECT_ROOT / "docs/_generated/viscosity_model_comparison.rst"
 SVG = PROJECT_ROOT / "docs/_static/viscosity_model_comparison.svg"
-ATMOSPHERE_GENERATOR = (
-    PROJECT_ROOT / "docs/scripts/generate_standard_atmosphere_validation.py"
-)
 ATMOSPHERE_FRAGMENT = (
     PROJECT_ROOT / "docs/_generated/standard_atmosphere_validation.rst"
 )
@@ -50,14 +49,26 @@ def _expected_row(temperature: float, candidate: DynamicViscosityModel) -> str:
     )
 
 
-def test_viscosity_comparison_assets_are_current() -> None:
-    subprocess.run(
-        [sys.executable, str(GENERATOR), "--check"],
+def _assert_generator_check_passes(generator: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(generator), "--check"],
         cwd=PROJECT_ROOT,
-        check=True,
         capture_output=True,
         text=True,
     )
+    if result.returncode:
+        output = "\n".join(
+            part for part in (result.stdout, result.stderr) if part
+        ).strip()
+        pytest.fail(
+            f"{generator.relative_to(PROJECT_ROOT)} reported stale generated assets"
+            f"\n{output}"
+        )
+
+
+@pytest.mark.generated_assets
+def test_viscosity_comparison_assets_are_current() -> None:
+    _assert_generator_check_passes(GENERATOR)
 
 
 def test_viscosity_comparison_tables_match_public_models() -> None:
@@ -76,16 +87,6 @@ def test_viscosity_comparison_svg_has_accessible_labels() -> None:
     assert "Dynamic viscosity (Pa·s)" in svg
     assert "Relative difference (%)" in svg
     assert "frozen N₂/O₂/Ar/CO₂ dry-air composition" in svg
-
-
-def test_standard_atmosphere_validation_assets_are_current() -> None:
-    subprocess.run(
-        [sys.executable, str(ATMOSPHERE_GENERATOR), "--check"],
-        cwd=PROJECT_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
 
 
 def test_standard_atmosphere_tables_record_the_computed_result() -> None:
@@ -107,14 +108,9 @@ def test_standard_atmosphere_svgs_have_accessible_labels() -> None:
         assert "Geometric altitude (km)" in svg
 
 
+@pytest.mark.generated_assets
 def test_all_verification_assets_are_current() -> None:
-    subprocess.run(
-        [sys.executable, str(VERIFICATION_GENERATOR), "--check"],
-        cwd=PROJECT_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    _assert_generator_check_passes(VERIFICATION_GENERATOR)
 
 
 def test_new_verification_svgs_have_accessible_labels() -> None:

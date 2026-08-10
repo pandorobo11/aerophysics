@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,7 +19,14 @@ def write_or_check(path: Path, content: str, *, check: bool) -> bool:
     """Write ``content`` or return whether an existing file is current."""
     normalized = content.rstrip() + "\n"
     if check:
-        return path.exists() and path.read_text(encoding="utf-8") == normalized
+        current = path.exists() and path.read_text(encoding="utf-8") == normalized
+        if not current:
+            try:
+                display_path = path.relative_to(Path.cwd())
+            except ValueError:
+                display_path = path
+            print(f"out of date or missing: {display_path}", file=sys.stderr)
+        return current
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(normalized, encoding="utf-8")
     return True

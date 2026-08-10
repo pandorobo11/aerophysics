@@ -221,9 +221,7 @@ render_detached_shock(UnitPreferences())
     assert len(app.dataframe[0].value) == 3
     assert len(app.get("plotly_chart")) == 3
 
-    app.selectbox(key="detached_shock_geometry").set_value(
-        "2D cylindrical nose"
-    ).run()
+    app.selectbox(key="detached_shock_geometry").set_value("2D cylindrical nose").run()
     assert app.selectbox(key="detached_shock_selection").options == [
         "Ambrosio–Wortman"  # noqa: RUF001
     ]

@@ -235,9 +235,7 @@ def billig_shock_shape(
         raise ValueError("transverse_coordinates must not be empty")
 
     standoff = shock_standoff_distance(mach, radius, geometry=geometry)
-    normalized = np.asarray(
-        standoff.normalized_standoff_distance, dtype=np.float64
-    )
+    normalized = np.asarray(standoff.normalized_standoff_distance, dtype=np.float64)
     distance = np.asarray(standoff.standoff_distance, dtype=np.float64)
     if geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE:
         curvature = 1.143 * radius * np.exp(0.54 / (mach - 1.0) ** 1.2)
@@ -259,10 +257,7 @@ def billig_shock_shape(
         + distance_expanded
         - curvature_expanded
         / tangent**2
-        * (
-            np.sqrt(1.0 + shock_y**2 * tangent**2 / curvature_expanded**2)
-            - 1.0
-        )
+        * (np.sqrt(1.0 + shock_y**2 * tangent**2 / curvature_expanded**2) - 1.0)
     )
 
     return BilligShockShapeResult(
@@ -295,9 +290,7 @@ def compare_standoff_distances(
     aw_normalized = np.asarray(
         ambrosio_wortman.normalized_standoff_distance, dtype=np.float64
     )
-    seiff_normalized = np.asarray(
-        seiff.normalized_standoff_distance, dtype=np.float64
-    )
+    seiff_normalized = np.asarray(seiff.normalized_standoff_distance, dtype=np.float64)
     aw_distance = np.asarray(ambrosio_wortman.standoff_distance, dtype=np.float64)
     seiff_distance = np.asarray(seiff.standoff_distance, dtype=np.float64)
     difference = seiff_normalized - aw_normalized
@@ -311,9 +304,7 @@ def compare_standoff_distances(
         ambrosio_wortman=ambrosio_wortman,
         seiff=seiff,
         normalized_standoff_difference=return_float(difference, scalar=scalar),
-        standoff_distance_difference=return_float(
-            distance_difference, scalar=scalar
-        ),
+        standoff_distance_difference=return_float(distance_difference, scalar=scalar),
         relative_difference=return_float(relative, scalar=scalar),
         geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
     )

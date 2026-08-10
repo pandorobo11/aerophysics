@@ -447,9 +447,7 @@ def detached_shock_trends(
         )
     seiff_normalized = _numeric(rows, "seiff_normalized_standoff_distance")
     if show_seiff and np.any(np.isfinite(seiff_normalized)):
-        normalized.add_trace(
-            go.Scatter(x=mach, y=seiff_normalized, name="Seiff")
-        )
+        normalized.add_trace(go.Scatter(x=mach, y=seiff_normalized, name="Seiff"))
     normalized.update_xaxes(title_text="Mach M∞")
     normalized.update_yaxes(title_text="Δ/Rn")
 
@@ -458,9 +456,7 @@ def detached_shock_trends(
         dimensional.add_trace(
             go.Scatter(
                 x=mach,
-                y=_converted(
-                    rows, "aw_standoff_distance", "length", preferences
-                ),
+                y=_converted(rows, "aw_standoff_distance", "length", preferences),
                 name="AW Δ",
             )
         )
@@ -469,9 +465,7 @@ def detached_shock_trends(
         dimensional.add_trace(
             go.Scatter(
                 x=mach,
-                y=_converted(
-                    rows, "seiff_standoff_distance", "length", preferences
-                ),
+                y=_converted(rows, "seiff_standoff_distance", "length", preferences),
                 name="Seiff Δ",
             )
         )

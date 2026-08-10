@@ -653,9 +653,7 @@ def render_expansion(preferences: UnitPreferences) -> None:
 def render_detached_shock(preferences: UnitPreferences) -> None:
     """Render detached-shock standoff and Billig-shape calculations."""
     st.title("離脱衝撃波")
-    st.caption(
-        "鈍頭物体の離脱距離を推算し、Billigの双曲線衝撃波形状を表示します。"
-    )
+    st.caption("鈍頭物体の離脱距離を推算し、Billigの双曲線衝撃波形状を表示します。")
     imported = pop_pending_configuration("detached_shock")
     inputs, models, sweep = _defaults(imported)
     render_configuration_import("detached_shock", "detached_shock")
@@ -826,9 +824,7 @@ def render_detached_shock(preferences: UnitPreferences) -> None:
     shape = stored_shape if isinstance(stored_shape, BilligShockShapeResult) else None
     configured_models = configuration.get("models")
     configured_model = (
-        configured_models.get("model")
-        if isinstance(configured_models, dict)
-        else None
+        configured_models.get("model") if isinstance(configured_models, dict) else None
     )
 
     def metrics(row: Mapping[str, object]) -> None:
@@ -855,9 +851,7 @@ def render_detached_shock(preferences: UnitPreferences) -> None:
             with column:
                 st.metric(
                     label,
-                    f"{float(value):.5g}"
-                    if isinstance(value, (int, float))
-                    else "—",
+                    f"{float(value):.5g}" if isinstance(value, (int, float)) else "—",
                 )
 
     figures = (

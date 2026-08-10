@@ -21,10 +21,17 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     arguments = ["--check"] if args.check else []
+    failures = []
     for generator in GENERATORS:
-        subprocess.run(
-            [sys.executable, str(DIRECTORY / generator), *arguments], check=True
+        result = subprocess.run(
+            [sys.executable, str(DIRECTORY / generator), *arguments]
         )
+        if result.returncode:
+            failures.append(generator)
+    if failures:
+        action = "check" if args.check else "generation"
+        joined = ", ".join(failures)
+        raise SystemExit(f"verification asset {action} failed: {joined}")
 
 
 if __name__ == "__main__":

@@ -172,12 +172,14 @@ Beattie–Bridgeman空気は R. E. Randall の *AEDC-TR-57-8* (1957) におけ�
 ## 開発
 
 ```console
-uv sync --all-groups --all-extras
-uv run pytest
-uv run ruff check .
-uv run mypy
-uv run sphinx-build -W -b html docs docs/_build/html
+uv sync --all-groups --all-extras --locked
+scripts/check.sh
 ```
+
+`scripts/check.sh` がローカルの完了条件です。Ruffの整形、lint、整形結果の
+check、mypy、テスト、生成・検証asset、ドキュメント、配布物buildをまとめて
+実行します。ファイルを変更しない確認だけが必要な場合は
+`scripts/check.sh --check-only` を使います。
 
 モデルの数式、出典、仮定、適用範囲は英語の API 文書に記載します。
 

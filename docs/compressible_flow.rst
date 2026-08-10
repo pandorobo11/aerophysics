@@ -650,7 +650,7 @@ rarefied-flow corrections, and shock fitting are outside this implementation.
 ...     4.0, 0.5, [-1.0, 0.0, 1.0],
 ...     geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
 ... )
->>> shape.shock_x_coordinates[1] == sphere.nose_radius + sphere.standoff_distance
+>>> bool(shape.shock_x[1] == sphere.nose_radius + sphere.standoff_distance)
 True
 >>> compare_standoff_distances(4.0, 0.5).seiff.density_ratio > 1.0
 True

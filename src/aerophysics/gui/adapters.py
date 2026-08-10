@@ -511,9 +511,7 @@ def detached_shock_condition(
 ) -> CalculationResult:
     """Calculate detached-shock standoff and Billig curvature data."""
     if selection not in {"ambrosio_wortman", "seiff", "comparison"}:
-        raise ValueError(
-            "selection must be ambrosio_wortman, seiff, or comparison"
-        )
+        raise ValueError("selection must be ambrosio_wortman, seiff, or comparison")
     if (
         geometry is DetachedShockGeometry.CYLINDRICAL_NOSE_2D
         and selection != "ambrosio_wortman"
@@ -548,9 +546,7 @@ def detached_shock_condition(
         seiff_distance = _array(seiff.standoff_distance)
         density_ratio = _array(seiff.density_ratio)
         comparison = compare_standoff_distances(upstream_mach, nose_radius)
-        normalized_difference = _array(
-            comparison.normalized_standoff_difference
-        )
+        normalized_difference = _array(comparison.normalized_standoff_difference)
         distance_difference = _array(comparison.standoff_distance_difference)
         relative_difference = _array(comparison.relative_difference)
 

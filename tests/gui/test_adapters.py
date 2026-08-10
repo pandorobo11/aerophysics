@@ -274,9 +274,7 @@ def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
         selection="comparison",
     )
     row = single.rows[0]
-    assert row["aw_normalized_standoff_distance"] == pytest.approx(
-        0.1750977921724338
-    )
+    assert row["aw_normalized_standoff_distance"] == pytest.approx(0.1750977921724338)
     assert isinstance(row["seiff_normalized_standoff_distance"], float)
     assert isinstance(row["billig_vertex_curvature_radius"], float)
     assert row["normalized_standoff_distance"] is None

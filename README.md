@@ -141,12 +141,14 @@ conventions for each model.
 ## Development
 
 ```console
-uv sync --all-groups --all-extras
-uv run pytest
-uv run ruff check .
-uv run mypy
-uv run sphinx-build -W -b html docs docs/_build/html
+uv sync --all-groups --all-extras --locked
+scripts/check.sh
 ```
+
+`scripts/check.sh` is the local completion gate. It runs the formatter in
+write mode, then checks Ruff, formatting, mypy, tests, generated verification
+assets, documentation, and package builds. Use
+`scripts/check.sh --check-only` when source files must not be modified.
 
 ## Releases
 

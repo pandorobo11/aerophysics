@@ -134,9 +134,7 @@ def test_billig_shape_metadata_vertex_curvature_and_symmetry() -> None:
     assert result.shock_x.shape == (3,)
     assert_allclose(result.shock_y, transverse)
     assert result.shock_x[0] == pytest.approx(result.shock_x[2])
-    assert result.shock_x[1] == pytest.approx(
-        radius + float(result.standoff_distance)
-    )
+    assert result.shock_x[1] == pytest.approx(radius + float(result.standoff_distance))
     curvature_from_vertex = 2.0 * (result.shock_x[1] - result.shock_x[2]) / 0.1**2
     assert curvature_from_vertex == pytest.approx(
         1.0 / float(result.vertex_curvature_radius), rel=2e-4
