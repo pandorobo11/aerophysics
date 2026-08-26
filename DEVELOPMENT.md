@@ -6,9 +6,10 @@ documentation belongs in the English Sphinx manual under `docs/`.
 
 ## Environment
 
-The project requires Python 3.12 or newer and the exact `uv` version declared
-in `pyproject.toml` (`0.9.13`). Synchronize every locked dependency group and
-extra from the repository root:
+The project requires Python 3.12 or newer. Local development does not require
+an exact `uv` version. CI and release workflows use a pinned uv version as the
+canonical reproducible validation environment. Synchronize every locked
+dependency group and extra from the repository root:
 
 ```console
 uv sync --all-groups --all-extras --locked

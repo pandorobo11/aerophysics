@@ -49,12 +49,16 @@ its inputs, regenerate the assets, and review the resulting diff instead.
 CI must never run a formatter in write mode. CI uses `ruff format --check .`
 and must not commit or otherwise apply automatic source changes.
 
-Use the exact uv version required by `pyproject.toml` (`0.9.13`) and keep
+Do not require an exact uv version in `pyproject.toml`. Local development may
+use a current compatible uv version. CI and release workflows pin uv explicitly
+to keep the canonical validation and release environments reproducible. Keep
 dependency installation locked with:
 
 ```console
 uv sync --all-groups --all-extras --locked
 ```
+
+Do not change the CI or release uv pin as part of unrelated changes.
 
 Do not weaken the existing Python/OS test matrix, coverage threshold, strict
 lint/type settings, or documentation warnings-as-errors policy.

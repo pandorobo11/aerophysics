@@ -41,9 +41,6 @@ Documentation = "https://github.com/pandorobo11/aerophysics/releases/latest"
 Issues = "https://github.com/pandorobo11/aerophysics/issues"
 Repository = "https://github.com/pandorobo11/aerophysics"
 
-[tool.uv]
-required-version = "==0.9.13"
-
 [dependency-groups]
 dev = [
   "build>=1.2",
