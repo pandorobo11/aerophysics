@@ -155,6 +155,7 @@ jobs:
   ci-gate:
     name: CI gate
     if: always()
+    # Keep needs and every result check below synchronized with required CI jobs.
     needs:
       - test
       - lint

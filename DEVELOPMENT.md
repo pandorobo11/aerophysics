@@ -13,16 +13,24 @@ Use a lightweight GitHub Flow for normal feature, fix, and refactoring work:
 2. Before opening a pull request, run the relevant tests, Ruff lint and format
    checks, and mypy. Run the complete local gate described below before handing
    off the change.
-3. Open a pull request to `main`, wait for CI to pass, and squash merge it.
+3. Open a pull request to `main` and wait for CI to pass. An authorized
+   maintainer then squash merges it.
 
 Do not push normal code changes directly to `main`. Direct pushes are reserved
 for clearly trivial edits such as README typos or comment-only corrections.
 Reviewer approval is welcome but is not a required merge condition.
+Codex must not merge a pull request unless the user explicitly requests or
+approves that specific merge.
 
 For changes to a physical model or numerical correlation, state and verify the
 applicability or validity range, units, sign and coordinate conventions, and
 the supporting analytical, literature, or regression verification in the pull
 request.
+
+Whenever a required CI job is added, removed, renamed, or changed in
+`.github/workflows/ci.yml`, update the `ci-gate` job's `needs` dependencies and
+result checks in the same pull request. `CI gate` must remain an exhaustive
+summary of every required CI job.
 
 ## Environment
 
