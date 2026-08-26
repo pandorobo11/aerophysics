@@ -9,6 +9,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 - Use one GUI selector for length and inverse-length display units so their
   dimensional bases stay consistent.
+- Remove the pinned ``fluids`` comparison from required standard-atmosphere
+  verification, separate numerical checks from the generated record, and
+  regenerate that record before documentation builds.
 
 ## [0.6.0] - 2026-08-11
 

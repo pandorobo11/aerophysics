@@ -31,16 +31,6 @@ equation (53), corrected constants, and the corrected sea-level value.  At
 86 km the implemented homogeneous model is compared with molecular-scale
 temperature ``T_M``; kinetic temperature begins to diverge at that transition.
 
-As an independent software cross-check, the comparison uses
-`fluids 1.3.1 <https://pypi.org/project/fluids/1.3.1/>`_, a general-purpose
-engineering fluid-dynamics library, through
-``fluids.atmosphere.ATMOSPHERE_1976``.  A fixed 0--86 km snapshot at 1 km
-intervals is committed as ``fluids-1.3.1.csv``.  Its package version, exact
-capture command, variable mapping, and PyPI wheel SHA-256 are recorded in the
-adjacent JSON file.  ``fluids`` is neither a runtime nor a CI dependency, and
-the snapshot is an independent code-path comparison rather than experimental
-ground truth.
-
 Comparison criteria
 ^^^^^^^^^^^^^^^^^^^
 
@@ -49,9 +39,7 @@ digit or a relative tolerance of ``1e-4``, plus a floating-point guard of
 ``1e-14 * max(1, abs(reference))``.  This accounts for the limited precision
 and occasional truncation in the historical printed tables.  Half of the
 final printed digit is retained as a stricter diagnostic, not as the overall
-verification decision.  Against ``fluids``, temperature uses an absolute
-tolerance of ``1e-4 K`` and every other common quantity uses a relative
-tolerance of ``2e-5``.
+verification decision.
 
 The full implemented range is also sampled at 1 m spacing.  The tests require:
 
@@ -87,13 +75,12 @@ viscosity changes.
    :alt: Six physical profiles of the U.S. Standard Atmosphere from minus 5 to 86 kilometres.
    :align: center
 
-The next figure separates the dimensionless software-relative differences
-from differences normalized by each official cell's printed-digit tolerance.
-The horizontal line at one in the official panel is the stricter diagnostic
-boundary; it is not the overall acceptance boundary.
+The next figure shows differences normalized by each official cell's
+printed-digit tolerance.  The horizontal line at one is the stricter
+diagnostic boundary; it is not the overall acceptance boundary.
 
 .. image:: ../_static/standard_atmosphere_comparison.svg
-   :alt: Relative differences from fluids and normalized differences from official tables.
+   :alt: Differences normalized by U.S. Standard Atmosphere 1976 printed-cell tolerances.
    :align: center
 
 Known limitations and reproduction
@@ -102,24 +89,25 @@ Known limitations and reproduction
 The status is ``Verified`` when all acceptance and diagnostic checks pass,
 ``Verified with observations`` when acceptance checks pass but a stricter
 printed-digit diagnostic does not, and ``Needs revision`` only when an
-acceptance, independent-software, or physical-invariant check fails.  Expected
-failures for the diagnostic observations remain strict: an unexplained failure
-stays visible and a future fix produces an unexpected success until this
-record is reviewed.  No observation listed here caused a change to the
-production atmosphere model.
+acceptance or physical-invariant check fails.  Expected failures for the
+diagnostic observations remain strict: an unexplained failure stays visible
+and a future fix produces an unexpected success until this record is reviewed.
+No observation listed here caused a change to the production atmosphere model.
+
+The included RST is a verification record of the values measured from the
+checkout that generated it.  Numerical acceptance is enforced by the pytest
+checks above, rather than by requiring the generated RST to match byte for
+byte.  Documentation and release builds regenerate the record from the
+checkout before running Sphinx, so recorded maximum differences correspond to
+the code being documented.
 
 Regenerate the committed report fragment and SVGs with::
 
    python docs/scripts/generate_standard_atmosphere_validation.py
 
-Check that they are current without writing files with::
+The deterministic SVGs can be checked without writing files with::
 
    python docs/scripts/generate_standard_atmosphere_validation.py --check
-
-The external snapshot is intentionally refreshed only by an explicit command
-in an isolated environment::
-
-   uv run --isolated --with fluids==1.3.1 python docs/scripts/capture_fluids_reference.py
 
 All verification artifacts can be regenerated or checked together with::
 

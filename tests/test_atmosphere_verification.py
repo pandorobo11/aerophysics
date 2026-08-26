@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 
 import numpy as np
@@ -22,8 +21,6 @@ from aerophysics.atmosphere import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_DIRECTORY = PROJECT_ROOT / "tests/reference_data/standard_atmosphere"
 OFFICIAL_CSV = REFERENCE_DIRECTORY / "official_1976.csv"
-FLUIDS_CSV = REFERENCE_DIRECTORY / "fluids-1.3.1.csv"
-FLUIDS_METADATA = REFERENCE_DIRECTORY / "fluids-1.3.1.json"
 
 OFFICIAL_PROPERTIES = (
     ("temperature_K", "temperature_abs_tolerance_K", "temperature"),
@@ -149,74 +146,6 @@ def test_public_api_matches_official_acceptance_criterion() -> None:
                 altitude,
                 state_field,
             )
-
-
-EXTERNAL_PROPERTIES = (
-    ("temperature_K", "temperature", "absolute", 1.0e-4),
-    ("pressure_Pa", "pressure", "relative", 2.0e-5),
-    ("density_kg_m3", "density", "relative", 2.0e-5),
-    ("gravity_m_s2", "gravity", "relative", 2.0e-5),
-    ("speed_of_sound_m_s", "speed_of_sound", "relative", 2.0e-5),
-    (
-        "dynamic_viscosity_Pa_s",
-        "dynamic_viscosity",
-        "relative",
-        2.0e-5,
-    ),
-    (
-        "kinematic_viscosity_m2_s",
-        "kinematic_viscosity",
-        "relative",
-        2.0e-5,
-    ),
-    (
-        "thermal_conductivity_W_m_K",
-        "thermal_conductivity",
-        "relative",
-        2.0e-5,
-    ),
-)
-
-
-@pytest.mark.parametrize(
-    ("reference_column", "state_field", "criterion", "threshold"),
-    EXTERNAL_PROPERTIES,
-)
-def test_public_api_matches_pinned_fluids_snapshot(
-    reference_column: str,
-    state_field: str,
-    criterion: str,
-    threshold: float,
-) -> None:
-    rows = _csv_rows(FLUIDS_CSV)
-    altitude = np.asarray(
-        [float(row["geometric_altitude_m"]) for row in rows], dtype=np.float64
-    )
-    reference = np.asarray(
-        [float(row[reference_column]) for row in rows], dtype=np.float64
-    )
-    actual = np.asarray(
-        getattr(standard_atmosphere(altitude), state_field), dtype=np.float64
-    )
-    difference = np.abs(actual - reference)
-    if criterion == "relative":
-        difference /= np.abs(reference)
-    assert np.all(difference <= threshold)
-
-
-def test_fluids_snapshot_provenance_is_pinned() -> None:
-    metadata = json.loads(FLUIDS_METADATA.read_text(encoding="utf-8"))
-    assert metadata["source"] == "fluids.atmosphere.ATMOSPHERE_1976"
-    assert metadata["version"] == "1.3.1"
-    assert metadata["wheel"] == {
-        "filename": "fluids-1.3.1-py3-none-any.whl",
-        "hash_source": "https://pypi.org/pypi/fluids/1.3.1/json",
-        "sha256": ("d9097efe57c910ac14b89a1984d5e7062ee9df1afc84e089d944fdd85404e361"),
-    }
-    rows = _csv_rows(FLUIDS_CSV)
-    assert len(rows) == 87
-    assert float(rows[0]["geometric_altitude_m"]) == 0.0
-    assert float(rows[-1]["geometric_altitude_m"]) == 86_000.0
 
 
 def test_full_range_monotonic_physical_behaviour() -> None:

@@ -62,57 +62,6 @@ All verification acceptance criteria pass.  Differences that exceed the stricter
      - Pass
 
 
-.. list-table:: fluids 1.3.1 comparison summary
-   :header-rows: 1
-   :widths: 24 23 24 16 13
-
-   * - Quantity
-     - Criterion
-     - Maximum difference
-     - Altitude (m)
-     - Status
-   * - Temperature
-     - absolute ≤ 1e-04 K
-     - 9.1690e-05
-     - 86000
-     - Pass
-   * - Pressure
-     - relative ≤ 2e-05
-     - < 1e-05
-     - —
-     - Pass
-   * - Density
-     - relative ≤ 2e-05
-     - < 1e-05
-     - —
-     - Pass
-   * - Gravity
-     - relative ≤ 2e-05
-     - < 1e-05
-     - —
-     - Pass
-   * - Speed of sound
-     - relative ≤ 2e-05
-     - < 1e-05
-     - —
-     - Pass
-   * - Dynamic viscosity
-     - relative ≤ 2e-05
-     - 1.1022e-05
-     - 64000
-     - Pass
-   * - Kinematic viscosity
-     - relative ≤ 2e-05
-     - 1.1022e-05
-     - 47000
-     - Pass
-   * - Thermal conductivity
-     - relative ≤ 2e-05
-     - < 1e-05
-     - —
-     - Pass
-
-
 .. list-table:: Physical and mathematical invariant summary
    :header-rows: 1
    :widths: 34 34 20 12

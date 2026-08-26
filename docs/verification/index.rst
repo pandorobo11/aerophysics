@@ -20,7 +20,7 @@ Current status
      - Record
    * - U.S. Standard Atmosphere 1976
      - Verified with observations
-     - Official tables, ``fluids`` snapshot, dense-grid invariants
+     - Official tables, physical and mathematical invariants
      - :doc:`standard_atmosphere`
    * - Compressible flow
      - Verified
@@ -47,7 +47,7 @@ Regenerate all committed verification fragments and figures with:
 
    uv run python docs/scripts/generate_verification.py
 
-Check them without changing files with:
+Check deterministic generated assets without changing files with:
 
 .. code-block:: console
 

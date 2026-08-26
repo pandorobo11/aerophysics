@@ -101,6 +101,13 @@ change. Unexpected output must be investigated in the generator, dependency,
 platform, or source data. Once the diff is understood, rerun
 `scripts/check.sh`.
 
+The standard-atmosphere RST is a generated verification record of the measured
+values from the current checkout, not a byte-for-byte numerical gate.
+`scripts/check.sh`, documentation workflows, release workflows, and the
+wheel build regenerate the verification set before their Sphinx build. The
+check-only local gate remains non-destructive; it checks the checked-in
+deterministic assets and builds the existing record without rewriting it.
+
 The standalone generated-asset gate is:
 
 ```console
