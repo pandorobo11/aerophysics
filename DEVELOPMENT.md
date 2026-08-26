@@ -4,6 +4,34 @@ This document is the contributor workflow for `aerophysics`, including local
 validation, generated documentation assets, and releases. User-facing model
 documentation belongs in the English Sphinx manual under `docs/`.
 
+## Contribution workflow
+
+Use a lightweight GitHub Flow for normal feature, fix, and refactoring work:
+
+1. Start a short-lived branch from the latest `main`, using a descriptive name
+   such as `feature/...`, `fix/...`, `refactor/...`, or `chore/...`.
+2. Before opening a pull request, run the relevant tests, Ruff lint and format
+   checks, and mypy. Run the complete local gate described below before handing
+   off the change.
+3. Open a pull request to `main` and wait for CI to pass. An authorized
+   maintainer then squash merges it.
+
+Do not push normal code changes directly to `main`. Direct pushes are reserved
+for clearly trivial edits such as README typos or comment-only corrections.
+Reviewer approval is welcome but is not a required merge condition.
+Codex must not merge a pull request unless the user explicitly requests or
+approves that specific merge.
+
+For changes to a physical model or numerical correlation, state and verify the
+applicability or validity range, units, sign and coordinate conventions, and
+the supporting analytical, literature, or regression verification in the pull
+request.
+
+Whenever a required CI job is added, removed, renamed, or changed in
+`.github/workflows/ci.yml`, update the `ci-gate` job's `needs` dependencies and
+result checks in the same pull request. `CI gate` must remain an exhaustive
+summary of every required CI job.
+
 ## Environment
 
 The project requires Python 3.12 or newer. Local development does not require
