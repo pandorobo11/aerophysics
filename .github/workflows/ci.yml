@@ -151,3 +151,45 @@ jobs:
         env:
           AEROPHYSICS_TEST_WHEEL_DIRECTORY: dist
         run: uv run pytest -m package_artifact --no-cov
+
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs:
+      - test
+      - lint
+      - format
+      - typecheck
+      - generated-assets
+      - docs
+      - package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every CI job to succeed
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          FORMAT_RESULT: ${{ needs.format.result }}
+          TYPECHECK_RESULT: ${{ needs.typecheck.result }}
+          GENERATED_ASSETS_RESULT: ${{ needs['generated-assets'].result }}
+          DOCS_RESULT: ${{ needs.docs.result }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+        run: |
+          failed=0
+          for check in \
+            "test=${TEST_RESULT}" \
+            "lint=${LINT_RESULT}" \
+            "format=${FORMAT_RESULT}" \
+            "typecheck=${TYPECHECK_RESULT}" \
+            "generated-assets=${GENERATED_ASSETS_RESULT}" \
+            "docs=${DOCS_RESULT}" \
+            "package=${PACKAGE_RESULT}"
+          do
+            name="${check%%=*}"
+            result="${check#*=}"
+            if [[ "${result}" != "success" ]]; then
+              echo "::error::${name} finished with ${result}"
+              failed=1
+            fi
+          done
+          exit "${failed}"

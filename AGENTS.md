@@ -1,5 +1,19 @@
 # Aerophysics agent instructions
 
+## Git workflow
+
+Use a short-lived branch and pull request for Codex code changes. Start from
+the latest `main`, use a descriptive prefix such as `feature/`, `fix/`,
+`refactor/`, or `chore/`, and squash merge the pull request after CI succeeds.
+Do not push code changes directly to `main`; direct pushes are permitted only
+for clearly trivial edits such as README typos or comment-only corrections.
+
+Before opening a pull request, run the relevant tests, Ruff lint and format
+checks, and mypy. For changes to a physical model or numerical correlation,
+confirm and document its applicability or validity range, units, sign and
+coordinate conventions, and analytical, literature, or regression
+verification.
+
 ## Completion gate
 
 Before considering a change complete, run the repository's local validation
