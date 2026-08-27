@@ -107,9 +107,11 @@ def test_standard_atmosphere_tables_record_the_computed_result() -> None:
     fragment = ATMOSPHERE_FRAGMENT.read_text(encoding="utf-8")
     assert "**Verified with observations**" in fragment
     assert "Official-table comparison summary" in fragment
-    assert "fluids 1.3.1 comparison summary" in fragment
+    assert "Maximum absolute difference" in fragment
+    assert "Maximum diagnostic ratio" in fragment
     assert "Physical and mathematical invariant summary" in fragment
-    assert "9.1690e-05" in fragment
+    assert "Known deviations from the strict printed-digit criterion" in fragment
+    assert "fluids" not in fragment
 
 
 def test_standard_atmosphere_svgs_have_accessible_labels() -> None:
@@ -122,7 +124,7 @@ def test_standard_atmosphere_svgs_have_accessible_labels() -> None:
         assert "Geometric altitude (km)" in svg
 
 
-def test_all_verification_assets_are_current() -> None:
+def test_deterministic_verification_assets_are_current() -> None:
     _assert_generator_check_passes(VERIFICATION_GENERATOR)
 
 

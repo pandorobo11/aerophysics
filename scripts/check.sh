@@ -4,7 +4,9 @@ set -Eeuo pipefail
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+check_only=false
 if [[ "${1:-}" == "--check-only" ]]; then
+    check_only=true
     FORMAT_COMMAND=(uv run ruff format --check .)
     shift
 else
@@ -37,6 +39,10 @@ run_step "Mypy" uv run mypy
 run_step "Normal test suite" \
     uv run pytest -m "not generated_assets and not package_artifact"
 run_step "Generated and verification assets" bash scripts/check-generated.sh
+if [[ "$check_only" == false ]]; then
+    run_step "Generate verification records for documentation" \
+        uv run python docs/scripts/generate_verification.py
+fi
 run_step "Build HTML documentation" \
     uv run sphinx-build -E -a -W --keep-going -b html docs docs/_build/html
 run_step "Run documentation doctests" \

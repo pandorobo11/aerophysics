@@ -40,6 +40,8 @@ jobs:
         run: uv run pytest -m "not generated_assets and not package_artifact"
       - name: Check generated and verification assets
         run: bash scripts/check-generated.sh
+      - name: Generate verification records from release checkout
+        run: uv run python docs/scripts/generate_verification.py
       - name: Run Ruff
         run: |
           uv run ruff check .

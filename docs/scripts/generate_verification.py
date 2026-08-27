@@ -1,4 +1,4 @@
-"""Regenerate or check every committed verification artifact."""
+"""Regenerate verification artifacts and check deterministic generated assets."""
 
 from __future__ import annotations
 

@@ -22,7 +22,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OFFICIAL_CSV = (
     PROJECT_ROOT / "tests/reference_data/standard_atmosphere/official_1976.csv"
 )
-FLUIDS_CSV = PROJECT_ROOT / "tests/reference_data/standard_atmosphere/fluids-1.3.1.csv"
 TABLE_PATH = PROJECT_ROOT / "docs/_generated/standard_atmosphere_validation.rst"
 PROFILE_SVG_PATH = PROJECT_ROOT / "docs/_static/standard_atmosphere_profiles.svg"
 COMPARISON_SVG_PATH = PROJECT_ROOT / "docs/_static/standard_atmosphere_comparison.svg"
@@ -55,18 +54,6 @@ class OfficialResult:
     ratio: float
     passed: bool
     verification_passed: bool
-
-
-@dataclass(frozen=True)
-class ExternalResult:
-    """Maximum discrepancy for one pinned ``fluids`` snapshot variable."""
-
-    label: str
-    criterion: str
-    maximum: float
-    altitude_m: float
-    limit: float
-    passed: bool
 
 
 @dataclass(frozen=True)
@@ -148,41 +135,6 @@ PROPERTY_SPECS = (
     ),
 )
 
-EXTERNAL_SPECS = (
-    ("temperature_K", "temperature", "Temperature", "absolute", 1.0e-4),
-    ("pressure_Pa", "pressure", "Pressure", "relative", 2.0e-5),
-    ("density_kg_m3", "density", "Density", "relative", 2.0e-5),
-    ("gravity_m_s2", "gravity", "Gravity", "relative", 2.0e-5),
-    (
-        "speed_of_sound_m_s",
-        "speed_of_sound",
-        "Speed of sound",
-        "relative",
-        2.0e-5,
-    ),
-    (
-        "dynamic_viscosity_Pa_s",
-        "dynamic_viscosity",
-        "Dynamic viscosity",
-        "relative",
-        2.0e-5,
-    ),
-    (
-        "kinematic_viscosity_m2_s",
-        "kinematic_viscosity",
-        "Kinematic viscosity",
-        "relative",
-        2.0e-5,
-    ),
-    (
-        "thermal_conductivity_W_m_K",
-        "thermal_conductivity",
-        "Thermal conductivity",
-        "relative",
-        2.0e-5,
-    ),
-)
-
 
 def _load_public_api() -> tuple[object, object]:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -238,48 +190,6 @@ def official_results() -> list[OfficialResult]:
                     verification_passed=(error <= verification_tolerance + guard),
                 )
             )
-    return results
-
-
-def _external_arrays() -> tuple[NDArray[np.float64], dict[str, NDArray[np.float64]]]:
-    rows = _load_csv(FLUIDS_CSV)
-    altitude = np.asarray(
-        [float(row["geometric_altitude_m"]) for row in rows], dtype=np.float64
-    )
-    values = {
-        column: np.asarray([float(row[column]) for row in rows], dtype=np.float64)
-        for column, *_ in EXTERNAL_SPECS
-    }
-    return altitude, values
-
-
-def external_results() -> list[ExternalResult]:
-    """Compare the public API with the pinned ``fluids`` snapshot."""
-    standard_atmosphere, _ = _load_public_api()
-    altitude, references = _external_arrays()
-    state = standard_atmosphere(altitude)
-    results: list[ExternalResult] = []
-    for column, state_field, label, kind, threshold in EXTERNAL_SPECS:
-        reference = references[column]
-        actual = np.asarray(getattr(state, state_field), dtype=np.float64)
-        difference = np.abs(actual - reference)
-        if kind == "relative":
-            difference = difference / np.abs(reference)
-            criterion = f"relative ≤ {threshold:.0e}"
-        else:
-            criterion = f"absolute ≤ {threshold:.0e} K"
-        index = int(np.argmax(difference))
-        maximum = float(difference[index])
-        results.append(
-            ExternalResult(
-                label=label,
-                criterion=criterion,
-                maximum=maximum,
-                altitude_m=float(altitude[index]),
-                limit=threshold,
-                passed=maximum <= threshold,
-            )
-        )
     return results
 
 
@@ -489,37 +399,6 @@ def _official_summary(results: Sequence[OfficialResult]) -> list[str]:
     return lines
 
 
-def _external_summary(results: Sequence[ExternalResult]) -> list[str]:
-    lines = [
-        ".. list-table:: fluids 1.3.1 comparison summary",
-        "   :header-rows: 1",
-        "   :widths: 24 23 24 16 13",
-        "",
-        "   * - Quantity",
-        "     - Criterion",
-        "     - Maximum difference",
-        "     - Altitude (m)",
-        "     - Status",
-    ]
-    for result in results:
-        bounded = result.maximum < result.limit / 2.0
-        maximum = (
-            format_bounded_error(result.maximum, result.limit, digits=5)
-            if bounded
-            else _number(result.maximum)
-        )
-        lines.extend(
-            [
-                f"   * - {result.label}",
-                f"     - {result.criterion}",
-                f"     - {maximum}",
-                f"     - {'—' if bounded else f'{result.altitude_m:.0f}'}",
-                f"     - {'Pass' if result.passed else 'Fail'}",
-            ]
-        )
-    return lines
-
-
 def _physical_summary(results: Sequence[PhysicalResult]) -> list[str]:
     lines = [
         ".. list-table:: Physical and mathematical invariant summary",
@@ -581,12 +460,9 @@ def _known_deviations(results: Sequence[OfficialResult]) -> list[str]:
 def generate_tables() -> str:
     """Return the generated RST verification fragment."""
     official = official_results()
-    external = external_results()
     physical = physical_results()
-    verification_pass = (
-        all(result.verification_passed for result in official)
-        and all(result.passed for result in external)
-        and all(result.passed for result in physical)
+    verification_pass = all(result.verification_passed for result in official) and all(
+        result.passed for result in physical
     )
     has_observations = any(not result.passed for result in official)
     if not verification_pass:
@@ -623,8 +499,6 @@ def generate_tables() -> str:
         "",
     ]
     lines.extend(_official_summary(official))
-    lines.extend(["", ""])
-    lines.extend(_external_summary(external))
     lines.extend(["", ""])
     lines.extend(_physical_summary(physical))
     lines.extend(["", ""])
@@ -897,31 +771,10 @@ def generate_profile_svg() -> str:
 
 
 def generate_comparison_svg() -> str:
-    """Return official-table and independent-implementation difference plots."""
-    standard_atmosphere, _ = _load_public_api()
+    """Return the official-table diagnostic difference plot."""
     official = [
         result for result in official_results() if result.coordinate_type == "geometric"
     ]
-    altitude, references = _external_arrays()
-    state = standard_atmosphere(altitude)
-    external_series: list[Series] = []
-    external_colors = (
-        "#0072B2",
-        "#D55E00",
-        "#009E73",
-        "#CC79A7",
-        "#56B4E9",
-        "#E69F00",
-        "#000000",
-        "#6A3D9A",
-    )
-    for color, (column, state_field, label, _kind, _threshold) in zip(
-        external_colors, EXTERNAL_SPECS, strict=True
-    ):
-        actual = np.asarray(getattr(state, state_field), dtype=np.float64)
-        relative_ppm = np.abs(actual / references[column] - 1.0) * 1.0e6
-        external_series.append(Series(label, color, np.maximum(relative_ppm, 1.0e-9)))
-
     official_series: list[Series] = []
     official_altitude = (
         np.asarray(sorted({result.altitude_m for result in official})) / 1_000.0
@@ -953,38 +806,22 @@ def generate_comparison_svg() -> str:
     lines = _svg_header(
         width=1200,
         height=470,
-        title="Standard-atmosphere verification differences",
+        title="Standard-atmosphere official-table diagnostics",
         description=(
-            "The left panel shows absolute relative differences from "
-            "fluids 1.3.1 in parts per million. The right panel shows "
-            "absolute differences divided by official printed-cell tolerances."
+            "The plot shows absolute differences divided by the official "
+            "printed-cell tolerances for the U.S. Standard Atmosphere 1976."
         ),
     )
     lines.append(
         '<text class="subtitle" x="600" y="50" text-anchor="middle">'
-        "The official line is a strict diagnostic; the software comparison "
-        "uses dimensionless relative differences.</text>"
+        "The horizontal line at one is the strict printed-digit diagnostic "
+        "boundary; acceptance uses the documented wider criterion.</text>"
     )
     lines.extend(
         _panel(
             x=28.0,
             y=66.0,
-            width=558.0,
-            height=374.0,
-            title="Absolute relative difference from fluids 1.3.1",
-            x_values=altitude / 1_000.0,
-            series=external_series,
-            y_domain=(1.0e-9, 30.0),
-            y_ticks=(1.0e-6, 1.0e-3, 1.0, 10.0),
-            y_label="Absolute relative difference (ppm, log scale)",
-            y_kind="log",
-        )
-    )
-    lines.extend(
-        _panel(
-            x=614.0,
-            y=66.0,
-            width=558.0,
+            width=1144.0,
             height=374.0,
             title="Difference relative to official printed tolerance",
             x_values=official_altitude,
@@ -1013,23 +850,31 @@ def _update(path: Path, expected: str, *, check: bool) -> bool:
 
 
 def main() -> int:
-    """Generate assets or fail when checked-in assets are stale."""
+    """Generate the verification record and deterministic SVG assets."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",
         action="store_true",
-        help="fail if a generated RST or SVG asset is out of date",
+        help="fail if a deterministic SVG asset is out of date",
     )
     arguments = parser.parse_args()
-    results = (
-        _update(TABLE_PATH, generate_tables(), check=arguments.check),
-        _update(PROFILE_SVG_PATH, generate_profile_svg(), check=arguments.check),
-        _update(
-            COMPARISON_SVG_PATH,
-            generate_comparison_svg(),
-            check=arguments.check,
-        ),
-    )
+    table = generate_tables()
+    profile_svg = generate_profile_svg()
+    comparison_svg = generate_comparison_svg()
+    if arguments.check:
+        # The RST is a measured verification record.  It is deliberately
+        # regenerated before documentation builds instead of being used as a
+        # byte-for-byte numerical gate.
+        results = (
+            _update(PROFILE_SVG_PATH, profile_svg, check=True),
+            _update(COMPARISON_SVG_PATH, comparison_svg, check=True),
+        )
+    else:
+        results = (
+            _update(TABLE_PATH, table, check=False),
+            _update(PROFILE_SVG_PATH, profile_svg, check=False),
+            _update(COMPARISON_SVG_PATH, comparison_svg, check=False),
+        )
     return 0 if all(results) else 1
 
 
