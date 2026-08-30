@@ -76,6 +76,22 @@ def test_version() -> None:
     assert __version__ == "0.6.0"
 
 
+def test_release_install_instructions_follow_package_version() -> None:
+    wheel_url = (
+        "https://github.com/pandorobo11/aerophysics/releases/download/"
+        f"v{__version__}/aerophysics-{__version__}-py3-none-any.whl"
+    )
+    documented_paths = (
+        "README.md",
+        "README.ja.md",
+        "docs/getting_started/installation.rst",
+        "docs/guides/gui.rst",
+    )
+    for relative_path in documented_paths:
+        content = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
+        assert wheel_url in content, relative_path
+
+
 def test_public_diagnostics() -> None:
     assert issubclass(ModelRangeError, ValueError)
     assert issubclass(NoAttachedShockError, ValueError)

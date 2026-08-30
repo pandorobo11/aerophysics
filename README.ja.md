@@ -11,19 +11,24 @@ CFD 解析は対象外です。
 
 ## インストール
 
-Python 3.12 以上が必要です。
+Python 3.12 以上が必要です。PyPI での配布を開始するまでは、
+[最新の GitHub Release](https://github.com/pandorobo11/aerophysics/releases/latest)
+に添付された wheel をインストールしてください。
 
 ```console
-python -m pip install aerophysics
+python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
 ```
 
 ローカル GUI を利用する場合は、追加依存関係を含めてインストールして
 起動します。
 
 ```console
-python -m pip install "aerophysics[gui]"
+python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
 aerophysics-gui
 ```
+
+バージョン付き URL をコピーする前に、Release ページで新しいバージョンが
+公開されていないか確認してください。
 
 ## 最小例
 
