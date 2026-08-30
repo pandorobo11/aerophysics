@@ -45,6 +45,26 @@ uv sync --all-groups --all-extras --locked
 
 Do not update the lock file as part of an ordinary environment sync.
 
+Build distributions with:
+
+```console
+scripts/build-distributions.sh
+```
+
+The script exports hash-locked constraints from every locked group and extra,
+then passes them to both isolated PEP 517 builds with hash enforcement. Keep
+the Hatchling backend in the `build` dependency group and every custom wheel
+hook dependency in `uv.lock`; otherwise the constrained build must fail
+rather than resolve an unreviewed build requirement.
+
+The release build and CI package job initially synchronize with
+`--no-install-project`. Their validation commands import the checkout through
+`PYTHONPATH=src` and disable `uv run`'s implicit synchronization. This prevents
+an earlier editable-project build from resolving backend requirements outside
+the locked, hash-constrained distribution build. Those initial synchronizations
+also use `--no-build`, so a missing third-party wheel fails closed instead of
+running an unconstrained source-build backend.
+
 ## Local validation
 
 Run the complete local gate before handing back a change:
@@ -137,8 +157,22 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-The tag-triggered release workflow verifies that the tag and project version
-match, reruns tests, static checks, documentation builds, and package builds,
-then publishes the wheel, source distribution, and
-`aerophysics-docs-X.Y.Z.zip` to the GitHub Release. The documentation archive
-opens at `aerophysics-docs-X.Y.Z/index.html` after extraction.
+The tag-triggered release workflow first requires a successful `CI gate` for
+the exact tagged commit and verifies that the tag and project version match.
+Its repository-read-only build job does not persist checkout credentials and
+reruns tests, static checks, documentation builds, and package builds. Release
+Actions are pinned to immutable commit SHAs. The job checksums the exact
+release bundle before an isolated provenance job attests it. Only then can the
+narrowly write-enabled publish job run.
+
+Publication is one-shot: the workflow fails if a GitHub Release already exists
+for the tag and never replaces published assets. Immediately before creating
+the release, it dereferences either a lightweight or annotated remote tag again
+and requires it to still target the commit that produced the bundle. Repository
+administrators must also protect `v*` tags from force updates or deletion with
+a GitHub ruleset; that closes the unavoidable interval between the final API
+check and release creation. A successful release contains the wheel, source
+distribution, `aerophysics-docs-X.Y.Z.zip`, and `SHA256SUMS`; GitHub also
+records build-provenance attestations for the bundle.
+Verify downloaded bytes with `sha256sum --check SHA256SUMS`. The documentation
+archive opens at `aerophysics-docs-X.Y.Z/index.html` after extraction.
