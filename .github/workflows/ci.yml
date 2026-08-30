@@ -140,6 +140,9 @@ jobs:
     name: Python package build and verification
     needs: test
     runs-on: ubuntu-latest
+    env:
+      UV_NO_SYNC: "1"
+      PYTHONPATH: ${{ github.workspace }}/src
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -149,8 +152,10 @@ jobs:
         with:
           version: "0.9.13"
           enable-cache: true
-      - run: uv sync --all-groups --all-extras --locked
-      - run: uv run python -m build
+      - run: >-
+          uv sync --all-groups --all-extras --locked --no-install-project
+          --no-build
+      - run: bash scripts/build-distributions.sh
       - name: Verify built wheel
         env:
           AEROPHYSICS_TEST_WHEEL_DIRECTORY: dist
