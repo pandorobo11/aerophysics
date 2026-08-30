@@ -151,9 +151,9 @@ jobs:
           enable-cache: true
       - run: uv sync --all-groups --all-extras --locked
       - run: uv run python -m build
-      - name: Verify built wheel
+      - name: Verify clean wheel and sdist installations
         env:
-          AEROPHYSICS_TEST_WHEEL_DIRECTORY: dist
+          AEROPHYSICS_TEST_ARTIFACT_DIRECTORY: dist
         run: uv run pytest -m package_artifact --no-cov
 
   ci-gate:

@@ -48,7 +48,8 @@ run_step "Build HTML documentation" \
 run_step "Run documentation doctests" \
     uv run sphinx-build -E -a -W --keep-going -b doctest docs docs/_build/doctest
 run_step "Build Python distributions" uv run python -m build
-run_step "Verify built wheel" env AEROPHYSICS_TEST_WHEEL_DIRECTORY=dist \
+run_step "Verify clean wheel and sdist installations" \
+    env AEROPHYSICS_TEST_ARTIFACT_DIRECTORY=dist \
     uv run pytest -m package_artifact --no-cov
 
 exit "$status"
