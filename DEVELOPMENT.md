@@ -45,6 +45,25 @@ uv sync --all-groups --all-extras --locked
 
 Do not update the lock file as part of an ordinary environment sync.
 
+### Minimum direct dependency compatibility
+
+Required CI separately resolves every dependency group and extra with uv's
+`lowest-direct` strategy on Python 3.12. This verifies that the lower bounds
+declared in `pyproject.toml` remain usable instead of testing only the newer
+versions in the canonical lock. Reproduce that job in a disposable worktree:
+
+```console
+UV_PROJECT_ENVIRONMENT=.venv-minimum \
+  uv sync --all-groups --all-extras --resolution lowest-direct
+.venv-minimum/bin/python scripts/check_minimum_versions.py
+.venv-minimum/bin/python -m pytest \
+  -m "not generated_assets and not package_artifact" --no-cov
+```
+
+The first command intentionally creates a lowest-direct `uv.lock` in that
+worktree. Do not commit it; the repository's canonical lock continues to use
+the normal highest-resolution strategy.
+
 ## Local validation
 
 Run the complete local gate before handing back a change:

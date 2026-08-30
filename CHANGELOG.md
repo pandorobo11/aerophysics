@@ -12,6 +12,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Remove the pinned ``fluids`` comparison from required standard-atmosphere
   verification, separate numerical checks from the generated record, and
   regenerate that record before documentation builds.
+- Test every dependency group and extra with the declared minimum direct
+  versions in a required Python 3.12 CI job.
 
 ## [0.6.0] - 2026-08-11
 
