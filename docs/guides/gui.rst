@@ -18,7 +18,8 @@ Install the ``gui`` extra and start the launcher:
    $ python -m pip install "aerophysics[gui]"
    $ aerophysics-gui
 
-The launcher starts Streamlit and opens its local URL. Stop it with
+The launcher binds Streamlit to the IPv4 loopback address, opens its local URL,
+and does not expose the application to other hosts by default. Stop it with
 :kbd:`Ctrl-C` in the launching terminal. Calculations and the bundled manual
 are served locally; an internet connection is not required after the wheel and
 its dependencies are installed.
