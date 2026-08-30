@@ -1,5 +1,6 @@
 """Headless Streamlit GUI tests."""
 
+import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -372,6 +373,46 @@ render_isentropic(UnitPreferences())
     app.button(key="FormSubmitter:isentropic_form-計算").click().run()
     assert not app.exception
     assert not app.error
+
+
+def test_isentropic_page_rejects_malformed_configuration_before_rerun() -> None:
+    script = """
+from aerophysics.gui.flow_pages import render_isentropic
+from aerophysics.gui.units import UnitPreferences
+render_isentropic(UnitPreferences())
+"""
+    malformed = {
+        "schema_version": 1,
+        "calculator": "isentropic",
+        "mode": "single",
+        "inputs_si": {
+            "input_value": "not-a-number",
+            "total_pressure": None,
+            "total_temperature": None,
+        },
+        "models": {
+            "input_basis": "mach",
+            "branch": "subsonic",
+            "gas_model": "AIR",
+            "with_mass_flux": False,
+            "allow_extrapolation": False,
+        },
+        "display_units": UnitPreferences().to_dict(),
+    }
+    app = AppTest.from_string(script, default_timeout=30).run()
+    cast(Any, app.get("file_uploader")[0]).upload(
+        "malformed.json",
+        json.dumps(malformed).encode(),
+        "application/json",
+    ).run()
+    app.button(key="isentropic_configuration_apply").click().run()
+
+    assert not app.exception
+    assert app.error[0].value == "inputs_si.input_value must be a number"
+    with pytest.raises(KeyError):
+        app.session_state["pending_isentropic_configuration"]
+    app.run()
+    assert not app.exception
 
 
 def test_isentropic_page_supports_beattie_bridgeman_air() -> None:
