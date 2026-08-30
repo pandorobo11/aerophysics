@@ -1,5 +1,7 @@
 """Tests for normal and oblique perfect-gas shocks."""
 
+import warnings
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -168,6 +170,64 @@ def test_zero_angle_conical_shock_is_a_mach_wave() -> None:
     assert result.surface_density_ratio == 1.0
     assert result.surface_temperature_ratio == 1.0
     assert result.total_pressure_ratio == 1.0
+
+
+def test_near_sonic_zero_angle_conical_shock_remains_a_mach_wave() -> None:
+    mach = np.nextafter(1.0, np.inf)
+    result = conical_shock(mach, 0.0)
+    assert result.shock_angle == pytest.approx(np.arcsin(1.0 / mach))
+    assert 0.0 < result.shock_angle < 0.5 * np.pi
+    assert result.surface_mach == mach
+    assert result.total_pressure_ratio == 1.0
+
+
+def test_near_sonic_conical_limit_uses_public_degeneracy_error() -> None:
+    mach = np.nextafter(1.0, np.inf)
+    with pytest.raises(
+        NoAttachedShockError,
+        match="conical-shock interval is physically or numerically degenerate",
+    ):
+        maximum_attached_cone_angle(mach)
+
+
+@pytest.mark.parametrize(
+    ("mach", "cone_angle"),
+    [
+        (1.01, 1e-4),
+        (1.0 + 1e-10, 1e-12),
+        (np.nextafter(1.0, np.inf), 1e-14),
+    ],
+)
+def test_tiny_cone_solver_failure_uses_public_degeneracy_error(
+    mach: float, cone_angle: float
+) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        with pytest.raises(
+            NoAttachedShockError,
+            match=(
+                r"conical-shock solution is physically or numerically degenerate.*"
+                r"cone half-angle"
+            ),
+        ):
+            conical_shock(mach, cone_angle)
+
+
+def test_near_sonic_conical_array_normalizes_failing_element() -> None:
+    with pytest.raises(NoAttachedShockError, match=r"Mach 1\.01"):
+        conical_shock(
+            [2.0, 1.01],
+            [float(degrees_to_radians(10.0)), 1e-4],
+        )
+
+
+def test_resolvable_near_sonic_conical_root_remains_physical() -> None:
+    mach = 1.0001
+    cone_angle = 1e-4
+    result = conical_shock(mach, cone_angle)
+    assert cone_angle < result.shock_angle < 0.5 * np.pi
+    assert result.post_shock_mach > result.surface_mach > 1.0
+    assert result.surface_pressure_ratio > 1.0
 
 
 def test_conical_shock_vectorizes_and_broadcasts() -> None:

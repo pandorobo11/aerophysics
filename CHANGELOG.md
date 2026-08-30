@@ -13,6 +13,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
   verification, separate numerical checks from the generated record, and
   regenerate that record before documentation builds.
 
+### Fixed
+
+- Normalize numerically degenerate near-sonic conical-shock failures to the
+  documented public no-attached-shock exception.
+
 ## [0.6.0] - 2026-08-11
 
 ### Added

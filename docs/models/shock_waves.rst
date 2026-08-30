@@ -158,6 +158,15 @@ attached-shock limit.  A larger cone half-angle raises
 :class:`~aerophysics.exceptions.NoAttachedShockError` rather than substituting
 a detached-shock approximation.
 
+As :math:`M_1\to1^+`, the Mach angle approaches :math:`\pi/2` and the
+available attached-shock-angle interval collapses.  The zero-half-angle limit
+remains the Mach wave.  For a positive cone half-angle, an interval or
+Taylor--Maccoll root that is too degenerate to resolve raises
+:class:`~aerophysics.exceptions.NoAttachedShockError`; low-level integration
+and bracketing exceptions are not part of the public API.  Cone half-angle is
+positive away from the axis, and a returned attached shock satisfies
+:math:`\theta_c<\beta<\pi/2`.
+
 The model assumes a calorically perfect gas, a sharp circular cone, zero angle
 of attack, steady inviscid adiabatic flow, and an attached axisymmetric shock.
 It does not model bluntness, viscosity, real-gas effects, or asymmetric cone
