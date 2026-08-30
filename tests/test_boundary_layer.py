@@ -178,7 +178,7 @@ def test_eckert_accepts_blottner_mixture_viscosity_model() -> None:
     assert result.effective_reynolds_number > 0.0
 
 
-def test_eckert_turbulent_uses_specified_wall_temperature() -> None:
+def test_eckert_uses_supplied_edge_viscosity_in_correction() -> None:
     result = flat_plate_boundary_layer(
         1.0,
         100.0,
@@ -199,7 +199,7 @@ def test_eckert_turbulent_uses_specified_wall_temperature() -> None:
         1e7
         * 220.0
         / reference
-        * float(AIR_VISCOSITY.dynamic_viscosity(220.0))
+        * 1e-5
         / float(AIR_VISCOSITY.dynamic_viscosity(reference))
     )
     assert result.recovery_temperature == pytest.approx(recovery)
@@ -214,6 +214,7 @@ def _van_driest_factors(
     mach: float,
     edge_temperature: float,
     wall_temperature: float | None = None,
+    edge_viscosity: float = 1e-5,
 ) -> tuple[float, float, float, float]:
     recovery_factor = np.cbrt(0.72)
     m = recovery_factor * (AIR.heat_capacity_ratio - 1.0) * mach**2 / 2.0
@@ -228,9 +229,7 @@ def _van_driest_factors(
     alpha = np.clip((m - 1.0 + temperature_factor) / denominator, -1.0, 1.0)
     beta = np.clip((m + 1.0 - temperature_factor) / denominator, -1.0, 1.0)
     friction_factor = m / (np.arcsin(alpha) + np.arcsin(beta)) ** 2
-    momentum_factor = float(AIR_VISCOSITY.dynamic_viscosity(edge_temperature)) / float(
-        AIR_VISCOSITY.dynamic_viscosity(wall)
-    )
+    momentum_factor = edge_viscosity / float(AIR_VISCOSITY.dynamic_viscosity(wall))
     return (
         friction_factor,
         momentum_factor,
@@ -239,13 +238,14 @@ def _van_driest_factors(
     )
 
 
-def test_van_driest_factors_and_effective_reynolds() -> None:
+def test_van_driest_uses_supplied_edge_viscosity_in_correction() -> None:
     edge_temperature = 250.0
     mach = 2.0
     reynolds = np.asarray(1e7)
     state = _van_driest_ii_state(
         reynolds,
         np.asarray(edge_temperature),
+        np.asarray(1e-5),
         np.asarray(mach),
         None,
         prandtl_number=0.72,
@@ -620,6 +620,7 @@ def test_van_driest_noncompressible_limit_is_stable() -> None:
     state = _van_driest_ii_state(
         reynolds,
         np.asarray(250.0),
+        np.asarray(1e-5),
         np.asarray(0.0),
         None,
         prandtl_number=0.72,
@@ -683,7 +684,12 @@ def test_van_driest_selection_uses_eckert_for_laminar_flow() -> None:
         mach=0.0,
         edge_temperature=250.0,
     )
-    assert result.effective_reynolds_number == result.reynolds_number
+    expected_reynolds = (
+        float(result.reynolds_number)
+        * 1e-5
+        / float(AIR_VISCOSITY.dynamic_viscosity(250.0))
+    )
+    assert result.effective_reynolds_number == pytest.approx(expected_reynolds)
     assert result.wall_temperature == 250.0
 
 

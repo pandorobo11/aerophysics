@@ -246,7 +246,10 @@ For ``CompressibilityCorrection.ECKERT``,
    Re_x^*=Re_x\frac{T_e}{T^*}\frac{\mu_e}{\mu^*}.
 
 Here :math:`\mu^*=\mu(T^*)` is evaluated with the selected dynamic-viscosity
-model.
+model, while :math:`\mu_e` is the supplied ``edge_dynamic_viscosity`` used in
+the definition of :math:`Re_x`. The implementation therefore preserves one
+edge state even when the supplied edge viscosity and the selected model do not
+coincide exactly.
 The incompressible thickness and friction correlations are evaluated at
 :math:`Re_x^*`. The implemented reference-temperature expression is recorded
 by :ref:`Glass and Hunt (1988) <ref-glass-hunt-1988>`.
@@ -287,6 +290,9 @@ floating-point excursions at the endpoints. The transformation factors are
    F_x=\frac{F_\theta}{F_C},
    \qquad
    Re_{x,i}=F_xRe_x.
+
+Here too :math:`\mu_e` is the supplied ``edge_dynamic_viscosity``;
+:math:`\mu_w=\mu(T_w)` is evaluated by ``viscosity_model``.
 
 These transformation factors follow the form stated by :ref:`Gnoffo, Berry,
 and Van Norman (2011) <ref-gnoffo-berry-van-norman-2011>`. The method and its
