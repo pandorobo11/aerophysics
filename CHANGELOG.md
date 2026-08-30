@@ -7,6 +7,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Validate imported GUI settings against calculator-specific input, model, and
+  sweep schemas before applying them, including finite and JSON-safe values.
 - Use one GUI selector for length and inverse-length display units so their
   dimensional bases stay consistent.
 - Remove the pinned ``fluids`` comparison from required standard-atmosphere
