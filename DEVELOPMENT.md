@@ -63,6 +63,26 @@ rewriting Python source, use:
 scripts/check.sh --check-only
 ```
 
+The normal test suite collects branch coverage once and applies independent
+gates to the two product layers:
+
+- the numerical core (top-level modules under ``src/aerophysics``) must remain
+  at or above 95%;
+- the GUI package (modules under ``src/aerophysics/gui``) must remain at or
+  above 90%.
+
+Run those same tests and gates on their own with:
+
+```console
+scripts/check-coverage.sh
+```
+
+Only ``gui/app.py`` is excluded. ``AppTest`` executes that declarative
+bootstrap as a script through Streamlit's runner, and those executed lines are
+not attributed to the importable module by the coverage collector. The page
+renderers, shared components, launcher, and every other GUI module remain
+measured by the GUI gate.
+
 CI must only check formatting (`ruff format --check .`); it must never apply
 formatting or commit generated changes.
 
