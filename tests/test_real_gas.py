@@ -137,6 +137,29 @@ def test_beattie_bridgeman_eos_and_thermodynamic_identities() -> None:
     assert gas.speed_of_sound(temperature, pressure) == state.speed_of_sound
 
 
+def test_beattie_bridgeman_low_pressure_density_has_relative_accuracy() -> None:
+    gas = BeattieBridgemanGas(287.0, 1.4, 0.0, 0.0, 0.0, 0.0, 0.0)
+    temperature = 300.0
+    pressures = np.array([1e-300, 1e-12, 1e-9, 1e-3, 1e6])
+    expected_density = pressures / (gas.specific_gas_constant * temperature)
+
+    density = gas.density(temperature, pressures)
+
+    assert_allclose(density, expected_density, rtol=2e-15, atol=0.0)
+    assert_allclose(gas.pressure(temperature, density), pressures, rtol=2e-15, atol=0.0)
+    state = gas.state(temperature, 1e-9)
+    assert state.density == pytest.approx(expected_density[2], rel=2e-15)
+    assert gas.pressure(temperature, state.density) == pytest.approx(
+        state.pressure, rel=2e-15
+    )
+
+
+def test_beattie_bridgeman_rejects_unrepresentable_density_scale() -> None:
+    gas = BeattieBridgemanGas(287.0, 1.4, 0.0, 0.0, 0.0, 0.0, 0.0)
+    with pytest.raises(ModelRangeError, match="density scale is not representable"):
+        gas.density(300.0, np.nextafter(0.0, 1.0))
+
+
 def test_beattie_bridgeman_arrays_applicability_and_validation() -> None:
     gas = AIR_BEATTIE_BRIDGEMAN
     temperatures = np.array([[800.0], [1200.0]])

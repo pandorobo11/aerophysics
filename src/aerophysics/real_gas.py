@@ -22,6 +22,8 @@ _ROOT_XTOL: Final = 1e-12
 _ROOT_RTOL: Final = 4.0 * np.finfo(np.float64).eps
 _ROOT_MAXITER: Final = 100
 _DENSITY_BRACKET_STEPS: Final = 200
+_DENSITY_SCALED_XTOL: Final = np.finfo(np.float64).tiny
+_EOS_CLOSURE_RTOL: Final = 1e-12
 
 
 def _require_finite_positive(value: float, *, name: str) -> float:
@@ -517,27 +519,50 @@ class BeattieBridgemanGas:
         )
 
     def _density_scalar(self, temperature: float, pressure: float) -> float:
-        ideal_density = pressure / (self.specific_gas_constant * temperature)
+        with np.errstate(divide="ignore", over="ignore", under="ignore"):
+            ideal_density = float(
+                np.divide(
+                    np.float64(pressure),
+                    np.float64(self.specific_gas_constant) * np.float64(temperature),
+                )
+            )
+        if not np.isfinite(ideal_density) or ideal_density <= 0.0:
+            raise ModelRangeError(
+                "Beattie--Bridgeman ideal-gas density scale is not representable"
+            )
         lower = 0.0
-        upper = max(0.25 * ideal_density, np.finfo(np.float64).tiny)
+        upper = 0.25
         for _ in range(_DENSITY_BRACKET_STEPS):
-            residual = self._pressure_scalar(temperature, upper) - pressure
-            derivative = self._dp_drho_scalar(temperature, upper)
+            upper_density = ideal_density * upper
+            residual = self._pressure_scalar(temperature, upper_density) - pressure
+            derivative = self._dp_drho_scalar(temperature, upper_density)
             if residual >= 0.0:
-                density = float(
+                scaled_density = float(
                     brentq(
-                        lambda value: (
-                            self._pressure_scalar(temperature, value) - pressure
+                        lambda scale: (
+                            self._pressure_scalar(temperature, ideal_density * scale)
+                            - pressure
                         ),
                         lower,
                         upper,
-                        xtol=_ROOT_XTOL,
+                        xtol=_DENSITY_SCALED_XTOL,
                         rtol=_ROOT_RTOL,
                         maxiter=_ROOT_MAXITER,
                     )
                 )
+                density = ideal_density * scaled_density
                 if self._dp_drho_scalar(temperature, density) <= 0.0:
                     break
+                solved_pressure = self._pressure_scalar(temperature, density)
+                if not np.isfinite(solved_pressure) or not np.isclose(
+                    solved_pressure,
+                    pressure,
+                    rtol=_EOS_CLOSURE_RTOL,
+                    atol=0.0,
+                ):
+                    raise ModelRangeError(
+                        "Beattie--Bridgeman density root failed EOS pressure closure"
+                    )
                 return density
             if derivative <= 0.0:
                 break
@@ -722,7 +747,11 @@ class BeattieBridgemanGas:
         *,
         allow_extrapolation: bool = False,
     ) -> FloatResult:
-        """Return the mechanically stable gas-phase density in kg/m³."""
+        """Return the mechanically stable gas-phase density in kg/m³.
+
+        The inversion is scaled by the ideal-gas density ``p / (R T)`` and
+        verifies relative pressure closure against this equation of state.
+        """
         temperatures, pressures, scalar = _broadcast_temperature_pressure(
             temperature, pressure
         )
