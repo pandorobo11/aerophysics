@@ -20,7 +20,9 @@ def as_float_array(value: ArrayLike, *, name: str) -> tuple[FloatArray, bool]:
 
 
 def return_float(array: FloatArray, *, scalar: bool) -> FloatResult:
-    """Return a Python float for scalar input, otherwise a float64 array."""
+    """Return a scalar or an owned, read-only float64 result array."""
     if scalar:
         return float(array)
-    return np.asarray(array, dtype=np.float64)
+    result = np.array(array, dtype=np.float64, copy=True)
+    result.flags.writeable = False
+    return result

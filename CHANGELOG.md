@@ -7,6 +7,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Return vectorized calculation results as owned, read-only NumPy snapshots so
+  later mutation of caller inputs cannot change previously computed states.
 - Use one GUI selector for length and inverse-length display units so their
   dimensional bases stay consistent.
 - Remove the pinned ``fluids`` comparison from required standard-atmosphere

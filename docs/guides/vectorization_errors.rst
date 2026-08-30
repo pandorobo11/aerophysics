@@ -23,6 +23,17 @@ True
 >>> state.pressure.dtype == np.dtype(np.float64)
 True
 
+Array results are owned, read-only snapshots. They never share storage with
+caller inputs, so later in-place changes to an input cannot make a result
+internally inconsistent. Make an explicit writable copy when downstream work
+needs to modify a result:
+
+>>> state.pressure.flags.writeable
+False
+>>> writable_pressure = state.pressure.copy()
+>>> writable_pressure.flags.writeable
+True
+
 Range errors
 ------------
 
