@@ -517,9 +517,29 @@ class BeattieBridgemanGas:
         )
 
     def _density_scalar(self, temperature: float, pressure: float) -> float:
+        spinodal = self._first_spinodal_density(temperature)
+        stable_upper: float | None = None
+        if spinodal is not None:
+            # The public density inverse is defined on the gas branch connected
+            # continuously to rho -> 0.  Restrict the bracket to just below the
+            # first isothermal spinodal so a narrow unstable interval cannot be
+            # skipped in favour of a separate high-density stable root.
+            stable_upper = np.nextafter(spinodal * (1.0 - 1.0e-10), 0.0)
+            for _ in range(64):
+                if self._dp_drho_scalar(temperature, stable_upper) > 0.0:
+                    break
+                stable_upper = np.nextafter(stable_upper, 0.0)
+            else:
+                raise ModelRangeError(
+                    "could not establish the mechanically stable "
+                    "Beattie--Bridgeman gas branch"
+                )
+
         ideal_density = pressure / (self.specific_gas_constant * temperature)
         lower = 0.0
         upper = max(0.25 * ideal_density, np.finfo(np.float64).tiny)
+        if stable_upper is not None:
+            upper = min(upper, stable_upper)
         for _ in range(_DENSITY_BRACKET_STEPS):
             residual = self._pressure_scalar(temperature, upper) - pressure
             derivative = self._dp_drho_scalar(temperature, upper)
@@ -542,7 +562,12 @@ class BeattieBridgemanGas:
             if derivative <= 0.0:
                 break
             lower = upper
-            upper *= 1.5
+            next_upper = upper * 1.5
+            if stable_upper is not None:
+                next_upper = min(next_upper, stable_upper)
+            if next_upper <= upper:
+                break
+            upper = next_upper
         raise ModelRangeError(
             "no mechanically stable Beattie--Bridgeman gas-phase density root"
         )

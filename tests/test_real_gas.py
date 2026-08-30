@@ -830,3 +830,26 @@ def test_unstable_beattie_bridgeman_state_fails_explicitly() -> None:
     )
     with pytest.raises(ModelRangeError, match="gas-phase density root"):
         pathological.density(300.0, 1.0e6)
+
+
+def test_beattie_bridgeman_density_selects_lowest_stable_gas_root() -> None:
+    gas = BeattieBridgemanGas(
+        287.0,
+        1.4,
+        a0=647341.1814617205,
+        b0=0.0,
+        a=2.5024920897394383,
+        b=0.0,
+        c=0.0,
+    )
+    temperature = 300.0
+    pressure = 3812.0518936864746
+
+    density = float(gas.density(temperature, pressure))
+    spinodal = gas._first_spinodal_density(temperature)
+
+    assert spinodal is not None
+    assert density == pytest.approx(0.1271156621155641, rel=1e-11)
+    assert density < spinodal
+    assert gas._dp_drho_scalar(temperature, density) > 0.0
+    assert gas.pressure(temperature, density) == pytest.approx(pressure, rel=2e-14)
