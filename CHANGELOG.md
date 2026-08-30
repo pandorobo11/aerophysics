@@ -12,6 +12,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Remove the pinned ``fluids`` comparison from required standard-atmosphere
   verification, separate numerical checks from the generated record, and
   regenerate that record before documentation builds.
+- Route compressible-flow and analysis GUI pages through shared typed helpers
+  for configuration defaults, SI conversion, session payloads, and metrics.
 
 ## [0.6.0] - 2026-08-11
 

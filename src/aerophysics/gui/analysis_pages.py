@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-import numpy as np
 import streamlit as st
 
 from aerophysics.boundary_layer_profile import (
@@ -50,75 +49,16 @@ from aerophysics.gui.figures import (
     thermochemistry_figures,
     viscosity_figures,
 )
-from aerophysics.gui.units import UnitPreferences, from_si, to_si
-
-
-def _defaults(
-    configuration: dict[str, object] | None,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    if configuration is None:
-        return {}, {}, {}
-    return tuple(
-        dict(value) if isinstance(value, dict) else {}
-        for value in (
-            configuration.get("inputs_si"),
-            configuration.get("models"),
-            configuration.get("sweep_si"),
-        )
-    )  # type: ignore[return-value]
-
-
-def _display(value: float, kind: str, unit: str) -> float:
-    return float(from_si(value, kind, unit))  # type: ignore[arg-type]
-
-
-def _si(value: float, kind: str, unit: str) -> float:
-    return float(to_si(value, kind, unit))  # type: ignore[arg-type]
-
-
-def _number(values: Mapping[str, Any], key: str, default: float) -> float:
-    value = values.get(key, default)
-    return float(value) if isinstance(value, (int, float)) else default
-
-
-def _array(values: Mapping[str, Any], key: str) -> np.ndarray | None:
-    value = values.get(key)
-    if not isinstance(value, list):
-        return None
-    return np.asarray(value, dtype=np.float64)
-
-
-def _metric(row: Mapping[str, object], label: str, contains: str) -> None:
-    heading = next((name for name in row if contains in name), "")
-    value = row.get(heading)
-    st.metric(label, f"{float(value):.5g}" if isinstance(value, (int, float)) else "—")
-
-
-def _profile_payload() -> tuple[ProfileCalculation, dict[str, object]] | None:
-    value = st.session_state.get("profile_payload")
-    if (
-        isinstance(value, tuple)
-        and len(value) == 2
-        and isinstance(value[0], ProfileCalculation)
-        and isinstance(value[1], dict)
-    ):
-        return value
-    return None
-
-
-def _result_payload(
-    key: str,
-) -> tuple[CalculationResult, dict[str, object]] | None:
-    value = st.session_state.get(key)
-    if (
-        isinstance(value, tuple)
-        and len(value) == 2
-        and isinstance(value[0], CalculationResult)
-        and isinstance(value[1], dict)
-    ):
-        return value
-    return None
-
+from aerophysics.gui.page_support import (
+    array_default,
+    configuration_defaults,
+    display_value,
+    numeric_default,
+    render_metric,
+    session_payload,
+    si_value,
+)
+from aerophysics.gui.units import UnitPreferences
 
 _TRANSFORM_LABELS = {
     CompressibleVelocityTransformation.VAN_DRIEST: "Van Driest",
@@ -131,7 +71,7 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
     st.title("圧縮性境界層プロファイル")
     st.caption("滑面・乱流ZPG境界層の平均速度と熱物性分布を予測します。")
     imported = pop_pending_configuration("boundary_layer_profile")
-    inputs, models, _ = _defaults(imported)
+    inputs, models, _ = configuration_defaults(imported)
     render_configuration_import("boundary_layer_profile", "profile")
     render_reset_button("profile", "profile_payload")
     linked = st.session_state.get("current_boundary_layer_case")
@@ -164,59 +104,59 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
         edge_velocity_si = (
             case.edge_velocity
             if isinstance(case, BoundaryLayerCase)
-            else _number(inputs, "edge_velocity", 300.0)
+            else numeric_default(inputs, "edge_velocity", 300.0)
         )
         edge_density_si = (
             case.edge_density
             if isinstance(case, BoundaryLayerCase)
-            else _number(inputs, "edge_density", 1.0)
+            else numeric_default(inputs, "edge_density", 1.0)
         )
         edge_temperature_si = (
             case.edge_temperature
             if isinstance(case, BoundaryLayerCase)
-            else _number(inputs, "edge_temperature", 300.0)
+            else numeric_default(inputs, "edge_temperature", 300.0)
         )
         thickness_si = (
             case.boundary_layer_thickness
             if isinstance(case, BoundaryLayerCase)
-            else _number(inputs, "boundary_layer_thickness", 0.05)
+            else numeric_default(inputs, "boundary_layer_thickness", 0.05)
         )
         shear_si = (
             case.wall_shear_stress
             if isinstance(case, BoundaryLayerCase)
-            else _number(inputs, "wall_shear_stress", 85.0)
+            else numeric_default(inputs, "wall_shear_stress", 85.0)
         )
         disabled = isinstance(case, BoundaryLayerCase)
         edge_velocity = finite_number(
             f"外縁速度 U_e [{preferences.speed}]",
-            _display(edge_velocity_si, "speed", preferences.speed),
+            display_value(edge_velocity_si, "speed", preferences.speed),
             key="profile_velocity",
             min_value=1.0e-12,
             disabled=disabled,
         )
         edge_density = finite_number(
             f"外縁密度 ρ_e [{preferences.density}]",
-            _display(edge_density_si, "density", preferences.density),
+            display_value(edge_density_si, "density", preferences.density),
             key="profile_density",
             min_value=1.0e-12,
             disabled=disabled,
         )
         edge_temperature = finite_number(
             f"外縁温度 T_e [{preferences.temperature}]",
-            _display(edge_temperature_si, "temperature", preferences.temperature),
+            display_value(edge_temperature_si, "temperature", preferences.temperature),
             key="profile_temperature",
             disabled=disabled,
         )
         thickness = finite_number(
             f"境界層厚さ δ₉₉ [{preferences.length}]",
-            _display(thickness_si, "length", preferences.length),
+            display_value(thickness_si, "length", preferences.length),
             key="profile_thickness",
             min_value=1.0e-12,
             disabled=disabled,
         )
         shear = finite_number(
             f"壁面せん断応力 τ_w [{preferences.pressure}]",
-            _display(shear_si, "pressure", preferences.pressure),
+            display_value(shear_si, "pressure", preferences.pressure),
             key="profile_shear",
             min_value=1.0e-12,
             disabled=disabled,
@@ -264,8 +204,8 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
         if not adiabatic:
             wall_temperature = finite_number(
                 f"壁温 T_w [{preferences.temperature}]",
-                _display(
-                    _number(inputs, "wall_temperature", 250.0),
+                display_value(
+                    numeric_default(inputs, "wall_temperature", 250.0),
                     "temperature",
                     preferences.temperature,
                 ),
@@ -280,7 +220,7 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
         if not automatic_wake:
             wake_parameter = finite_number(
                 "wake parameter Π",
-                _number(inputs, "wake_parameter", 0.3),
+                numeric_default(inputs, "wake_parameter", 0.3),
                 key="profile_wake",
                 min_value=0.0,
             )
@@ -304,17 +244,17 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
                 if comparison == "compare"
                 else (CompressibleVelocityTransformation(str(comparison)),)
             )
-            velocity_si = _si(edge_velocity, "speed", preferences.speed)
-            density_si = _si(edge_density, "density", preferences.density)
-            temperature_si = _si(
+            velocity_si = si_value(edge_velocity, "speed", preferences.speed)
+            density_si = si_value(edge_density, "density", preferences.density)
+            temperature_si = si_value(
                 edge_temperature, "temperature", preferences.temperature
             )
-            thickness_value_si = _si(thickness, "length", preferences.length)
-            shear_value_si = _si(shear, "pressure", preferences.pressure)
+            thickness_value_si = si_value(thickness, "length", preferences.length)
+            shear_value_si = si_value(shear, "pressure", preferences.pressure)
             wall_si = (
                 None
                 if wall_temperature is None
-                else _si(wall_temperature, "temperature", preferences.temperature)
+                else si_value(wall_temperature, "temperature", preferences.temperature)
             )
             calculation = boundary_layer_profiles(
                 edge_velocity=velocity_si,
@@ -353,7 +293,7 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
         else:
             st.session_state["profile_payload"] = (calculation, configuration)
 
-    payload = _profile_payload()
+    payload = session_payload("profile_payload", ProfileCalculation)
     if payload is None:
         if not has_linked:
             st.info("平板境界層画面で乱流単点ケースを保存すると入力を引き継げます。")
@@ -375,7 +315,7 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
             strict=True,
         ):
             with column:
-                _metric(row, *item)
+                render_metric(row, *item)
 
     render_result_bundle(
         calculator="boundary_layer_profile",
@@ -420,10 +360,10 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
     st.title("突起抗力")
     st.caption("境界層内の実効動圧を投影面積で積分して直接抗力を推定します。")
     imported = pop_pending_configuration("protrusion_drag")
-    inputs, models, sweep = _defaults(imported)
+    inputs, models, sweep = configuration_defaults(imported)
     if imported is not None:
         imported_profile = tuple(
-            _array(inputs, key)
+            array_default(inputs, key)
             for key in ("profile_height", "profile_velocity", "profile_density")
         )
         if all(value is not None for value in imported_profile):
@@ -433,7 +373,7 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
                 imported_profile[2],  # type: ignore[arg-type]
             )
         imported_shape = tuple(
-            _array(inputs, key) for key in ("shape_height", "shape_width")
+            array_default(inputs, key) for key in ("shape_height", "shape_width")
         )
         if all(value is not None for value in imported_shape):
             st.session_state["protrusion_embedded_shape"] = ShapeCSV(
@@ -511,49 +451,51 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
         edge_velocity_si = (
             linked_profile.edge_velocity
             if isinstance(linked_profile, BoundaryProfileCase)
-            else _number(inputs, "edge_velocity", 300.0)
+            else numeric_default(inputs, "edge_velocity", 300.0)
         )
         edge_density_si = (
             linked_profile.edge_density
             if isinstance(linked_profile, BoundaryProfileCase)
-            else _number(inputs, "edge_density", 1.0)
+            else numeric_default(inputs, "edge_density", 1.0)
         )
         thickness_si = (
             linked_profile.boundary_layer_thickness
             if isinstance(linked_profile, BoundaryProfileCase)
-            else _number(inputs, "boundary_layer_thickness", 0.05)
+            else numeric_default(inputs, "boundary_layer_thickness", 0.05)
         )
         disabled = isinstance(linked_profile, BoundaryProfileCase)
         edge_velocity = finite_number(
             f"外縁速度 U_e [{preferences.speed}]",
-            _display(edge_velocity_si, "speed", preferences.speed),
+            display_value(edge_velocity_si, "speed", preferences.speed),
             key="protrusion_velocity",
             min_value=1.0e-12,
             disabled=disabled,
         )
         edge_density = finite_number(
             f"外縁密度 ρ_e [{preferences.density}]",
-            _display(edge_density_si, "density", preferences.density),
+            display_value(edge_density_si, "density", preferences.density),
             key="protrusion_density",
             min_value=1.0e-12,
             disabled=disabled,
         )
         thickness = finite_number(
             f"境界層厚さ δ [{preferences.length}]",
-            _display(thickness_si, "length", preferences.length),
+            display_value(thickness_si, "length", preferences.length),
             key="protrusion_thickness",
             min_value=1.0e-12,
             disabled=disabled,
         )
         coefficient = finite_number(
             "自由流抗力係数 C_D",
-            _number(inputs, "drag_coefficient", 1.0),
+            numeric_default(inputs, "drag_coefficient", 1.0),
             key="protrusion_cd",
             min_value=0.0,
         )
         height = finite_number(
             f"突起高さ h [{preferences.length}]",
-            _display(_number(inputs, "height", 0.01), "length", preferences.length),
+            display_value(
+                numeric_default(inputs, "height", 0.01), "length", preferences.length
+            ),
             key="protrusion_height",
             min_value=1.0e-12,
         )
@@ -566,8 +508,10 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
         )
         width = finite_number(
             f"代表幅 b₀ [{preferences.length}]",
-            _display(
-                _number(inputs, "base_width", 0.005), "length", preferences.length
+            display_value(
+                numeric_default(inputs, "base_width", 0.005),
+                "length",
+                preferences.length,
             ),
             key="protrusion_width",
             min_value=1.0e-12,
@@ -595,14 +539,14 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
             if compressible:
                 mach = finite_number(
                     "外縁 Mach M_e",
-                    _number(inputs, "mach", 2.0),
+                    numeric_default(inputs, "mach", 2.0),
                     key="protrusion_mach",
                     min_value=0.0,
                 )
                 edge_temperature = finite_number(
                     f"外縁温度 T_e [{preferences.temperature}]",
-                    _display(
-                        _number(inputs, "edge_temperature", 250.0),
+                    display_value(
+                        numeric_default(inputs, "edge_temperature", 250.0),
                         "temperature",
                         preferences.temperature,
                     ),
@@ -616,8 +560,8 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
                 if not adiabatic:
                     wall_temperature = finite_number(
                         f"壁温 T_w [{preferences.temperature}]",
-                        _display(
-                            _number(inputs, "wall_temperature", 300.0),
+                        display_value(
+                            numeric_default(inputs, "wall_temperature", 300.0),
                             "temperature",
                             preferences.temperature,
                         ),
@@ -666,11 +610,15 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
                 "base_width",
                 "boundary_layer_thickness",
             }
-            default_start = _number(sweep, "start", 0.002 if length_field else 0.1)
-            default_stop = _number(sweep, "stop", 0.08 if length_field else 2.0)
+            default_start = numeric_default(
+                sweep, "start", 0.002 if length_field else 0.1
+            )
+            default_stop = numeric_default(sweep, "stop", 0.08 if length_field else 2.0)
             if length_field:
-                default_start = _display(default_start, "length", preferences.length)
-                default_stop = _display(default_stop, "length", preferences.length)
+                default_start = display_value(
+                    default_start, "length", preferences.length
+                )
+                default_stop = display_value(default_stop, "length", preferences.length)
             left, right, count = st.columns(3)
             with left:
                 start = finite_number(
@@ -726,20 +674,20 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
                     shape_data = embedded_shape_data
                 else:
                     raise ValueError("形状CSVを選択してください")
-            velocity_si = _si(edge_velocity, "speed", preferences.speed)
-            density_si = _si(edge_density, "density", preferences.density)
-            thickness_value_si = _si(thickness, "length", preferences.length)
-            height_si = _si(height, "length", preferences.length)
-            width_si = _si(width, "length", preferences.length)
+            velocity_si = si_value(edge_velocity, "speed", preferences.speed)
+            density_si = si_value(edge_density, "density", preferences.density)
+            thickness_value_si = si_value(thickness, "length", preferences.length)
+            height_si = si_value(height, "length", preferences.length)
+            width_si = si_value(width, "length", preferences.length)
             edge_temperature_si = (
                 None
                 if edge_temperature is None
-                else _si(edge_temperature, "temperature", preferences.temperature)
+                else si_value(edge_temperature, "temperature", preferences.temperature)
             )
             wall_temperature_si = (
                 None
                 if wall_temperature is None
-                else _si(wall_temperature, "temperature", preferences.temperature)
+                else si_value(wall_temperature, "temperature", preferences.temperature)
             )
             profile_height = (
                 None if profile_data is None else profile_data.wall_distance
@@ -774,10 +722,14 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
                     "boundary_layer_thickness",
                 }
                 start_si = (
-                    _si(start, "length", preferences.length) if length_field else start
+                    si_value(start, "length", preferences.length)
+                    if length_field
+                    else start
                 )
                 stop_si = (
-                    _si(stop, "length", preferences.length) if length_field else stop
+                    si_value(stop, "length", preferences.length)
+                    if length_field
+                    else stop
                 )
                 result = protrusion_sweep(
                     sweep_field=sweep_field,
@@ -902,7 +854,7 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
             strict=True,
         ):
             with column:
-                _metric(row, *item)
+                render_metric(row, *item)
 
     render_result_bundle(
         calculator="protrusion_drag",
@@ -928,7 +880,7 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
     st.title("熱化学")
     st.caption("NASA7／NASA9多項式による凍結組成乾燥空気の温度依存物性です。")
     imported = pop_pending_configuration("thermochemistry")
-    inputs, models, sweep = _defaults(imported)
+    inputs, models, sweep = configuration_defaults(imported)
     render_configuration_import("thermochemistry", "thermo")
     render_reset_button("thermo", "thermo_payload")
 
@@ -954,8 +906,8 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
         )
         temperature = finite_number(
             f"温度 T [{preferences.temperature}]",
-            _display(
-                _number(inputs, "temperature", 300.0),
+            display_value(
+                numeric_default(inputs, "temperature", 300.0),
                 "temperature",
                 preferences.temperature,
             ),
@@ -963,8 +915,8 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
         )
         pressure = finite_number(
             f"圧力 p [{preferences.pressure}]",
-            _display(
-                _number(inputs, "pressure", 101_325.0),
+            display_value(
+                numeric_default(inputs, "pressure", 101_325.0),
                 "pressure",
                 preferences.pressure,
             ),
@@ -973,8 +925,8 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
         )
         reference = finite_number(
             f"顕熱基準温度 T_ref [{preferences.temperature}]",
-            _display(
-                _number(inputs, "reference_temperature", 298.15),
+            display_value(
+                numeric_default(inputs, "reference_temperature", 298.15),
                 "temperature",
                 preferences.temperature,
             ),
@@ -992,8 +944,8 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
             with left:
                 start = finite_number(
                     f"開始温度 [{preferences.temperature}]",
-                    _display(
-                        _number(sweep, "start", 200.0),
+                    display_value(
+                        numeric_default(sweep, "start", 200.0),
                         "temperature",
                         preferences.temperature,
                     ),
@@ -1002,8 +954,8 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
             with right:
                 stop = finite_number(
                     f"終了温度 [{preferences.temperature}]",
-                    _display(
-                        _number(sweep, "stop", 6000.0),
+                    display_value(
+                        numeric_default(sweep, "stop", 6000.0),
                         "temperature",
                         preferences.temperature,
                     ),
@@ -1025,9 +977,11 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
     if submitted:
         st.session_state.pop("thermo_payload", None)
         try:
-            temperature_si = _si(temperature, "temperature", preferences.temperature)
-            pressure_si = _si(pressure, "pressure", preferences.pressure)
-            reference_si = _si(reference, "temperature", preferences.temperature)
+            temperature_si = si_value(
+                temperature, "temperature", preferences.temperature
+            )
+            pressure_si = si_value(pressure, "pressure", preferences.pressure)
+            reference_si = si_value(reference, "temperature", preferences.temperature)
             selected_models = (
                 ("NASA7", "NASA9") if selection == "compare" else (selection,)
             )
@@ -1041,8 +995,8 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
                     allow_extrapolation=allow_extrapolation,
                 )
             else:
-                start_si = _si(start, "temperature", preferences.temperature)
-                stop_si = _si(stop, "temperature", preferences.temperature)
+                start_si = si_value(start, "temperature", preferences.temperature)
+                stop_si = si_value(stop, "temperature", preferences.temperature)
                 result = thermochemistry_sweep(
                     start=start_si,
                     stop=stop_si,
@@ -1078,7 +1032,7 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
         else:
             st.session_state["thermo_payload"] = (result, configuration)
 
-    payload = _result_payload("thermo_payload")
+    payload = session_payload("thermo_payload", CalculationResult)
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
             st.write("200–6000 Kの凍結組成理想気体で、解離・反応・電離は含みません。")
@@ -1098,7 +1052,7 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
             strict=True,
         ):
             with column:
-                _metric(row, *item)
+                render_metric(row, *item)
 
     render_result_bundle(
         calculator="thermochemistry",
@@ -1121,7 +1075,7 @@ def render_viscosity(preferences: UnitPreferences) -> None:
     st.title("粘性係数")
     st.caption("Sutherland／Keyes／Blottner-Wilkeによる乾燥空気の動的粘性係数です。")
     imported = pop_pending_configuration("viscosity")
-    inputs, models, sweep = _defaults(imported)
+    inputs, models, sweep = configuration_defaults(imported)
     render_configuration_import("viscosity", "viscosity")
     render_reset_button("viscosity", "viscosity_payload")
 
@@ -1151,8 +1105,8 @@ def render_viscosity(preferences: UnitPreferences) -> None:
         )
         temperature = finite_number(
             f"温度 T [{preferences.temperature}]",
-            _display(
-                _number(inputs, "temperature", 1000.0),
+            display_value(
+                numeric_default(inputs, "temperature", 1000.0),
                 "temperature",
                 preferences.temperature,
             ),
@@ -1171,8 +1125,8 @@ def render_viscosity(preferences: UnitPreferences) -> None:
             with left:
                 start = finite_number(
                     f"開始温度 [{preferences.temperature}]",
-                    _display(
-                        _number(sweep, "start", 79.0),
+                    display_value(
+                        numeric_default(sweep, "start", 79.0),
                         "temperature",
                         preferences.temperature,
                     ),
@@ -1181,8 +1135,8 @@ def render_viscosity(preferences: UnitPreferences) -> None:
             with right:
                 stop = finite_number(
                     f"終了温度 [{preferences.temperature}]",
-                    _display(
-                        _number(sweep, "stop", 30_000.0),
+                    display_value(
+                        numeric_default(sweep, "stop", 30_000.0),
                         "temperature",
                         preferences.temperature,
                     ),
@@ -1212,7 +1166,9 @@ def render_viscosity(preferences: UnitPreferences) -> None:
     if submitted:
         st.session_state.pop("viscosity_payload", None)
         try:
-            temperature_si = _si(temperature, "temperature", preferences.temperature)
+            temperature_si = si_value(
+                temperature, "temperature", preferences.temperature
+            )
             selected_models = (
                 ("Sutherland", "Keyes", "Blottner/Wilke")
                 if selection == "compare"
@@ -1226,8 +1182,8 @@ def render_viscosity(preferences: UnitPreferences) -> None:
                     allow_extrapolation=allow_extrapolation,
                 )
             else:
-                start_si = _si(start, "temperature", preferences.temperature)
-                stop_si = _si(stop, "temperature", preferences.temperature)
+                start_si = si_value(start, "temperature", preferences.temperature)
+                stop_si = si_value(stop, "temperature", preferences.temperature)
                 result = viscosity_sweep(
                     start=start_si,
                     stop=stop_si,
@@ -1259,7 +1215,7 @@ def render_viscosity(preferences: UnitPreferences) -> None:
         else:
             st.session_state["viscosity_payload"] = (result, configuration)
 
-    payload = _result_payload("viscosity_payload")
+    payload = session_payload("viscosity_payload", CalculationResult)
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
             st.write(
