@@ -112,6 +112,40 @@ def test_flight_velocity_and_sweeps() -> None:
         )
 
 
+def test_flight_adapter_rejects_multidimensional_inputs_but_core_broadcasts() -> None:
+    altitudes = np.asarray([[0.0], [1_000.0]])
+    mach_values = np.asarray([0.5, 1.0])
+    direct = FlightCondition.from_mach(altitudes, mach_values)
+    assert np.asarray(direct.velocity).shape == (2, 2)
+
+    with pytest.raises(ValueError, match=r"geometric_altitude.*one-dimensional"):
+        flight_condition(
+            geometric_altitude=altitudes,
+            motion=mach_values,
+            motion_basis="mach",
+            characteristic_length=None,
+        )
+    with pytest.raises(ValueError, match=r"motion.*one-dimensional"):
+        flight_condition(
+            geometric_altitude=np.asarray([0.0, 1_000.0]),
+            motion=np.asarray([[0.5], [1.0]]),
+            motion_basis="mach",
+            characteristic_length=None,
+        )
+
+
+def test_one_dimensional_flight_input_preserves_row_order() -> None:
+    result = flight_condition(
+        geometric_altitude=np.asarray([2_000.0, 0.0, 1_000.0]),
+        motion=0.5,
+        motion_basis="mach",
+        characteristic_length=None,
+    )
+    assert [row["geometric_altitude"] for row in result.rows] == pytest.approx(
+        [2_000.0, 0.0, 1_000.0]
+    )
+
+
 def test_isentropic_adapter_forward_inverse_and_mass_flux() -> None:
     forward = isentropic_condition(
         input_value=2.0,
@@ -159,6 +193,11 @@ def test_isentropic_sweep_and_validation() -> None:
         )
     with pytest.raises(ValueError, match="unsupported"):
         isentropic_condition(input_value=1.0, input_basis="other")
+    with pytest.raises(ValueError, match=r"input_value.*one-dimensional"):
+        isentropic_condition(
+            input_value=np.asarray([[1.0, 2.0]]),
+            input_basis="mach",
+        )
 
 
 def test_thermally_perfect_isentropic_adapter_forward_inverse_and_warning() -> None:
@@ -345,6 +384,19 @@ def test_normal_shock_adapter_and_sweep() -> None:
     assert isinstance(first_ratio, float)
     assert isinstance(last_ratio, float)
     assert last_ratio < first_ratio
+
+
+def test_shock_adapters_reject_multidimensional_mach_inputs() -> None:
+    mach_values = np.asarray([[2.0, 3.0]])
+    with pytest.raises(ValueError, match=r"upstream_mach.*one-dimensional"):
+        normal_shock_condition(upstream_mach=mach_values)
+    with pytest.raises(ValueError, match=r"upstream_mach.*one-dimensional"):
+        detached_shock_condition(
+            upstream_mach=mach_values,
+            nose_radius=0.1,
+            geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+            selection="ambrosio_wortman",
+        )
 
 
 def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
@@ -583,6 +635,23 @@ def test_flat_plate_adapter_and_warning_capture() -> None:
         wall_temperature=None,
     )
     assert warned.warnings
+
+
+def test_flat_plate_adapter_rejects_multidimensional_distance() -> None:
+    with pytest.raises(ValueError, match=r"distance.*one-dimensional"):
+        flat_plate(
+            distance=np.asarray([[0.1, 1.0]]),
+            edge_velocity=10.0,
+            edge_density=1.0,
+            edge_dynamic_viscosity=1e-5,
+            regime=BoundaryLayerRegime.LAMINAR,
+            turbulent_correlation=TurbulentCorrelation.SCHLICHTING,
+            transition_reynolds=None,
+            compressibility_correction=CompressibilityCorrection.NONE,
+            mach=None,
+            edge_temperature=None,
+            wall_temperature=None,
+        )
 
 
 def test_flat_plate_compressible_distance_sweep() -> None:

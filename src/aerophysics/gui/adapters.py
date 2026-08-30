@@ -63,6 +63,7 @@ from aerophysics.thermochemistry import ThermallyPerfectGas
 
 type CellValue = float | str | None
 type Row = dict[str, CellValue]
+type ScalarOrOneDimensional = float | np.ndarray
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,8 +122,11 @@ def sweep_values(
     return np.linspace(start, stop, points, dtype=np.float64)
 
 
-def _array(value: object) -> np.ndarray:
-    return np.atleast_1d(np.asarray(value, dtype=np.float64))
+def _array(value: object, *, name: str = "table value") -> np.ndarray:
+    array = np.asarray(value, dtype=np.float64)
+    if array.ndim > 1:
+        raise ValueError(f"{name} must be a scalar or one-dimensional array")
+    return np.atleast_1d(array)
 
 
 def _optional_at(value: object, index: int) -> float | None:
@@ -133,12 +137,14 @@ def _optional_at(value: object, index: int) -> float | None:
 
 def flight_condition(
     *,
-    geometric_altitude: float | np.ndarray,
-    motion: float | np.ndarray,
+    geometric_altitude: ScalarOrOneDimensional,
+    motion: ScalarOrOneDimensional,
     motion_basis: str,
     characteristic_length: float | None,
 ) -> CalculationResult:
-    """Calculate scalar or broadcast flight conditions."""
+    """Calculate flight conditions from scalar or one-dimensional inputs."""
+    _array(geometric_altitude, name="geometric_altitude")
+    _array(motion, name="motion")
     if motion_basis == "mach":
         condition = FlightCondition.from_mach(
             geometric_altitude, motion, characteristic_length
@@ -271,7 +277,7 @@ def _mach_from_isentropic_input(
 
 def isentropic_condition(
     *,
-    input_value: float | np.ndarray,
+    input_value: ScalarOrOneDimensional,
     input_basis: str,
     branch: MachBranch = MachBranch.SUBSONIC,
     gas_model: str = "AIR",
@@ -279,7 +285,8 @@ def isentropic_condition(
     total_temperature: float | None = None,
     allow_extrapolation: bool = True,
 ) -> CalculationResult:
-    """Calculate isentropic state, inverse, area, and mass-flow relations."""
+    """Calculate isentropic relations for a scalar or one-dimensional input."""
+    input_values = _array(input_value, name="input_value")
     try:
         gas = _ISENTROPIC_GASES[gas_model]
     except KeyError as error:
@@ -335,7 +342,7 @@ def isentropic_condition(
             critical_temperature_ratio = float(critical.total_temperature_ratio)
             critical_pressure_ratio = float(critical.total_pressure_ratio)
             critical_density_ratio = float(critical.total_density_ratio)
-        for raw_value in _array(input_value):
+        for raw_value in input_values:
             value = float(raw_value)
             mach = _mach_from_isentropic_input(
                 value,
@@ -556,8 +563,11 @@ def isentropic_sweep(
     )
 
 
-def normal_shock_condition(*, upstream_mach: float | np.ndarray) -> CalculationResult:
-    """Calculate normal-shock ratios and the Rayleigh pitot relation."""
+def normal_shock_condition(
+    *, upstream_mach: ScalarOrOneDimensional
+) -> CalculationResult:
+    """Calculate normal-shock rows for scalar or one-dimensional Mach input."""
+    _array(upstream_mach, name="upstream_mach")
     result = normal_shock(upstream_mach)
     mach_values = _array(result.upstream_mach)
     pitot_values = _array(supersonic_pitot_pressure_ratio(mach_values))
@@ -594,12 +604,12 @@ def normal_shock_sweep(*, start: float, stop: float, points: int) -> Calculation
 
 def detached_shock_condition(
     *,
-    upstream_mach: float | np.ndarray,
+    upstream_mach: ScalarOrOneDimensional,
     nose_radius: float,
     geometry: DetachedShockGeometry,
     selection: str,
 ) -> CalculationResult:
-    """Calculate detached-shock standoff and Billig curvature data."""
+    """Calculate detached-shock rows for scalar or one-dimensional Mach input."""
     if selection not in {"ambrosio_wortman", "seiff", "comparison"}:
         raise ValueError("selection must be ambrosio_wortman, seiff, or comparison")
     if (
@@ -607,6 +617,7 @@ def detached_shock_condition(
         and selection != "ambrosio_wortman"
     ):
         raise ValueError("Seiff and comparison are available only for sphere geometry")
+    _array(upstream_mach, name="upstream_mach")
 
     # Billig's curvature is required for every displayed row and deliberately
     # uses the Ambrosio--Wortman standoff.  Calling it once gives us the AW
@@ -959,7 +970,7 @@ def conical_shock_sweep(
 
 def flat_plate(
     *,
-    distance: float | np.ndarray,
+    distance: ScalarOrOneDimensional,
     edge_velocity: float,
     edge_density: float,
     edge_dynamic_viscosity: float,
@@ -971,7 +982,8 @@ def flat_plate(
     edge_temperature: float | None,
     wall_temperature: float | None,
 ) -> CalculationResult:
-    """Calculate a scalar or distance-array flat-plate boundary layer."""
+    """Calculate a flat plate for scalar or one-dimensional distance input."""
+    _array(distance, name="distance")
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
         result = flat_plate_boundary_layer(

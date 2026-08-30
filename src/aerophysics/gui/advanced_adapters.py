@@ -14,7 +14,13 @@ from aerophysics.boundary_layer_profile import (
     TemperatureVelocityRelation,
     compressible_turbulent_boundary_layer_profile,
 )
-from aerophysics.gui.adapters import CalculationResult, Row, sweep_values
+from aerophysics.gui.adapters import (
+    CalculationResult,
+    Row,
+    ScalarOrOneDimensional,
+    _array,
+    sweep_values,
+)
 from aerophysics.protrusion import protrusion_drag
 from aerophysics.transport import (
     AIR_BLOTTNER_VISCOSITY,
@@ -350,17 +356,17 @@ _THERMO_MODELS = {"NASA7": AIR_NASA7, "NASA9": AIR_NASA9}
 
 def thermochemistry_condition(
     *,
-    temperature: float | np.ndarray,
+    temperature: ScalarOrOneDimensional,
     pressure: float,
     reference_temperature: float,
     models: Sequence[str],
     allow_extrapolation: bool,
 ) -> CalculationResult:
-    """Calculate frozen dry-air thermodynamic properties."""
+    """Calculate properties for scalar or one-dimensional temperature input."""
     selected = tuple(models)
     if not selected or len(set(selected)) != len(selected):
         raise ValueError("models must contain unique NASA model choices")
-    temperatures = np.atleast_1d(np.asarray(temperature, dtype=np.float64))
+    temperatures = _array(temperature, name="temperature")
     rows: list[Row] = []
     messages: list[str] = []
     for name in selected:
@@ -477,11 +483,11 @@ _VISCOSITY_RANGES: dict[str, tuple[float, float] | None] = {
 
 def viscosity_condition(
     *,
-    temperature: float | np.ndarray,
+    temperature: ScalarOrOneDimensional,
     models: Sequence[str],
     allow_extrapolation: bool,
 ) -> CalculationResult:
-    """Calculate dry-air dynamic viscosity with one or more models."""
+    """Calculate viscosity for scalar or one-dimensional temperature input."""
     selected = tuple(models)
     if not selected or len(set(selected)) != len(selected):
         raise ValueError("models must contain unique viscosity model choices")
@@ -489,7 +495,7 @@ def viscosity_condition(
     if unknown:
         raise ValueError("model must be Sutherland, Keyes, or Blottner/Wilke")
 
-    temperatures = np.atleast_1d(np.asarray(temperature, dtype=np.float64)).reshape(-1)
+    temperatures = _array(temperature, name="temperature")
     if not np.all(np.isfinite(temperatures)) or np.any(temperatures <= 0.0):
         raise ValueError("temperature must be finite and greater than zero")
     baseline = np.atleast_1d(

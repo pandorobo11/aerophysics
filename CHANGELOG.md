@@ -7,6 +7,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Define GUI table adapters as accepting scalar or one-dimensional array
+  inputs, with explicit errors for unsupported multidimensional arrays.
 - Use one GUI selector for length and inverse-length display units so their
   dimensional bases stay consistent.
 - Remove the pinned ``fluids`` comparison from required standard-atmosphere

@@ -239,6 +239,14 @@ def test_thermochemistry_adapter_matches_core_and_extrapolates() -> None:
             models=("other",),
             allow_extrapolation=False,
         )
+    with pytest.raises(ValueError, match=r"temperature.*one-dimensional"):
+        thermochemistry_condition(
+            temperature=np.asarray([[300.0, 1_000.0]]),
+            pressure=101_325.0,
+            reference_temperature=298.15,
+            models=("NASA9",),
+            allow_extrapolation=False,
+        )
 
 
 def test_viscosity_adapter_matches_public_models_and_order() -> None:
@@ -262,14 +270,20 @@ def test_viscosity_adapter_matches_public_models_and_order() -> None:
         AIR_BLOTTNER_VISCOSITY.dynamic_viscosity(1000.0)
     )
     assert result.rows[0]["relative_difference"] == pytest.approx(0.0)
-    multidimensional = viscosity_condition(
-        temperature=np.array([[300.0, 1000.0], [1500.0, 1845.0]]),
+    one_dimensional = viscosity_condition(
+        temperature=np.array([300.0, 1000.0, 1500.0, 1845.0]),
         models=("Keyes",),
         allow_extrapolation=False,
     )
-    assert [row["temperature"] for row in multidimensional.rows] == pytest.approx(
+    assert [row["temperature"] for row in one_dimensional.rows] == pytest.approx(
         [300.0, 1000.0, 1500.0, 1845.0]
     )
+    with pytest.raises(ValueError, match=r"temperature.*one-dimensional"):
+        viscosity_condition(
+            temperature=np.array([[300.0, 1000.0], [1500.0, 1845.0]]),
+            models=("Keyes",),
+            allow_extrapolation=False,
+        )
 
 
 def test_viscosity_adapter_ranges_and_explicit_extrapolation() -> None:
