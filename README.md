@@ -13,18 +13,22 @@ See [README.ja.md](README.ja.md) for the Japanese entry point.
 
 ## Installation
 
-`aerophysics` requires Python 3.12 or newer.
+`aerophysics` requires Python 3.12 or newer. Until a PyPI distribution is
+available, install the current wheel from the
+[latest GitHub Release](https://github.com/pandorobo11/aerophysics/releases/latest):
 
 ```console
-python -m pip install aerophysics
+python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
 ```
 
 To install and launch the optional local GUI:
 
 ```console
-python -m pip install "aerophysics[gui]"
+python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
 aerophysics-gui
 ```
+
+Check the release page for a newer version before copying a versioned URL.
 
 ## Minimal example
 
