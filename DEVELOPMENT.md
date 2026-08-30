@@ -45,6 +45,22 @@ uv sync --all-groups --all-extras --locked
 
 Do not update the lock file as part of an ordinary environment sync.
 
+## GUI page pipeline
+
+Calculator pages keep their boundary logic in `aerophysics.gui.page_support`:
+validated configuration is copied into typed input, model, and sweep sections;
+display values are converted to SI; a pure adapter performs the calculation;
+and the `(result, configuration)` session payload is validated before render
+and export. Preserve those tuple shapes and session keys when migrating a page.
+
+Missing or invalid optional numeric defaults use the widget's explicit
+fallback. A missing result payload is expected before the first calculation,
+but a present malformed payload raises `PageDataError`. Result metrics prefer
+an exact table heading and otherwise require one unambiguous matching heading.
+Expected unavailable values use `None` and render as an em dash; missing,
+duplicate, or other non-numeric fields raise `PageDataError` instead of
+silently rendering an incomplete result.
+
 ## Local validation
 
 Run the complete local gate before handing back a change:
