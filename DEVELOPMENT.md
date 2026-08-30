@@ -63,6 +63,18 @@ rewriting Python source, use:
 scripts/check.sh --check-only
 ```
 
+The complete gate also exports every locked dependency group and optional extra
+and checks it against the current Python vulnerability database. Run that check
+on its own with:
+
+```console
+scripts/check-dependencies.sh
+```
+
+The audit operates on the hashes and exact versions in ``uv.lock``. Update the
+lock deliberately when an advisory identifies a fixed compatible release; do
+not suppress an advisory merely to restore a green check.
+
 CI must only check formatting (`ruff format --check .`); it must never apply
 formatting or commit generated changes.
 
