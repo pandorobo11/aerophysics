@@ -14,6 +14,7 @@ from pathlib import Path
 
 DOCS_URL_ENV = "AEROPHYSICS_DOCS_URL"
 DOCS_DIR_ENV = "AEROPHYSICS_DOCS_DIR"
+LOOPBACK_ADDRESS = "127.0.0.1"
 
 
 class _QuietDocumentationHandler(SimpleHTTPRequestHandler):
@@ -43,7 +44,7 @@ def _start_documentation_server(
     directory: Path,
 ) -> tuple[ThreadingHTTPServer, threading.Thread]:
     handler = partial(_QuietDocumentationHandler, directory=str(directory))
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    server = ThreadingHTTPServer((LOOPBACK_ADDRESS, 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -57,7 +58,15 @@ def main() -> None:
             "Install them with: python -m pip install 'aerophysics[gui]'"
         )
     app = Path(__file__).with_name("app.py")
-    command = [sys.executable, "-m", "streamlit", "run", str(app), *sys.argv[1:]]
+    command = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(app),
+        f"--server.address={LOOPBACK_ADDRESS}",
+        *sys.argv[1:],
+    ]
     environment = dict(os.environ)
     docs_server: ThreadingHTTPServer | None = None
     docs_thread: threading.Thread | None = None
@@ -65,7 +74,7 @@ def main() -> None:
     if directory is not None:
         docs_server, docs_thread = _start_documentation_server(directory)
         port = docs_server.server_address[1]
-        environment[DOCS_URL_ENV] = f"http://127.0.0.1:{port}/"
+        environment[DOCS_URL_ENV] = f"http://{LOOPBACK_ADDRESS}:{port}/"
     try:
         try:
             returncode = subprocess.run(
