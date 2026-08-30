@@ -21,6 +21,7 @@ from aerophysics.isentropic import (
     area_ratio,
     choked_mass_flux,
     critical_ratios,
+    isentropic_analysis,
     isentropic_ratios,
     isentropic_state,
     mach_from_area_ratio,
@@ -522,6 +523,34 @@ def test_new_models_isentropic_forward_inverse_and_area_branches(
         total_temperature=1200.0,
         total_pressure=total_pressure,
     )
+    analysis = isentropic_analysis(
+        mach,
+        gas,
+        total_temperature=1200.0,
+        total_pressure=total_pressure,
+    )
+    assert_allclose(
+        analysis.ratios.total_temperature_ratio,
+        ratios.total_temperature_ratio,
+    )
+    assert_allclose(analysis.ratios.total_pressure_ratio, ratios.total_pressure_ratio)
+    assert_allclose(analysis.ratios.total_density_ratio, ratios.total_density_ratio)
+    assert np.isinf(np.asarray(analysis.area_ratio)[0])
+    assert_allclose(
+        np.asarray(analysis.area_ratio)[1:],
+        area_ratio(
+            mach[1:],
+            gas,
+            total_temperature=1200.0,
+            total_pressure=total_pressure,
+        ),
+    )
+    if total_pressure is None:
+        assert analysis.state is None
+        assert analysis.mass_flux is None
+    else:
+        assert analysis.state is not None
+        assert analysis.mass_flux is not None
     assert_allclose(
         mach_from_total_temperature_ratio(
             ratios.total_temperature_ratio,
@@ -779,6 +808,12 @@ def test_isentropic_requirements_broadcast_and_range_handling() -> None:
         isentropic_ratios(1.0, AIR_HARMONIC_OSCILLATOR)
     with pytest.raises(ValueError, match="total_pressure"):
         isentropic_ratios(1.0, AIR_BEATTIE_BRIDGEMAN, total_temperature=1200.0)
+    with pytest.raises(ValueError, match="total_temperature and total_pressure"):
+        isentropic_analysis(
+            1.0,
+            AIR_BEATTIE_BRIDGEMAN,
+            total_temperature=1200.0,
+        )
     with pytest.warns(ApplicabilityWarning) as captured:
         isentropic_ratios(
             [1.0, 2.0],

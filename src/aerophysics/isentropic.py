@@ -93,6 +93,26 @@ class IsentropicFlowState:
 
 
 @dataclass(frozen=True, slots=True)
+class IsentropicAnalysis:
+    """Fused forward-flow results evaluated from one set of solved states.
+
+    ``state``, ``mass_flux``, and ``choked_mass_flux`` are available when both
+    total temperature and total pressure are supplied. ``area_ratio`` uses the
+    limiting value ``inf`` at Mach zero; the standalone :func:`area_ratio`
+    function continues to require strictly positive Mach numbers.
+    """
+
+    ratios: IsentropicRatios
+    critical_ratios: CriticalRatios
+    area_ratio: FloatResult
+    mass_flow_parameter: FloatResult
+    critical_mass_flow_parameter: FloatResult
+    mass_flux: FloatResult | None
+    choked_mass_flux: FloatResult | None
+    state: IsentropicFlowState | None
+
+
+@dataclass(frozen=True, slots=True)
 class _ThermalProperties:
     enthalpy: float
     entropy: float
@@ -121,6 +141,29 @@ class _RealFlowState:
     total_pressure_ratio: float
     total_density_ratio: float
     mass_flow_parameter: float
+
+
+@dataclass(frozen=True, slots=True)
+class _AbsoluteFlowArrays:
+    total_density: FloatArray
+    static_temperature: FloatArray
+    static_pressure: FloatArray
+    static_density: FloatArray
+    velocity: FloatArray
+    speed_of_sound: FloatArray
+
+
+@dataclass(frozen=True, slots=True)
+class _AnalysisArrays:
+    temperature_ratio: FloatArray
+    pressure_ratio: FloatArray
+    density_ratio: FloatArray
+    mass_flow_parameter: FloatArray
+    critical_temperature_ratio: FloatArray
+    critical_pressure_ratio: FloatArray
+    critical_density_ratio: FloatArray
+    critical_mass_flow_parameter: FloatArray
+    absolute: _AbsoluteFlowArrays | None
 
 
 def _validate_mach(
@@ -802,6 +845,470 @@ def _check_real_area_states(
         np.concatenate((static_temperature.ravel(), critical_temperature.ravel())),
         np.concatenate((static_pressure.ravel(), critical_pressure.ravel())),
         allow_extrapolation=allow_extrapolation,
+    )
+
+
+def _analysis_inputs(
+    mach: ArrayLike,
+    gas: IsentropicGasModel,
+    total_temperature: ArrayLike | None,
+    total_pressure: ArrayLike | None,
+) -> tuple[FloatArray, FloatArray | None, FloatArray | None, bool]:
+    mach_values, mach_scalar = _validate_mach(mach)
+    if isinstance(gas, BeattieBridgemanGas) and (
+        total_temperature is None or total_pressure is None
+    ):
+        raise ValueError(
+            "total_temperature and total_pressure are required for a "
+            "Beattie--Bridgeman gas"
+        )
+    if isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)) and (
+        total_temperature is None
+    ):
+        raise ValueError("total_temperature is required for a thermally perfect gas")
+    if total_pressure is not None and total_temperature is None:
+        raise ValueError(
+            "total_temperature is required when total_pressure is specified"
+        )
+
+    temperatures: FloatArray | None = None
+    pressures: FloatArray | None = None
+    temperature_scalar = True
+    pressure_scalar = True
+    if total_temperature is not None:
+        temperatures, temperature_scalar = as_float_array(
+            total_temperature, name="total_temperature"
+        )
+        if np.any(temperatures <= 0.0):
+            raise ValueError("total_temperature must be greater than zero")
+    if total_pressure is not None:
+        pressures, pressure_scalar = as_float_array(
+            total_pressure, name="total_pressure"
+        )
+        if np.any(pressures <= 0.0):
+            raise ValueError("total_pressure must be greater than zero")
+
+    try:
+        if pressures is not None:
+            assert temperatures is not None
+            mach_values, temperatures, pressures = np.broadcast_arrays(
+                mach_values, temperatures, pressures
+            )
+        elif temperatures is not None:
+            mach_values, temperatures = np.broadcast_arrays(mach_values, temperatures)
+    except ValueError as error:
+        raise ValueError(
+            "mach, total_temperature, and total_pressure must be broadcastable"
+        ) from error
+
+    return (
+        np.asarray(mach_values, dtype=np.float64),
+        (
+            np.asarray(temperatures, dtype=np.float64)
+            if temperatures is not None
+            else None
+        ),
+        np.asarray(pressures, dtype=np.float64) if pressures is not None else None,
+        mach_scalar and temperature_scalar and pressure_scalar,
+    )
+
+
+def _perfect_analysis_arrays(
+    mach: FloatArray,
+    total_temperature: FloatArray | None,
+    total_pressure: FloatArray | None,
+    gas: PerfectGas,
+) -> _AnalysisArrays:
+    gamma = gas.heat_capacity_ratio
+    temperature_ratio = _temperature_factor(mach, gas)
+    pressure_ratio = temperature_ratio ** (gamma / (gamma - 1.0))
+    density_ratio = temperature_ratio ** (1.0 / (gamma - 1.0))
+    exponent = (gamma + 1.0) / (2.0 * (gamma - 1.0))
+    parameter = np.sqrt(gamma) * mach / temperature_ratio**exponent
+
+    critical_temperature = 0.5 * (gamma + 1.0)
+    critical_pressure = critical_temperature ** (gamma / (gamma - 1.0))
+    critical_density = critical_temperature ** (1.0 / (gamma - 1.0))
+    critical_parameter = np.sqrt(gamma) / critical_temperature**exponent
+    critical_temperature_ratio = np.full_like(mach, critical_temperature)
+    critical_pressure_ratio = np.full_like(mach, critical_pressure)
+    critical_density_ratio = np.full_like(mach, critical_density)
+    critical_mass_flow_parameter = np.full_like(mach, critical_parameter)
+
+    absolute = None
+    if total_pressure is not None:
+        assert total_temperature is not None
+        static_temperature = total_temperature / temperature_ratio
+        static_pressure = total_pressure / pressure_ratio
+        total_density = total_pressure / (gas.specific_gas_constant * total_temperature)
+        static_density = static_pressure / (
+            gas.specific_gas_constant * static_temperature
+        )
+        speed_of_sound = np.sqrt(gamma * gas.specific_gas_constant * static_temperature)
+        absolute = _AbsoluteFlowArrays(
+            total_density=total_density,
+            static_temperature=static_temperature,
+            static_pressure=static_pressure,
+            static_density=static_density,
+            velocity=mach * speed_of_sound,
+            speed_of_sound=speed_of_sound,
+        )
+
+    return _AnalysisArrays(
+        temperature_ratio=temperature_ratio,
+        pressure_ratio=pressure_ratio,
+        density_ratio=density_ratio,
+        mass_flow_parameter=parameter,
+        critical_temperature_ratio=critical_temperature_ratio,
+        critical_pressure_ratio=critical_pressure_ratio,
+        critical_density_ratio=critical_density_ratio,
+        critical_mass_flow_parameter=critical_mass_flow_parameter,
+        absolute=absolute,
+    )
+
+
+def _thermal_analysis_arrays(
+    mach: FloatArray,
+    total_temperature: FloatArray,
+    total_pressure: FloatArray | None,
+    gas: _IdealThermalGas,
+    *,
+    allow_extrapolation: bool,
+) -> _AnalysisArrays:
+    if isinstance(gas, HarmonicOscillatorGas):
+        _check_harmonic_total_temperature(
+            gas,
+            total_temperature,
+            allow_extrapolation=allow_extrapolation,
+        )
+
+    temperature_ratio = np.empty_like(mach)
+    pressure_ratio = np.empty_like(mach)
+    density_ratio = np.empty_like(mach)
+    parameter = np.empty_like(mach)
+    critical_temperature_ratio = np.empty_like(mach)
+    critical_pressure_ratio = np.empty_like(mach)
+    critical_density_ratio = np.empty_like(mach)
+    critical_parameter = np.empty_like(mach)
+
+    total_density: FloatArray | None = None
+    static_temperature: FloatArray | None = None
+    static_pressure: FloatArray | None = None
+    static_density: FloatArray | None = None
+    velocity: FloatArray | None = None
+    speed_of_sound: FloatArray | None = None
+    if total_pressure is not None:
+        total_density = np.empty_like(mach)
+        static_temperature = np.empty_like(mach)
+        static_pressure = np.empty_like(mach)
+        static_density = np.empty_like(mach)
+        velocity = np.empty_like(mach)
+        speed_of_sound = np.empty_like(mach)
+
+    solved: dict[tuple[float, float], _ThermalFlowState] = {}
+
+    def solve(mach_value: float, temperature: float) -> _ThermalFlowState:
+        key = (mach_value, temperature)
+        state = solved.get(key)
+        if state is None:
+            state = _thermal_flow_state(
+                mach_value,
+                temperature,
+                gas,
+                allow_extrapolation=allow_extrapolation,
+            )
+            solved[key] = state
+        return state
+
+    extrapolated = False
+    for index in np.ndindex(mach.shape):
+        total_temperature_value = float(total_temperature[index])
+        critical = solve(1.0, total_temperature_value)
+        state = solve(float(mach[index]), total_temperature_value)
+        temperature_ratio[index] = state.total_temperature_ratio
+        pressure_ratio[index] = state.total_pressure_ratio
+        density_ratio[index] = state.total_density_ratio
+        parameter[index] = state.mass_flow_parameter
+        critical_temperature_ratio[index] = critical.total_temperature_ratio
+        critical_pressure_ratio[index] = critical.total_pressure_ratio
+        critical_density_ratio[index] = critical.total_density_ratio
+        critical_parameter[index] = critical.mass_flow_parameter
+        extrapolated = extrapolated or state.extrapolated or critical.extrapolated
+
+        if total_pressure is not None:
+            assert total_density is not None
+            assert static_temperature is not None
+            assert static_pressure is not None
+            assert static_density is not None
+            assert velocity is not None
+            assert speed_of_sound is not None
+            properties = _thermal_properties(
+                state.static_temperature,
+                gas,
+                allow_extrapolation=allow_extrapolation,
+            )
+            static_temperature[index] = state.static_temperature
+            static_pressure[index] = total_pressure[index] / state.total_pressure_ratio
+            total_density[index] = total_pressure[index] / (
+                gas.specific_gas_constant * total_temperature[index]
+            )
+            static_density[index] = static_pressure[index] / (
+                gas.specific_gas_constant * static_temperature[index]
+            )
+            speed_of_sound[index] = np.sqrt(properties.sound_speed_squared)
+            velocity[index] = mach[index] * speed_of_sound[index]
+
+    _warn_if_extrapolated(gas, extrapolated)
+    absolute = None
+    if total_pressure is not None:
+        assert total_density is not None
+        assert static_temperature is not None
+        assert static_pressure is not None
+        assert static_density is not None
+        assert velocity is not None
+        assert speed_of_sound is not None
+        absolute = _AbsoluteFlowArrays(
+            total_density=total_density,
+            static_temperature=static_temperature,
+            static_pressure=static_pressure,
+            static_density=static_density,
+            velocity=velocity,
+            speed_of_sound=speed_of_sound,
+        )
+    return _AnalysisArrays(
+        temperature_ratio=temperature_ratio,
+        pressure_ratio=pressure_ratio,
+        density_ratio=density_ratio,
+        mass_flow_parameter=parameter,
+        critical_temperature_ratio=critical_temperature_ratio,
+        critical_pressure_ratio=critical_pressure_ratio,
+        critical_density_ratio=critical_density_ratio,
+        critical_mass_flow_parameter=critical_parameter,
+        absolute=absolute,
+    )
+
+
+def _real_analysis_arrays(
+    mach: FloatArray,
+    total_temperature: FloatArray,
+    total_pressure: FloatArray,
+    gas: BeattieBridgemanGas,
+    *,
+    allow_extrapolation: bool,
+) -> _AnalysisArrays:
+    total_outside = _check_real_total_conditions(
+        gas,
+        total_temperature,
+        total_pressure,
+        allow_extrapolation=allow_extrapolation,
+    )
+    temperature_ratio = np.empty_like(mach)
+    pressure_ratio = np.empty_like(mach)
+    density_ratio = np.empty_like(mach)
+    parameter = np.empty_like(mach)
+    critical_temperature_ratio = np.empty_like(mach)
+    critical_pressure_ratio = np.empty_like(mach)
+    critical_density_ratio = np.empty_like(mach)
+    critical_parameter = np.empty_like(mach)
+    total_density = np.empty_like(mach)
+    static_temperature = np.empty_like(mach)
+    static_pressure = np.empty_like(mach)
+    static_density = np.empty_like(mach)
+    velocity = np.empty_like(mach)
+    speed_of_sound = np.empty_like(mach)
+    critical_static_temperature = np.empty_like(mach)
+    critical_static_pressure = np.empty_like(mach)
+    solved: dict[tuple[float, float, float], _RealFlowState] = {}
+
+    def solve(mach_value: float, temperature: float, pressure: float) -> _RealFlowState:
+        key = (mach_value, temperature, pressure)
+        state = solved.get(key)
+        if state is None:
+            state = _real_flow_state(mach_value, temperature, pressure, gas)
+            solved[key] = state
+        return state
+
+    for index in np.ndindex(mach.shape):
+        total_temperature_value = float(total_temperature[index])
+        total_pressure_value = float(total_pressure[index])
+        critical = solve(1.0, total_temperature_value, total_pressure_value)
+        state = solve(float(mach[index]), total_temperature_value, total_pressure_value)
+        temperature_ratio[index] = state.total_temperature_ratio
+        pressure_ratio[index] = state.total_pressure_ratio
+        density_ratio[index] = state.total_density_ratio
+        parameter[index] = state.mass_flow_parameter
+        critical_temperature_ratio[index] = critical.total_temperature_ratio
+        critical_pressure_ratio[index] = critical.total_pressure_ratio
+        critical_density_ratio[index] = critical.total_density_ratio
+        critical_parameter[index] = critical.mass_flow_parameter
+        total_density[index] = state.total.density
+        static_temperature[index] = state.static.temperature
+        static_pressure[index] = state.static.pressure
+        static_density[index] = state.static.density
+        velocity[index] = state.velocity
+        speed_of_sound[index] = state.static.speed_of_sound
+        critical_static_temperature[index] = critical.static.temperature
+        critical_static_pressure[index] = critical.static.pressure
+
+    _check_real_static_conditions(
+        gas,
+        total_outside,
+        np.concatenate(
+            (static_temperature.ravel(), critical_static_temperature.ravel())
+        ),
+        np.concatenate((static_pressure.ravel(), critical_static_pressure.ravel())),
+        allow_extrapolation=allow_extrapolation,
+    )
+    return _AnalysisArrays(
+        temperature_ratio=temperature_ratio,
+        pressure_ratio=pressure_ratio,
+        density_ratio=density_ratio,
+        mass_flow_parameter=parameter,
+        critical_temperature_ratio=critical_temperature_ratio,
+        critical_pressure_ratio=critical_pressure_ratio,
+        critical_density_ratio=critical_density_ratio,
+        critical_mass_flow_parameter=critical_parameter,
+        absolute=_AbsoluteFlowArrays(
+            total_density=total_density,
+            static_temperature=static_temperature,
+            static_pressure=static_pressure,
+            static_density=static_density,
+            velocity=velocity,
+            speed_of_sound=speed_of_sound,
+        ),
+    )
+
+
+def _make_isentropic_analysis(
+    mach: FloatArray,
+    total_temperature: FloatArray | None,
+    total_pressure: FloatArray | None,
+    gas: IsentropicGasModel,
+    values: _AnalysisArrays,
+    *,
+    scalar: bool,
+) -> IsentropicAnalysis:
+    def output(result: FloatArray) -> FloatResult:
+        return return_float(result, scalar=scalar)
+
+    area = np.full_like(mach, np.inf)
+    np.divide(
+        values.critical_mass_flow_parameter,
+        values.mass_flow_parameter,
+        out=area,
+        where=values.mass_flow_parameter > 0.0,
+    )
+
+    mass_flux_value: FloatResult | None = None
+    choked_mass_flux_value: FloatResult | None = None
+    state = None
+    if total_pressure is not None:
+        assert total_temperature is not None
+        assert values.absolute is not None
+        normalization = np.sqrt(gas.specific_gas_constant * total_temperature)
+        mass_flux_value = output(
+            total_pressure * values.mass_flow_parameter / normalization
+        )
+        choked_mass_flux_value = output(
+            total_pressure * values.critical_mass_flow_parameter / normalization
+        )
+        dynamic_pressure = (
+            0.5 * values.absolute.static_density * values.absolute.velocity**2
+        )
+        state = IsentropicFlowState(
+            mach=output(mach),
+            total_temperature=output(total_temperature),
+            total_pressure=output(total_pressure),
+            total_density=output(values.absolute.total_density),
+            static_temperature=output(values.absolute.static_temperature),
+            static_pressure=output(values.absolute.static_pressure),
+            static_density=output(values.absolute.static_density),
+            velocity=output(values.absolute.velocity),
+            speed_of_sound=output(values.absolute.speed_of_sound),
+            dynamic_pressure=output(dynamic_pressure),
+            mass_flux=output(values.absolute.static_density * values.absolute.velocity),
+        )
+
+    return IsentropicAnalysis(
+        ratios=IsentropicRatios(
+            mach=output(mach),
+            total_temperature_ratio=output(values.temperature_ratio),
+            total_pressure_ratio=output(values.pressure_ratio),
+            total_density_ratio=output(values.density_ratio),
+        ),
+        critical_ratios=CriticalRatios(
+            total_temperature_ratio=output(values.critical_temperature_ratio),
+            total_pressure_ratio=output(values.critical_pressure_ratio),
+            total_density_ratio=output(values.critical_density_ratio),
+        ),
+        area_ratio=output(area),
+        mass_flow_parameter=output(values.mass_flow_parameter),
+        critical_mass_flow_parameter=output(values.critical_mass_flow_parameter),
+        mass_flux=mass_flux_value,
+        choked_mass_flux=choked_mass_flux_value,
+        state=state,
+    )
+
+
+def isentropic_analysis(
+    mach: ArrayLike,
+    gas: IsentropicGasModel = AIR,
+    *,
+    total_temperature: ArrayLike | None = None,
+    total_pressure: ArrayLike | None = None,
+    allow_extrapolation: bool = True,
+) -> IsentropicAnalysis:
+    """Evaluate coupled forward isentropic quantities with shared flow states.
+
+    Use this fused API when ratios, area, mass-flow, and absolute-state values
+    are needed together. Thermally perfect and Beattie--Bridgeman numerical
+    states are solved once per distinct input state, while each distinct
+    reservoir condition shares one Mach-one critical state.
+
+    ``total_temperature`` is required for thermally perfect gases. A
+    Beattie--Bridgeman gas also requires ``total_pressure``. For other gases,
+    absolute state and mass-flux results are included only when both reservoir
+    quantities are supplied.
+    """
+    mach_values, temperatures, pressures, scalar = _analysis_inputs(
+        mach,
+        gas,
+        total_temperature,
+        total_pressure,
+    )
+    if isinstance(gas, BeattieBridgemanGas):
+        assert temperatures is not None
+        assert pressures is not None
+        values = _real_analysis_arrays(
+            mach_values,
+            temperatures,
+            pressures,
+            gas,
+            allow_extrapolation=allow_extrapolation,
+        )
+    elif isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
+        assert temperatures is not None
+        values = _thermal_analysis_arrays(
+            mach_values,
+            temperatures,
+            pressures,
+            gas,
+            allow_extrapolation=allow_extrapolation,
+        )
+    else:
+        values = _perfect_analysis_arrays(
+            mach_values,
+            temperatures,
+            pressures,
+            gas,
+        )
+    return _make_isentropic_analysis(
+        mach_values,
+        temperatures,
+        pressures,
+        gas,
+        values,
+        scalar=scalar,
     )
 
 
@@ -1923,6 +2430,7 @@ def isentropic_state(
 
 __all__ = [
     "CriticalRatios",
+    "IsentropicAnalysis",
     "IsentropicFlowState",
     "IsentropicGasModel",
     "IsentropicRatios",
@@ -1930,6 +2438,7 @@ __all__ = [
     "area_ratio",
     "choked_mass_flux",
     "critical_ratios",
+    "isentropic_analysis",
     "isentropic_ratios",
     "isentropic_state",
     "mach_from_area_ratio",

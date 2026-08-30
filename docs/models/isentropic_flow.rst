@@ -64,6 +64,33 @@ The choked mass flux is the value at :math:`M=1`.
 These calorically perfect relations follow
 :ref:`NACA Report 1135 <ref-naca-report-1135>`.
 
+Fused multi-output analysis
+---------------------------
+
+Calling each relation independently is useful when only one quantity is
+needed. When a workflow needs ratios, area, mass-flow, and absolute-state
+values together, :func:`aerophysics.isentropic.isentropic_analysis` returns
+them as one :class:`~aerophysics.isentropic.IsentropicAnalysis`. For numerical
+gas models, the fused call solves each distinct requested state once and
+shares one Mach-one critical state for each distinct reservoir condition.
+
+>>> from aerophysics.isentropic import isentropic_analysis
+>>> analysis = isentropic_analysis(
+...     [0.0, 1.0, 2.0],
+...     total_temperature=300.0,
+...     total_pressure=101325.0,
+... )
+>>> [round(float(value), 6) for value in analysis.ratios.total_pressure_ratio]
+[1.0, 1.892929, 7.824449]
+>>> analysis.state is not None
+True
+
+The returned fields follow the broadcast shape of all supplied inputs.
+Absolute state and mass-flux fields are ``None`` unless both reservoir
+temperature and pressure are supplied. At Mach zero, the fused result records
+the limiting area ratio as positive infinity; the standalone
+:func:`~aerophysics.isentropic.area_ratio` continues to reject Mach zero.
+
 Thermally perfect gas
 ---------------------
 

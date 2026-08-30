@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+import aerophysics.isentropic as isentropic_module
 from aerophysics import AIR_NASA7, AIR_NASA9
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import PerfectGas
@@ -12,6 +13,7 @@ from aerophysics.isentropic import (
     area_ratio,
     choked_mass_flux,
     critical_ratios,
+    isentropic_analysis,
     isentropic_ratios,
     isentropic_state,
     mach_from_area_ratio,
@@ -132,6 +134,141 @@ def test_mass_flux_broadcasts() -> None:
     assert result.shape == (2, 2)
     assert result.dtype == np.float64
     assert_allclose(result[1], 2.0 * result[0])
+
+
+def test_fused_analysis_matches_caloric_component_relations() -> None:
+    mach = np.asarray([0.0, 1.0, 2.0])
+    analysis = isentropic_analysis(
+        mach,
+        total_temperature=300.0,
+        total_pressure=101_325.0,
+    )
+    ratios = isentropic_ratios(mach)
+    critical = critical_ratios()
+    assert_allclose(
+        analysis.ratios.total_temperature_ratio,
+        ratios.total_temperature_ratio,
+    )
+    assert_allclose(
+        analysis.ratios.total_pressure_ratio,
+        ratios.total_pressure_ratio,
+    )
+    assert_allclose(
+        analysis.ratios.total_density_ratio,
+        ratios.total_density_ratio,
+    )
+    assert_allclose(
+        analysis.critical_ratios.total_pressure_ratio,
+        np.full(3, critical.total_pressure_ratio),
+    )
+    assert_allclose(analysis.mass_flow_parameter, mass_flow_parameter(mach))
+    assert isinstance(analysis.mass_flux, np.ndarray)
+    direct_flux = mass_flux(101_325.0, 300.0, mach)
+    assert isinstance(direct_flux, np.ndarray)
+    assert_allclose(
+        analysis.mass_flux,
+        direct_flux,
+    )
+    assert isinstance(analysis.choked_mass_flux, np.ndarray)
+    assert_allclose(
+        analysis.choked_mass_flux,
+        np.full(3, choked_mass_flux(101_325.0, 300.0)),
+    )
+    assert isinstance(analysis.area_ratio, np.ndarray)
+    assert np.isinf(np.asarray(analysis.area_ratio)[0])
+    assert_allclose(analysis.area_ratio, [np.inf, 1.0, float(area_ratio(2.0))])
+    assert analysis.state is not None
+    direct_state = isentropic_state(
+        mach,
+        total_temperature=300.0,
+        total_pressure=101_325.0,
+    )
+    assert_allclose(analysis.state.static_temperature, direct_state.static_temperature)
+    assert_allclose(analysis.state.static_pressure, direct_state.static_pressure)
+    assert_allclose(analysis.state.velocity, direct_state.velocity)
+
+
+def test_fused_analysis_reuses_thermal_states(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = isentropic_module._thermal_flow_state
+    calls: list[float] = []
+
+    def counted_state(
+        mach: float,
+        total_temperature: float,
+        gas: ThermallyPerfectGas,
+        *,
+        allow_extrapolation: bool,
+    ) -> object:
+        calls.append(mach)
+        return original(
+            mach,
+            total_temperature,
+            gas,
+            allow_extrapolation=allow_extrapolation,
+        )
+
+    monkeypatch.setattr(isentropic_module, "_thermal_flow_state", counted_state)
+    analysis = isentropic_analysis(
+        [1.5, 2.0, 2.5],
+        AIR_NASA9,
+        total_temperature=1000.0,
+        total_pressure=100_000.0,
+        allow_extrapolation=False,
+    )
+    assert calls == [1.0, 1.5, 2.0, 2.5]
+    assert analysis.state is not None
+    assert isinstance(analysis.mass_flux, np.ndarray)
+    assert isinstance(analysis.state.mass_flux, np.ndarray)
+    assert_allclose(
+        analysis.mass_flux,
+        analysis.state.mass_flux,
+        rtol=2e-15,
+    )
+
+
+def test_fused_analysis_optional_state_and_validation() -> None:
+    dimensionless = isentropic_analysis(2.0)
+    assert dimensionless.state is None
+    assert dimensionless.mass_flux is None
+    assert dimensionless.choked_mass_flux is None
+
+    thermal = isentropic_analysis(
+        [[1.0], [2.0]],
+        AIR_NASA9,
+        total_temperature=[1000.0, 1200.0],
+        allow_extrapolation=False,
+    )
+    assert thermal.state is None
+    assert np.shape(thermal.ratios.mach) == (2, 2)
+    assert_allclose(
+        thermal.ratios.total_pressure_ratio,
+        isentropic_ratios(
+            [[1.0], [2.0]],
+            AIR_NASA9,
+            total_temperature=[1000.0, 1200.0],
+            allow_extrapolation=False,
+        ).total_pressure_ratio,
+    )
+
+    with pytest.raises(ValueError, match="thermally perfect"):
+        isentropic_analysis(1.0, AIR_NASA9)
+    with pytest.raises(ValueError, match="when total_pressure"):
+        isentropic_analysis(1.0, total_pressure=100_000.0)
+    with pytest.raises(ValueError, match="total_temperature"):
+        isentropic_analysis(1.0, total_temperature=0.0)
+    with pytest.raises(ValueError, match="total_pressure"):
+        isentropic_analysis(
+            1.0,
+            total_temperature=300.0,
+            total_pressure=0.0,
+        )
+    with pytest.raises(ValueError, match="broadcastable"):
+        isentropic_analysis(
+            [1.0, 2.0],
+            total_temperature=[250.0, 300.0, 350.0],
+        )
 
 
 def test_absolute_isentropic_state_supports_caloric_and_nasa_air() -> None:
