@@ -47,7 +47,7 @@ jobs:
       - run: uv sync --all-groups --all-extras --locked
       - name: Run normal test suite with coverage
         if: matrix.coverage == true
-        run: uv run pytest -m "not generated_assets and not package_artifact"
+        run: bash scripts/check-coverage.sh
       - name: Run normal test suite without coverage
         if: matrix.coverage == false
         run: >-
