@@ -56,8 +56,12 @@ scripts/check.sh
 The gate synchronizes the locked environment, formats Python in write mode,
 and then runs Ruff lint and format checks, mypy, the normal test suite, the
 generated-asset checks, warning-as-error Sphinx HTML and doctest builds, and
-the wheel and source-distribution builds. To run the same checks without
-rewriting Python source, use:
+the wheel and source-distribution builds. It then installs the wheel with its
+GUI extra and the sdist into separate clean virtual environments. Those
+installed-package checks run from outside the checkout and cover metadata,
+runtime dependencies, a public calculation, the console entry point, and
+bundled documentation lookup. To run the same checks without rewriting Python
+source, use:
 
 ```console
 scripts/check.sh --check-only
