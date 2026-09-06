@@ -7,7 +7,8 @@ import pytest
 
 import aerophysics.detached_shock as detached_shock
 import aerophysics.gui.adapters as adapters
-from aerophysics import BeattieBridgemanGas, FlightCondition
+import aerophysics.isentropic as isentropic
+from aerophysics import BeattieBridgemanGas, FlightCondition, ThermallyPerfectGas
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -260,7 +261,7 @@ def test_beattie_bridgeman_adapter_requires_total_state() -> None:
 def test_beattie_bridgeman_adapter_reuses_single_and_critical_states(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original = adapters._real_flow_state  # type: ignore[attr-defined]
+    original = isentropic._real_flow_state
     calls: list[float] = []
 
     def counted_state(
@@ -272,7 +273,8 @@ def test_beattie_bridgeman_adapter_reuses_single_and_critical_states(
         calls.append(mach)
         return original(mach, total_temperature, total_pressure, gas)
 
-    monkeypatch.setattr(adapters, "_real_flow_state", counted_state)
+    assert not hasattr(adapters, "_real_flow_state")
+    monkeypatch.setattr(isentropic, "_real_flow_state", counted_state)
     result = isentropic_condition(
         input_value=10.0,
         input_basis="mach",
@@ -293,7 +295,7 @@ def test_beattie_bridgeman_adapter_reuses_single_and_critical_states(
 def test_beattie_bridgeman_adapter_sweep_reuses_one_critical_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original = adapters._real_flow_state  # type: ignore[attr-defined]
+    original = isentropic._real_flow_state
     calls: list[float] = []
 
     def counted_state(
@@ -305,7 +307,7 @@ def test_beattie_bridgeman_adapter_sweep_reuses_one_critical_state(
         calls.append(mach)
         return original(mach, total_temperature, total_pressure, gas)
 
-    monkeypatch.setattr(adapters, "_real_flow_state", counted_state)
+    monkeypatch.setattr(isentropic, "_real_flow_state", counted_state)
     result = isentropic_sweep(
         input_basis="mach",
         branch=MachBranch.SUPERSONIC,
@@ -315,6 +317,44 @@ def test_beattie_bridgeman_adapter_sweep_reuses_one_critical_state(
         gas_model="BEATTIE_BRIDGEMAN",
         total_temperature=1200.0,
         total_pressure=6.0e6,
+        allow_extrapolation=False,
+    )
+    assert len(result.rows) == 3
+    assert calls == [1.0, 1.5, 2.0, 2.5]
+    assert not result.warnings
+
+
+def test_thermal_adapter_sweep_reuses_one_critical_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = isentropic._thermal_flow_state
+    calls: list[float] = []
+
+    def counted_state(
+        mach: float,
+        total_temperature: float,
+        gas: ThermallyPerfectGas,
+        *,
+        allow_extrapolation: bool,
+    ) -> object:
+        calls.append(mach)
+        return original(
+            mach,
+            total_temperature,
+            gas,
+            allow_extrapolation=allow_extrapolation,
+        )
+
+    monkeypatch.setattr(isentropic, "_thermal_flow_state", counted_state)
+    result = isentropic_sweep(
+        input_basis="mach",
+        branch=MachBranch.SUPERSONIC,
+        start=1.5,
+        stop=2.5,
+        points=3,
+        gas_model="NASA9",
+        total_temperature=1000.0,
+        total_pressure=100_000.0,
         allow_extrapolation=False,
     )
     assert len(result.rows) == 3
