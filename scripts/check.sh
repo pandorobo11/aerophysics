@@ -36,8 +36,7 @@ run_step "Format Python files" "${FORMAT_COMMAND[@]}"
 run_step "Ruff lint" uv run ruff check .
 run_step "Verify formatting" uv run ruff format --check .
 run_step "Mypy" uv run mypy
-run_step "Normal test suite" \
-    uv run pytest -m "not generated_assets and not package_artifact"
+run_step "Normal test suite and coverage gates" bash scripts/check-coverage.sh
 run_step "Generated and verification assets" bash scripts/check-generated.sh
 if [[ "$check_only" == false ]]; then
     run_step "Generate verification records for documentation" \

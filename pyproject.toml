@@ -75,7 +75,6 @@ addopts = [
   "--cov=aerophysics",
   "--cov-branch",
   "--cov-report=term-missing",
-  "--cov-fail-under=95",
 ]
 testpaths = ["tests"]
 markers = [
@@ -87,14 +86,10 @@ markers = [
 source = ["aerophysics"]
 omit = [
   "src/aerophysics/gui/app.py",
-  "src/aerophysics/gui/analysis_pages.py",
-  "src/aerophysics/gui/components.py",
-  "src/aerophysics/gui/flow_pages.py",
-  "src/aerophysics/gui/launcher.py",
-  "src/aerophysics/gui/pages.py",
 ]
 
 [tool.coverage.report]
+precision = 2
 exclude_also = [
   "if TYPE_CHECKING:",
   "if __name__ == .__main__.:",
