@@ -11,14 +11,16 @@ a separate physical model.
 Installation and launch
 -----------------------
 
-Install the ``gui`` extra and start the launcher:
+Install the ``gui`` extra from the current GitHub Release wheel and start the
+launcher:
 
 .. code-block:: console
 
-   $ python -m pip install "aerophysics[gui]"
+   $ python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
    $ aerophysics-gui
 
-The launcher starts Streamlit and opens its local URL. Stop it with
+The launcher binds Streamlit to the IPv4 loopback address, opens its local URL,
+and does not expose the application to other hosts by default. Stop it with
 :kbd:`Ctrl-C` in the launching terminal. Calculations and the bundled manual
 are served locally; an internet connection is not required after the wheel and
 its dependencies are installed.
@@ -72,6 +74,15 @@ Every completed calculator provides two reproducibility downloads:
   calculator and model selections, canonical SI inputs, sweep definition when
   present, and the display-unit preferences. Load it from the same calculator
   page; a configuration for a different calculator or schema is rejected.
+
+Settings are checked for required and unsupported fields, value types, model
+choices, finite SI numbers, and numeric input-widget limits before they are
+applied. JSON ``NaN`` and infinity values are not accepted. Sweep grids use
+the same bound-ordering and spacing validation as calculations. The settings
+loader does not predict physical validity or reject individual sweep points:
+calculators retain their existing errors and missing-point behavior.
+A structural configuration error does not alter the current inputs or queue
+values for the next rerun.
 
 The protrusion calculator also accepts measured or externally generated CSV
 inputs. Download its templates before preparing data. A profile file requires

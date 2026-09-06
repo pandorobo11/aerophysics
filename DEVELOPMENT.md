@@ -45,25 +45,20 @@ uv sync --all-groups --all-extras --locked
 
 Do not update the lock file as part of an ordinary environment sync.
 
-Build distributions with:
+## Dependency audit
+
+The lock uses a patched GitPython release. Run the dependency audit explicitly
+after dependency updates and before a release:
 
 ```console
-scripts/build-distributions.sh
+scripts/check-dependencies.sh
 ```
 
-The script exports hash-locked constraints from every locked group and extra,
-then passes them to both isolated PEP 517 builds with hash enforcement. Keep
-the Hatchling backend in the `build` dependency group and every custom wheel
-hook dependency in `uv.lock`; otherwise the constrained build must fail
-rather than resolve an unreviewed build requirement.
-
-The release build and CI package job initially synchronize with
-`--no-install-project`. Their validation commands import the checkout through
-`PYTHONPATH=src` and disable `uv run`'s implicit synchronization. This prevents
-an earlier editable-project build from resolving backend requirements outside
-the locked, hash-constrained distribution build. Those initial synchronizations
-also use `--no-build`, so a missing third-party wheel fails closed instead of
-running an unconstrained source-build backend.
+The command checks every locked group and extra, including hashes, against
+the current vulnerability database. It requires network access and is not
+part of the local completion gate or required pull-request CI. Review any
+findings for affected versions and reachable code paths, and update the lock
+when a compatible fix is available.
 
 ## Local validation
 
@@ -76,12 +71,36 @@ scripts/check.sh
 The gate synchronizes the locked environment, formats Python in write mode,
 and then runs Ruff lint and format checks, mypy, the normal test suite, the
 generated-asset checks, warning-as-error Sphinx HTML and doctest builds, and
-the wheel and source-distribution builds. To run the same checks without
-rewriting Python source, use:
+the wheel and source-distribution builds. It then installs the wheel with its
+GUI extra and the sdist into separate clean virtual environments. Those
+installed-package checks run from outside the checkout and cover metadata,
+runtime dependencies, a public calculation, the console entry point, and
+bundled documentation lookup. To run the same checks without rewriting Python
+source, use:
 
 ```console
 scripts/check.sh --check-only
 ```
+
+The normal test suite collects branch coverage once and applies independent
+gates to the two product layers:
+
+- the numerical core (top-level modules under ``src/aerophysics``) must remain
+  at or above 95%;
+- the GUI package (modules under ``src/aerophysics/gui``) must remain at or
+  above 90%.
+
+Run those same tests and gates on their own with:
+
+```console
+scripts/check-coverage.sh
+```
+
+Only ``gui/app.py`` is excluded. ``AppTest`` executes that declarative
+bootstrap as a script through Streamlit's runner, and those executed lines are
+not attributed to the importable module by the coverage collector. The page
+renderers, shared components, launcher, and every other GUI module remain
+measured by the GUI gate.
 
 CI must only check formatting (`ruff format --check .`); it must never apply
 formatting or commit generated changes.
@@ -157,22 +176,20 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-The tag-triggered release workflow first requires a successful `CI gate` for
-the exact tagged commit and verifies that the tag and project version match.
-Its repository-read-only build job does not persist checkout credentials and
-reruns tests, static checks, documentation builds, and package builds. Release
-Actions are pinned to immutable commit SHAs. The job checksums the exact
-release bundle before an isolated provenance job attests it. Only then can the
-narrowly write-enabled publish job run.
+The tag-triggered release workflow verifies that the tag and project version
+match, reruns tests, static checks, documentation builds, and package builds,
+then publishes the wheel, source distribution, and
+`aerophysics-docs-X.Y.Z.zip` to the GitHub Release. The documentation archive
+opens at `aerophysics-docs-X.Y.Z/index.html` after extraction.
 
-Publication is one-shot: the workflow fails if a GitHub Release already exists
-for the tag and never replaces published assets. Immediately before creating
-the release, it dereferences either a lightweight or annotated remote tag again
-and requires it to still target the commit that produced the bundle. Repository
-administrators must also protect `v*` tags from force updates or deletion with
-a GitHub ruleset; that closes the unavoidable interval between the final API
-check and release creation. A successful release contains the wheel, source
-distribution, `aerophysics-docs-X.Y.Z.zip`, and `SHA256SUMS`; GitHub also
-records build-provenance attestations for the bundle.
-Verify downloaded bytes with `sha256sum --check SHA256SUMS`. The documentation
-archive opens at `aerophysics-docs-X.Y.Z/index.html` after extraction.
+### Release permissions
+
+The release workflow validates and builds with read-only repository access;
+checkout credentials are not persisted. An isolated publish job downloads the
+validated artifacts and is the only job with `contents: write`. It does not
+check out or execute project code. Release Actions are pinned to immutable
+commits; the existing Python and uv versions remain unchanged.
+
+Publication uses `gh release create` only. An existing release causes a failure
+instead of replacing its assets. Investigate partial publication failures
+before retrying; the workflow does not overwrite an existing release to recover.

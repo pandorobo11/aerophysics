@@ -47,7 +47,7 @@ jobs:
       - run: uv sync --all-groups --all-extras --locked
       - name: Run normal test suite with coverage
         if: matrix.coverage == true
-        run: uv run pytest -m "not generated_assets and not package_artifact"
+        run: bash scripts/check-coverage.sh
       - name: Run normal test suite without coverage
         if: matrix.coverage == false
         run: >-
@@ -140,9 +140,6 @@ jobs:
     name: Python package build and verification
     needs: test
     runs-on: ubuntu-latest
-    env:
-      UV_NO_SYNC: "1"
-      PYTHONPATH: ${{ github.workspace }}/src
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -152,13 +149,11 @@ jobs:
         with:
           version: "0.9.13"
           enable-cache: true
-      - run: >-
-          uv sync --all-groups --all-extras --locked --no-install-project
-          --no-build
-      - run: bash scripts/build-distributions.sh
-      - name: Verify built wheel
+      - run: uv sync --all-groups --all-extras --locked
+      - run: uv run python -m build
+      - name: Verify clean wheel and sdist installations
         env:
-          AEROPHYSICS_TEST_WHEEL_DIRECTORY: dist
+          AEROPHYSICS_TEST_ARTIFACT_DIRECTORY: dist
         run: uv run pytest -m package_artifact --no-cov
 
   ci-gate:

@@ -156,11 +156,26 @@ def test_configuration_round_trip_with_embedded_profile_arrays() -> None:
         calculator="protrusion_drag",
         mode="single",
         inputs_si={
+            "drag_coefficient": 1.0,
+            "height": 0.01,
+            "base_width": 0.005,
+            "edge_velocity": 100.0,
+            "edge_density": 1.0,
+            "boundary_layer_thickness": 0.02,
+            "mach": None,
+            "edge_temperature": None,
+            "wall_temperature": None,
             "profile_height": [0.0, 0.01],
             "profile_velocity": [0.0, 100.0],
             "profile_density": [1.2, 1.0],
+            "shape_height": None,
+            "shape_width": None,
         },
-        models={"profile_source": "csv"},
+        models={
+            "profile_source": "csv",
+            "shape": "rectangle",
+            "compressible": False,
+        },
         units=UnitPreferences(),
     )
     assert load_configuration(dump_configuration(configuration)) == configuration
@@ -203,6 +218,12 @@ def test_configuration_rejects_invalid_json_and_fields() -> None:
     base["mode"] = "other"
     with pytest.raises(ConfigurationError, match="mode"):
         validate_configuration(base)
+    base["inputs_si"] = {
+        "geometric_altitude": 0.0,
+        "motion": 0.8,
+        "characteristic_length": None,
+    }
+    base["models"] = {"motion_basis": "mach"}
     base["mode"] = "sweep"
     with pytest.raises(ConfigurationError, match="sweep_si"):
         validate_configuration(base)
@@ -291,26 +312,125 @@ def test_conical_shock_table_converts_angles() -> None:
     assert table[0]["衝撃波角 β [deg]"] == pytest.approx(31.0)
 
 
-@pytest.mark.parametrize(
-    "calculator",
-    [
-        "isentropic",
-        "normal_shock",
-        "expansion",
-        "boundary_layer_profile",
-        "conical_shock",
-        "protrusion_drag",
-        "thermochemistry",
-        "viscosity",
-    ],
-)
-def test_additional_calculator_tables_and_config(calculator: str) -> None:
+_VALID_SINGLE_PAYLOADS: dict[str, tuple[dict[str, object], dict[str, object]]] = {
+    "flight": (
+        {
+            "geometric_altitude": 1000.0,
+            "motion": 0.8,
+            "characteristic_length": None,
+        },
+        {"motion_basis": "mach"},
+    ),
+    "oblique_shock": (
+        {"upstream_mach": 2.0, "deflection_angle": 0.1},
+        {"branch": "weak"},
+    ),
+    "conical_shock": (
+        {"upstream_mach": 2.0, "cone_half_angle": 0.1},
+        {},
+    ),
+    "boundary_layer": (
+        {
+            "distance": 1.0,
+            "edge_velocity": 100.0,
+            "edge_density": 1.0,
+            "edge_dynamic_viscosity": 1.0e-5,
+            "transition_reynolds": None,
+            "mach": None,
+            "edge_temperature": 288.15,
+            "wall_temperature": None,
+        },
+        {
+            "source": "manual",
+            "regime": "turbulent",
+            "turbulent_correlation": "schlichting",
+            "compressibility_correction": "none",
+        },
+    ),
+    "isentropic": (
+        {
+            "input_value": 2.0,
+            "total_pressure": None,
+            "total_temperature": 300.0,
+        },
+        {
+            "input_basis": "mach",
+            "branch": "subsonic",
+            "gas_model": "AIR",
+            "with_mass_flux": False,
+            "allow_extrapolation": True,
+        },
+    ),
+    "normal_shock": ({"upstream_mach": 2.0}, {}),
+    "expansion": ({"upstream_mach": 2.0, "turn_angle": 0.1}, {}),
+    "detached_shock": (
+        {"upstream_mach": 4.0, "nose_radius": 0.1},
+        {"geometry": "axisymmetric_sphere", "model": "comparison"},
+    ),
+    "boundary_layer_profile": (
+        {
+            "edge_velocity": 300.0,
+            "edge_density": 1.0,
+            "edge_temperature": 300.0,
+            "boundary_layer_thickness": 0.05,
+            "wall_shear_stress": 85.0,
+            "wall_temperature": None,
+            "wake_parameter": None,
+            "points": 257,
+        },
+        {
+            "source": "manual",
+            "transformation": "compare",
+            "temperature_velocity_relation": "generalized_reynolds_analogy",
+        },
+    ),
+    "protrusion_drag": (
+        {
+            "drag_coefficient": 1.0,
+            "height": 0.01,
+            "base_width": 0.005,
+            "edge_velocity": 100.0,
+            "edge_density": 1.0,
+            "boundary_layer_thickness": 0.02,
+            "mach": None,
+            "edge_temperature": None,
+            "wall_temperature": None,
+            "profile_height": None,
+            "profile_velocity": None,
+            "profile_density": None,
+            "shape_height": None,
+            "shape_width": None,
+        },
+        {
+            "profile_source": "power_law",
+            "shape": "rectangle",
+            "compressible": False,
+        },
+    ),
+    "thermochemistry": (
+        {
+            "temperature": 300.0,
+            "pressure": 101_325.0,
+            "reference_temperature": 298.15,
+        },
+        {"selection": "compare", "allow_extrapolation": False},
+    ),
+    "viscosity": (
+        {"temperature": 1000.0},
+        {"selection": "compare", "allow_extrapolation": False},
+    ),
+}
+
+
+@pytest.mark.parametrize("calculator", sorted(_VALID_SINGLE_PAYLOADS))
+def test_calculator_tables_and_configuration_schemas(calculator: str) -> None:
     assert columns_for(calculator)
+    inputs_si, models = _VALID_SINGLE_PAYLOADS[calculator]
     configuration = make_configuration(
         calculator=calculator,
         mode="single",
-        inputs_si={},
-        models={},
+        inputs_si=inputs_si,
+        models=models,
         units=UnitPreferences(),
     )
     assert configuration["calculator"] == calculator

@@ -53,6 +53,11 @@ a supersonic solution. Thermally perfect and Beattie--Bridgeman workflows use
 the same public API but require the reservoir inputs described in
 :doc:`../models/isentropic_flow`.
 
+When one workflow needs ratios, area, mass-flow, and absolute-state values
+together, use :func:`~aerophysics.isentropic.isentropic_analysis`. It evaluates
+the coupled results from one set of flow states and shares each Mach-one state
+across matching reservoir conditions.
+
 Shock and expansion turns
 -------------------------
 
