@@ -45,6 +45,21 @@ uv sync --all-groups --all-extras --locked
 
 Do not update the lock file as part of an ordinary environment sync.
 
+## Dependency audit
+
+The lock uses a patched GitPython release. Run the dependency audit explicitly
+after dependency updates and before a release:
+
+```console
+scripts/check-dependencies.sh
+```
+
+The command checks every locked group and extra, including hashes, against
+the current vulnerability database. It requires network access and is not
+part of the local completion gate or required pull-request CI. Review any
+findings for affected versions and reachable code paths, and update the lock
+when a compatible fix is available.
+
 ## Local validation
 
 Run the complete local gate before handing back a change:
