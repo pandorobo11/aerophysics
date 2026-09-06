@@ -13,6 +13,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Validate imported GUI settings against calculator-specific input, model, and
+  sweep schemas before applying them, including finite and JSON-safe values.
 - Use the fused isentropic analysis path in GUI sweeps so thermally perfect and
   Beattie--Bridgeman states are not solved repeatedly for each displayed
   quantity.

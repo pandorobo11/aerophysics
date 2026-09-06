@@ -75,6 +75,15 @@ Every completed calculator provides two reproducibility downloads:
   present, and the display-unit preferences. Load it from the same calculator
   page; a configuration for a different calculator or schema is rejected.
 
+Settings are checked for required and unsupported fields, value types, model
+choices, finite SI numbers, and numeric input-widget limits before they are
+applied. JSON ``NaN`` and infinity values are not accepted. Sweep grids use
+the same bound-ordering and spacing validation as calculations. The settings
+loader does not predict physical validity or reject individual sweep points:
+calculators retain their existing errors and missing-point behavior.
+A structural configuration error does not alter the current inputs or queue
+values for the next rerun.
+
 The protrusion calculator also accepts measured or externally generated CSV
 inputs. Download its templates before preparing data. A profile file requires
 ``wall_distance,velocity,density`` columns, and a projected-shape file requires
