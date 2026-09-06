@@ -54,9 +54,9 @@ jobs:
           uv run sphinx-build -W --keep-going -b doctest docs docs/_build/doctest
       - name: Build Python distributions
         run: uv run python -m build
-      - name: Verify built wheel
+      - name: Verify clean wheel and sdist installations
         env:
-          AEROPHYSICS_TEST_WHEEL_DIRECTORY: dist
+          AEROPHYSICS_TEST_ARTIFACT_DIRECTORY: dist
         run: uv run pytest -m package_artifact --no-cov
 
       - name: Package HTML documentation
