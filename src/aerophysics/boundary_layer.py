@@ -198,6 +198,7 @@ def _recovery_temperature(
 def _eckert_effective_reynolds(
     reynolds: FloatArray,
     edge_temperature: FloatArray,
+    edge_viscosity: FloatArray,
     mach: FloatArray,
     specified_wall_temperature: FloatArray | None,
     *,
@@ -217,9 +218,6 @@ def _eckert_effective_reynolds(
         recovery if specified_wall_temperature is None else specified_wall_temperature
     )
     reference = 0.22 * recovery + 0.28 * edge_temperature + 0.50 * wall
-    edge_viscosity = np.asarray(
-        viscosity_model.dynamic_viscosity(edge_temperature), dtype=np.float64
-    )
     reference_viscosity = np.asarray(
         viscosity_model.dynamic_viscosity(reference), dtype=np.float64
     )
@@ -249,6 +247,7 @@ class _VanDriestIIState:
 def _van_driest_ii_state(
     reynolds: FloatArray,
     edge_temperature: FloatArray,
+    edge_viscosity: FloatArray,
     mach: FloatArray,
     specified_wall_temperature: FloatArray | None,
     *,
@@ -266,9 +265,6 @@ def _van_driest_ii_state(
     )
     wall = (
         recovery if specified_wall_temperature is None else specified_wall_temperature
-    )
-    edge_viscosity = np.asarray(
-        viscosity_model.dynamic_viscosity(edge_temperature), dtype=np.float64
     )
     with np.errstate(over="ignore", invalid="ignore"):
         wall_viscosity = np.asarray(
@@ -432,7 +428,8 @@ def flat_plate_boundary_layer(
     edge_density:
         Boundary-layer edge density in kg/m³.
     edge_dynamic_viscosity:
-        Boundary-layer edge dynamic viscosity in Pa s.
+        Boundary-layer edge dynamic viscosity in Pa s. Compressibility
+        corrections use this same edge-viscosity value.
     regime:
         Explicit laminar, turbulent, or transitional model selection.
     turbulent_correlation:
@@ -458,7 +455,8 @@ def flat_plate_boundary_layer(
         Constant Prandtl number used for the recovery factors.
     gas, viscosity_model:
         Perfect-gas and dynamic-viscosity models used by compressibility
-        corrections.
+        corrections. ``viscosity_model`` evaluates reference or wall
+        viscosity; it does not replace ``edge_dynamic_viscosity``.
 
     Notes
     -----
@@ -562,6 +560,7 @@ def flat_plate_boundary_layer(
         ) = _eckert_effective_reynolds(
             reynolds,
             edge_temperature_values,
+            np.asarray(viscosity, dtype=np.float64),
             mach_values,
             specified_wall,
             turbulent=False,
@@ -580,6 +579,7 @@ def flat_plate_boundary_layer(
             ) = _eckert_effective_reynolds(
                 reynolds,
                 edge_temperature_values,
+                np.asarray(viscosity, dtype=np.float64),
                 mach_values,
                 specified_wall,
                 turbulent=True,
@@ -599,6 +599,7 @@ def flat_plate_boundary_layer(
             van_driest = _van_driest_ii_state(
                 reynolds,
                 edge_temperature_values,
+                np.asarray(viscosity, dtype=np.float64),
                 mach_values,
                 specified_wall,
                 prandtl_number=prandtl_number,

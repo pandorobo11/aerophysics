@@ -1,12 +1,14 @@
 Installation
 ============
 
-``aerophysics`` requires Python 3.12 or newer. Install the calculation package
-with pip:
+``aerophysics`` requires Python 3.12 or newer. Until a PyPI distribution is
+available, install the current wheel from the `latest GitHub Release`_:
 
 .. code-block:: console
 
-   python -m pip install aerophysics
+   python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
+
+Check the release page for a newer version before copying a versioned URL.
 
 Confirm that the package can evaluate the reference atmosphere:
 
@@ -21,7 +23,7 @@ Install the GUI extra and launch the local Streamlit application:
 
 .. code-block:: console
 
-   python -m pip install "aerophysics[gui]"
+   python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
    aerophysics-gui
 
 The wheel includes an offline copy of this manual. See :doc:`../guides/gui`
@@ -34,3 +36,5 @@ Development installation
 Repository contributors should use the locked environment described in the
 top-level ``DEVELOPMENT.md`` rather than installing editable dependencies by
 hand.
+
+.. _latest GitHub Release: https://github.com/pandorobo11/aerophysics/releases/latest
