@@ -1393,17 +1393,13 @@ def _thermal_mach_from_area_scalar(
         )
         return 1.0, state.extrapolated
 
-    extrapolated = False
-
     def residual(mach: float) -> float:
-        nonlocal extrapolated
-        value, outside = _thermal_area_ratio_scalar(
+        value, _outside = _thermal_area_ratio_scalar(
             mach,
             total_temperature,
             gas,
             allow_extrapolation=allow_extrapolation,
         )
-        extrapolated = extrapolated or outside
         return value - target
 
     if branch is MachBranch.SUBSONIC:
@@ -1411,13 +1407,12 @@ def _thermal_mach_from_area_scalar(
         upper = 1.0
     elif not allow_extrapolation and isinstance(gas, ThermallyPerfectGas):
         lower = 1.0
-        upper, outside = _thermal_mach_from_static_temperature(
+        upper, _outside = _thermal_mach_from_static_temperature(
             gas.temperature_range[0],
             total_temperature,
             gas,
             allow_extrapolation=False,
         )
-        extrapolated = extrapolated or outside
         if upper <= 1.0 or residual(upper) < 0.0:
             raise ModelRangeError(
                 "supersonic area-ratio solution requires temperature below "
@@ -1439,6 +1434,12 @@ def _thermal_mach_from_area_scalar(
             rtol=_ROOT_RTOL,
             maxiter=_ROOT_MAXITER,
         )
+    )
+    _value, extrapolated = _thermal_area_ratio_scalar(
+        result,
+        total_temperature,
+        gas,
+        allow_extrapolation=allow_extrapolation,
     )
     return result, extrapolated
 
