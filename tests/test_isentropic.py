@@ -1,5 +1,7 @@
 """Tests for perfect-gas isentropic relations."""
 
+import warnings
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -460,6 +462,59 @@ def test_strict_supersonic_area_inverse_uses_available_temperature_range() -> No
         total_temperature=300.0,
         allow_extrapolation=False,
     ) == pytest.approx(1.2)
+
+
+@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
+@pytest.mark.parametrize("mach", [1.01, 1.1, 1.2, 1.5])
+def test_thermal_area_inverse_ignores_extrapolated_solver_probes(
+    gas: ThermallyPerfectGas,
+    mach: float,
+) -> None:
+    target = area_ratio(
+        mach,
+        gas,
+        total_temperature=300.0,
+        allow_extrapolation=False,
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ApplicabilityWarning)
+        result = mach_from_area_ratio(
+            target,
+            MachBranch.SUPERSONIC,
+            gas,
+            total_temperature=300.0,
+        )
+
+    assert result == pytest.approx(mach)
+
+
+@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
+def test_thermal_area_inverse_reports_converged_out_of_range_state(
+    gas: ThermallyPerfectGas,
+) -> None:
+    with pytest.warns(ApplicabilityWarning):
+        target = area_ratio(2.0, gas, total_temperature=300.0)
+
+    with pytest.warns(ApplicabilityWarning) as caught:
+        result = mach_from_area_ratio(
+            target,
+            MachBranch.SUPERSONIC,
+            gas,
+            total_temperature=300.0,
+        )
+
+    assert len(caught) == 1
+    assert result == pytest.approx(2.0)
+
+    with pytest.raises(ModelRangeError, match="below the fitted range"):
+        mach_from_area_ratio(
+            target,
+            MachBranch.SUPERSONIC,
+            gas,
+            total_temperature=300.0,
+            allow_extrapolation=False,
+        )
 
 
 def test_thermal_default_extrapolation_warns_once_and_strict_mode_rejects() -> None:
