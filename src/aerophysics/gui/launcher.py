@@ -54,7 +54,8 @@ def main() -> None:
     if importlib.util.find_spec("streamlit") is None:
         raise SystemExit(
             "GUI dependencies are not installed. "
-            "Install them with: python -m pip install 'aerophysics[gui]'"
+            "Reinstall the same aerophysics wheel with its 'gui' extra; "
+            "see the installation guide."
         )
     app = Path(__file__).with_name("app.py")
     command = [sys.executable, "-m", "streamlit", "run", str(app), *sys.argv[1:]]

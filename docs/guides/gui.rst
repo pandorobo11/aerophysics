@@ -11,11 +11,12 @@ a separate physical model.
 Installation and launch
 -----------------------
 
-Install the ``gui`` extra and start the launcher:
+Install the ``gui`` extra from the current GitHub Release wheel and start the
+launcher:
 
 .. code-block:: console
 
-   $ python -m pip install "aerophysics[gui]"
+   $ python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
    $ aerophysics-gui
 
 The launcher starts Streamlit and opens its local URL. Stop it with
