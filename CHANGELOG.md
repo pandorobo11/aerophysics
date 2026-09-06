@@ -5,13 +5,29 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Added
+
+- Add a fused ``isentropic_analysis`` API that reuses solved flow and critical
+  states when ratios, area, mass-flow, and absolute-state results are needed
+  together.
+
 ### Changed
 
+- Use the fused isentropic analysis path in GUI sweeps so thermally perfect and
+  Beattie--Bridgeman states are not solved repeatedly for each displayed
+  quantity.
+- Return vectorized calculation results as owned, read-only NumPy snapshots so
+  later mutation of caller inputs cannot change previously computed states.
 - Use one GUI selector for length and inverse-length display units so their
   dimensional bases stay consistent.
 - Remove the pinned ``fluids`` comparison from required standard-atmosphere
   verification, separate numerical checks from the generated record, and
   regenerate that record before documentation builds.
+
+### Fixed
+
+- Avoid spurious thermally perfect area-inversion applicability warnings caused
+  only by intermediate root-solver probes outside the fitted temperature range.
 
 ## [0.6.0] - 2026-08-11
 

@@ -14,8 +14,10 @@ from aerophysics.gui.documentation import (
 )
 from aerophysics.gui.launcher import (
     DOCS_DIR_ENV,
+    LOOPBACK_ADDRESS,
     _documentation_directory,
     _start_documentation_server,
+    main,
 )
 
 
@@ -80,10 +82,31 @@ def test_local_documentation_server(tmp_path: Path) -> None:
     ):
         server, _thread = _start_documentation_server(tmp_path)
     address, handler = server_class.call_args.args
-    assert address == ("127.0.0.1", 0)
+    assert address == (LOOPBACK_ADDRESS, 0)
     assert callable(handler)
     thread_class.assert_called_once_with(target=server.serve_forever, daemon=True)
     thread_class.return_value.start.assert_called_once_with()
+
+
+def test_gui_launcher_binds_streamlit_to_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "aerophysics.gui.launcher._documentation_directory", lambda: None
+    )
+    monkeypatch.setattr("aerophysics.gui.launcher.sys.argv", ["aerophysics-gui"])
+    with (
+        patch(
+            "aerophysics.gui.launcher.importlib.util.find_spec", return_value=object()
+        ),
+        patch("aerophysics.gui.launcher.subprocess.run") as run,
+    ):
+        run.return_value.returncode = 0
+        with pytest.raises(SystemExit, match="0"):
+            main()
+
+    command = run.call_args.args[0]
+    assert f"--server.address={LOOPBACK_ADDRESS}" in command
 
 
 def test_documentation_directory_override(
