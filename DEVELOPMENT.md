@@ -56,12 +56,36 @@ scripts/check.sh
 The gate synchronizes the locked environment, formats Python in write mode,
 and then runs Ruff lint and format checks, mypy, the normal test suite, the
 generated-asset checks, warning-as-error Sphinx HTML and doctest builds, and
-the wheel and source-distribution builds. To run the same checks without
-rewriting Python source, use:
+the wheel and source-distribution builds. It then installs the wheel with its
+GUI extra and the sdist into separate clean virtual environments. Those
+installed-package checks run from outside the checkout and cover metadata,
+runtime dependencies, a public calculation, the console entry point, and
+bundled documentation lookup. To run the same checks without rewriting Python
+source, use:
 
 ```console
 scripts/check.sh --check-only
 ```
+
+The normal test suite collects branch coverage once and applies independent
+gates to the two product layers:
+
+- the numerical core (top-level modules under ``src/aerophysics``) must remain
+  at or above 95%;
+- the GUI package (modules under ``src/aerophysics/gui``) must remain at or
+  above 90%.
+
+Run those same tests and gates on their own with:
+
+```console
+scripts/check-coverage.sh
+```
+
+Only ``gui/app.py`` is excluded. ``AppTest`` executes that declarative
+bootstrap as a script through Streamlit's runner, and those executed lines are
+not attributed to the importable module by the coverage collector. The page
+renderers, shared components, launcher, and every other GUI module remain
+measured by the GUI gate.
 
 CI must only check formatting (`ruff format --check .`); it must never apply
 formatting or commit generated changes.
