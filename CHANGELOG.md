@@ -26,6 +26,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Keep Beattie--Bridgeman density inversion on the lowest-density stable gas
+  branch when custom coefficients permit multiple roots.
 - Avoid spurious thermally perfect area-inversion applicability warnings caused
   only by intermediate root-solver probes outside the fitted temperature range.
 
