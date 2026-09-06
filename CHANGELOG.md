@@ -13,6 +13,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
   verification, separate numerical checks from the generated record, and
   regenerate that record before documentation builds.
 
+### Fixed
+
+- Avoid spurious thermally perfect area-inversion applicability warnings caused
+  only by intermediate root-solver probes outside the fitted temperature range.
+
 ## [0.6.0] - 2026-08-11
 
 ### Added
