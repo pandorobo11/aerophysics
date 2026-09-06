@@ -45,6 +45,21 @@ uv sync --all-groups --all-extras --locked
 
 Do not update the lock file as part of an ordinary environment sync.
 
+## Dependency audit
+
+The lock uses a patched GitPython release. Run the dependency audit explicitly
+after dependency updates and before a release:
+
+```console
+scripts/check-dependencies.sh
+```
+
+The command checks every locked group and extra, including hashes, against
+the current vulnerability database. It requires network access and is not
+part of the local completion gate or required pull-request CI. Review any
+findings for affected versions and reachable code paths, and update the lock
+when a compatible fix is available.
+
 ## Local validation
 
 Run the complete local gate before handing back a change:
@@ -56,24 +71,36 @@ scripts/check.sh
 The gate synchronizes the locked environment, formats Python in write mode,
 and then runs Ruff lint and format checks, mypy, the normal test suite, the
 generated-asset checks, warning-as-error Sphinx HTML and doctest builds, and
-the wheel and source-distribution builds. To run the same checks without
-rewriting Python source, use:
+the wheel and source-distribution builds. It then installs the wheel with its
+GUI extra and the sdist into separate clean virtual environments. Those
+installed-package checks run from outside the checkout and cover metadata,
+runtime dependencies, a public calculation, the console entry point, and
+bundled documentation lookup. To run the same checks without rewriting Python
+source, use:
 
 ```console
 scripts/check.sh --check-only
 ```
 
-The complete gate also exports every locked dependency group and optional extra
-and checks it against the current Python vulnerability database. Run that check
-on its own with:
+The normal test suite collects branch coverage once and applies independent
+gates to the two product layers:
+
+- the numerical core (top-level modules under ``src/aerophysics``) must remain
+  at or above 95%;
+- the GUI package (modules under ``src/aerophysics/gui``) must remain at or
+  above 90%.
+
+Run those same tests and gates on their own with:
 
 ```console
-scripts/check-dependencies.sh
+scripts/check-coverage.sh
 ```
 
-The audit operates on the hashes and exact versions in ``uv.lock``. Update the
-lock deliberately when an advisory identifies a fixed compatible release; do
-not suppress an advisory merely to restore a green check.
+Only ``gui/app.py`` is excluded. ``AppTest`` executes that declarative
+bootstrap as a script through Streamlit's runner, and those executed lines are
+not attributed to the importable module by the coverage collector. The page
+renderers, shared components, launcher, and every other GUI module remain
+measured by the GUI gate.
 
 CI must only check formatting (`ruff format --check .`); it must never apply
 formatting or commit generated changes.

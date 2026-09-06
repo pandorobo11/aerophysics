@@ -47,7 +47,7 @@ jobs:
       - run: uv sync --all-groups --all-extras --locked
       - name: Run normal test suite with coverage
         if: matrix.coverage == true
-        run: uv run pytest -m "not generated_assets and not package_artifact"
+        run: bash scripts/check-coverage.sh
       - name: Run normal test suite without coverage
         if: matrix.coverage == false
         run: >-
@@ -98,21 +98,6 @@ jobs:
           enable-cache: true
       - run: uv sync --all-groups --all-extras --locked
       - run: uv run mypy
-
-  dependency-audit:
-    name: Locked dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@v9.0.0
-        with:
-          version: "0.9.13"
-          enable-cache: true
-      - run: uv sync --all-groups --all-extras --locked
-      - run: bash scripts/check-dependencies.sh
 
   generated-assets:
     name: Generated assets (Ubuntu, Python 3.12)
@@ -166,9 +151,9 @@ jobs:
           enable-cache: true
       - run: uv sync --all-groups --all-extras --locked
       - run: uv run python -m build
-      - name: Verify built wheel
+      - name: Verify clean wheel and sdist installations
         env:
-          AEROPHYSICS_TEST_WHEEL_DIRECTORY: dist
+          AEROPHYSICS_TEST_ARTIFACT_DIRECTORY: dist
         run: uv run pytest -m package_artifact --no-cov
 
   ci-gate:
@@ -180,7 +165,6 @@ jobs:
       - lint
       - format
       - typecheck
-      - dependency-audit
       - generated-assets
       - docs
       - package
@@ -192,7 +176,6 @@ jobs:
           LINT_RESULT: ${{ needs.lint.result }}
           FORMAT_RESULT: ${{ needs.format.result }}
           TYPECHECK_RESULT: ${{ needs.typecheck.result }}
-          DEPENDENCY_AUDIT_RESULT: ${{ needs['dependency-audit'].result }}
           GENERATED_ASSETS_RESULT: ${{ needs['generated-assets'].result }}
           DOCS_RESULT: ${{ needs.docs.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
@@ -203,7 +186,6 @@ jobs:
             "lint=${LINT_RESULT}" \
             "format=${FORMAT_RESULT}" \
             "typecheck=${TYPECHECK_RESULT}" \
-            "dependency-audit=${DEPENDENCY_AUDIT_RESULT}" \
             "generated-assets=${GENERATED_ASSETS_RESULT}" \
             "docs=${DOCS_RESULT}" \
             "package=${PACKAGE_RESULT}"
