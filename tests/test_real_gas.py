@@ -21,6 +21,7 @@ from aerophysics.isentropic import (
     area_ratio,
     choked_mass_flux,
     critical_ratios,
+    isentropic_analysis,
     isentropic_ratios,
     isentropic_state,
     mach_from_area_ratio,
@@ -522,6 +523,34 @@ def test_new_models_isentropic_forward_inverse_and_area_branches(
         total_temperature=1200.0,
         total_pressure=total_pressure,
     )
+    analysis = isentropic_analysis(
+        mach,
+        gas,
+        total_temperature=1200.0,
+        total_pressure=total_pressure,
+    )
+    assert_allclose(
+        analysis.ratios.total_temperature_ratio,
+        ratios.total_temperature_ratio,
+    )
+    assert_allclose(analysis.ratios.total_pressure_ratio, ratios.total_pressure_ratio)
+    assert_allclose(analysis.ratios.total_density_ratio, ratios.total_density_ratio)
+    assert np.isinf(np.asarray(analysis.area_ratio)[0])
+    assert_allclose(
+        np.asarray(analysis.area_ratio)[1:],
+        area_ratio(
+            mach[1:],
+            gas,
+            total_temperature=1200.0,
+            total_pressure=total_pressure,
+        ),
+    )
+    if total_pressure is None:
+        assert analysis.state is None
+        assert analysis.mass_flux is None
+    else:
+        assert analysis.state is not None
+        assert analysis.mass_flux is not None
     assert_allclose(
         mach_from_total_temperature_ratio(
             ratios.total_temperature_ratio,
@@ -779,6 +808,12 @@ def test_isentropic_requirements_broadcast_and_range_handling() -> None:
         isentropic_ratios(1.0, AIR_HARMONIC_OSCILLATOR)
     with pytest.raises(ValueError, match="total_pressure"):
         isentropic_ratios(1.0, AIR_BEATTIE_BRIDGEMAN, total_temperature=1200.0)
+    with pytest.raises(ValueError, match="total_temperature and total_pressure"):
+        isentropic_analysis(
+            1.0,
+            AIR_BEATTIE_BRIDGEMAN,
+            total_temperature=1200.0,
+        )
     with pytest.warns(ApplicabilityWarning) as captured:
         isentropic_ratios(
             [1.0, 2.0],
@@ -830,3 +865,26 @@ def test_unstable_beattie_bridgeman_state_fails_explicitly() -> None:
     )
     with pytest.raises(ModelRangeError, match="gas-phase density root"):
         pathological.density(300.0, 1.0e6)
+
+
+def test_beattie_bridgeman_density_selects_lowest_stable_gas_root() -> None:
+    gas = BeattieBridgemanGas(
+        287.0,
+        1.4,
+        a0=647341.1814617205,
+        b0=0.0,
+        a=2.5024920897394383,
+        b=0.0,
+        c=0.0,
+    )
+    temperature = 300.0
+    pressure = 3812.0518936864746
+
+    density = float(gas.density(temperature, pressure))
+    spinodal = gas._first_spinodal_density(temperature)
+
+    assert spinodal is not None
+    assert density == pytest.approx(0.1271156621155641, rel=1e-11)
+    assert density < spinodal
+    assert gas._dp_drho_scalar(temperature, density) > 0.0
+    assert gas.pressure(temperature, density) == pytest.approx(pressure, rel=2e-14)

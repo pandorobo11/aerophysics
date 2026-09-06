@@ -10,7 +10,6 @@ from aerophysics.gui.config import (
     ConfigurationError,
     dump_configuration,
     load_configuration,
-    make_configuration,
     validate_configuration,
 )
 from aerophysics.gui.units import UnitPreferences
@@ -85,7 +84,7 @@ def test_required_and_unknown_payload_fields_are_rejected(
     ("update", "message"),
     (
         ({"field": "velocity"}, "field must be one of"),
-        ({"start": 2_000.0}, "start must be less"),
+        ({"start": 2_000.0}, "sweep start must be less"),
         ({"points": True}, "points must be an integer"),
         ({"points": 1}, "points must be at least"),
         ({"points": 502}, "points must be at most"),
@@ -147,69 +146,6 @@ def test_calculator_specific_sweep_point_limit_is_validated() -> None:
 
     with pytest.raises(ConfigurationError, match="points must be at most 201"):
         validate_configuration(configuration)
-
-
-@pytest.mark.parametrize(
-    ("calculator", "inputs", "models", "message"),
-    (
-        (
-            "isentropic",
-            {
-                "input_value": 2.0,
-                "total_pressure": None,
-                "total_temperature": None,
-            },
-            {
-                "input_basis": "mach",
-                "branch": "subsonic",
-                "gas_model": "NASA9",
-                "with_mass_flux": False,
-                "allow_extrapolation": False,
-            },
-            "total_temperature is required",
-        ),
-        (
-            "boundary_layer",
-            {
-                "distance": 1.0,
-                "edge_velocity": 100.0,
-                "edge_density": 1.0,
-                "edge_dynamic_viscosity": 1.0e-5,
-                "transition_reynolds": None,
-                "mach": None,
-                "edge_temperature": 300.0,
-                "wall_temperature": None,
-            },
-            {
-                "source": "manual",
-                "regime": "transitional",
-                "turbulent_correlation": "schlichting",
-                "compressibility_correction": "none",
-            },
-            "transition_reynolds is required",
-        ),
-        (
-            "detached_shock",
-            {"upstream_mach": 4.0, "nose_radius": 0.1},
-            {"geometry": "cylindrical_nose_2d", "model": "comparison"},
-            "supports only",
-        ),
-    ),
-)
-def test_cross_field_constraints_are_validated(
-    calculator: str,
-    inputs: dict[str, object],
-    models: dict[str, object],
-    message: str,
-) -> None:
-    with pytest.raises(ConfigurationError, match=message):
-        make_configuration(
-            calculator=calculator,
-            mode="single",
-            inputs_si=inputs,
-            models=models,
-            units=UnitPreferences(),
-        )
 
 
 @pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))

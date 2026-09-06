@@ -660,3 +660,35 @@ render_protrusion_drag(UnitPreferences())
     assert not app.exception
     assert not app.error
     assert app.dataframe[0].value["プロファイル"].iloc[0] == "provided"
+
+
+def test_protrusion_zero_height_sweep_can_be_exported_and_imported() -> None:
+    from aerophysics.gui.config import dump_configuration
+
+    script = """
+from aerophysics.gui.analysis_pages import render_protrusion_drag
+from aerophysics.gui.units import UnitPreferences
+render_protrusion_drag(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.radio(key="protrusion_mode").set_value("1変数スイープ").run()
+    app.number_input(key="protrusion_sweep_start").set_value(0.0).run()
+    app.number_input(key="protrusion_sweep_points").set_value(3).run()
+    app.button(key="FormSubmitter:protrusion_form-計算").click().run()
+
+    assert not app.exception
+    assert not app.error
+    assert len(app.dataframe[0].value) == 3
+    assert app.metric[0].value == "—"
+    configuration = app.session_state["protrusion_payload"][1]
+    serialized = dump_configuration(configuration)
+    cast(Any, app.get("file_uploader")[0]).upload(
+        "zero-height-sweep.json", serialized.encode(), "application/json"
+    ).run()
+    app.button(key="protrusion_configuration_apply").click().run()
+    app.button(key="FormSubmitter:protrusion_form-計算").click().run()
+
+    assert not app.exception
+    assert not app.error
+    assert len(app.dataframe[0].value) == 3
+    assert app.metric[0].value == "—"
