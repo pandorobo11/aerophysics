@@ -181,3 +181,15 @@ match, reruns tests, static checks, documentation builds, and package builds,
 then publishes the wheel, source distribution, and
 `aerophysics-docs-X.Y.Z.zip` to the GitHub Release. The documentation archive
 opens at `aerophysics-docs-X.Y.Z/index.html` after extraction.
+
+### Release permissions
+
+The release workflow validates and builds with read-only repository access;
+checkout credentials are not persisted. An isolated publish job downloads the
+validated artifacts and is the only job with `contents: write`. It does not
+check out or execute project code. Release Actions are pinned to immutable
+commits; the existing Python and uv versions remain unchanged.
+
+Publication uses `gh release create` only. An existing release causes a failure
+instead of replacing its assets. Investigate partial publication failures
+before retrying; the workflow does not overwrite an existing release to recover.
