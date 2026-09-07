@@ -1,13 +1,15 @@
 """Tests for perfect-gas isentropic relations."""
 
 import warnings
+from dataclasses import fields
 
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from numpy.typing import ArrayLike, NDArray
 
 import aerophysics.isentropic as isentropic_module
-from aerophysics import AIR_NASA7, AIR_NASA9
+from aerophysics import AIR_HARMONIC_OSCILLATOR, AIR_NASA7, AIR_NASA9
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import PerfectGas
 from aerophysics.isentropic import (
@@ -25,6 +27,7 @@ from aerophysics.isentropic import (
     mass_flow_parameter,
     mass_flux,
 )
+from aerophysics.real_gas import HarmonicOscillatorGas
 from aerophysics.thermochemistry import (
     UNIVERSAL_GAS_CONSTANT,
     IdealGasSpecies,
@@ -188,6 +191,105 @@ def test_fused_analysis_matches_caloric_component_relations() -> None:
     assert_allclose(analysis.state.static_temperature, direct_state.static_temperature)
     assert_allclose(analysis.state.static_pressure, direct_state.static_pressure)
     assert_allclose(analysis.state.velocity, direct_state.velocity)
+
+
+@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
+@pytest.mark.parametrize("with_pressure", [False, True])
+@pytest.mark.parametrize("scalar", [False, True])
+def test_fused_thermal_analysis_matches_public_relations(
+    gas: ThermallyPerfectGas | HarmonicOscillatorGas,
+    with_pressure: bool,
+    scalar: bool,
+) -> None:
+    mach = np.asarray(2.0) if scalar else np.asarray([[0.5], [1.0], [2.0]])
+    temperature = np.asarray(1000.0) if scalar else np.asarray([1000.0, 1200.0])
+    pressure = (
+        np.asarray(100_000.0)
+        if scalar
+        else np.asarray([[100_000.0], [200_000.0], [300_000.0]])
+    )
+    shape = () if scalar else (3, 2)
+
+    def check_result(actual: float | NDArray[np.float64], expected: ArrayLike) -> None:
+        assert_allclose(actual, np.broadcast_to(expected, shape), rtol=1e-12, atol=0.0)
+        if scalar:
+            assert isinstance(actual, float)
+        else:
+            assert isinstance(actual, np.ndarray)
+            assert actual.shape == shape
+            assert actual.dtype == np.float64
+            assert not actual.flags.writeable
+            for argument in (mach, temperature, pressure):
+                assert not np.shares_memory(actual, argument)
+
+    analysis = isentropic_analysis(
+        float(mach) if scalar else mach,
+        gas,
+        total_temperature=float(temperature) if scalar else temperature,
+        total_pressure=(float(pressure) if scalar else pressure)
+        if with_pressure
+        else None,
+        allow_extrapolation=False,
+    )
+    ratios = isentropic_ratios(
+        mach, gas, total_temperature=temperature, allow_extrapolation=False
+    )
+    critical = critical_ratios(
+        gas, total_temperature=temperature, allow_extrapolation=False
+    )
+    for actual_ratios, expected_ratios in (
+        (analysis.ratios, ratios),
+        (analysis.critical_ratios, critical),
+    ):
+        for field in fields(actual_ratios):
+            check_result(
+                getattr(actual_ratios, field.name), getattr(expected_ratios, field.name)
+            )
+    check_result(
+        analysis.area_ratio,
+        area_ratio(mach, gas, total_temperature=temperature, allow_extrapolation=False),
+    )
+    check_result(
+        analysis.mass_flow_parameter,
+        mass_flow_parameter(
+            mach, gas, total_temperature=temperature, allow_extrapolation=False
+        ),
+    )
+    check_result(
+        analysis.critical_mass_flow_parameter,
+        mass_flow_parameter(
+            1.0, gas, total_temperature=temperature, allow_extrapolation=False
+        ),
+    )
+
+    if not with_pressure:
+        assert analysis.state is None
+        assert analysis.mass_flux is None
+        assert analysis.choked_mass_flux is None
+        return
+
+    assert analysis.state is not None
+    direct_state = isentropic_state(
+        mach,
+        gas,
+        total_temperature=temperature,
+        total_pressure=pressure,
+        allow_extrapolation=False,
+    )
+    for field in fields(direct_state):
+        check_result(
+            getattr(analysis.state, field.name), getattr(direct_state, field.name)
+        )
+    assert analysis.mass_flux is not None
+    check_result(
+        analysis.mass_flux,
+        mass_flux(pressure, temperature, mach, gas, allow_extrapolation=False),
+    )
+    assert analysis.choked_mass_flux is not None
+    check_result(
+        analysis.choked_mass_flux,
+        choked_mass_flux(pressure, temperature, gas, allow_extrapolation=False),
+    )
 
 
 def test_fused_analysis_reuses_thermal_states(
