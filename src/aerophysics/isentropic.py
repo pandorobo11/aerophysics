@@ -991,19 +991,16 @@ def _thermal_analysis_arrays(
     critical_density_ratio = np.empty_like(mach)
     critical_parameter = np.empty_like(mach)
 
-    total_density: FloatArray | None = None
-    static_temperature: FloatArray | None = None
-    static_pressure: FloatArray | None = None
-    static_density: FloatArray | None = None
-    velocity: FloatArray | None = None
-    speed_of_sound: FloatArray | None = None
+    absolute = None
     if total_pressure is not None:
-        total_density = np.empty_like(mach)
-        static_temperature = np.empty_like(mach)
-        static_pressure = np.empty_like(mach)
-        static_density = np.empty_like(mach)
-        velocity = np.empty_like(mach)
-        speed_of_sound = np.empty_like(mach)
+        absolute = _AbsoluteFlowArrays(
+            total_density=np.empty_like(mach),
+            static_temperature=np.empty_like(mach),
+            static_pressure=np.empty_like(mach),
+            static_density=np.empty_like(mach),
+            velocity=np.empty_like(mach),
+            speed_of_sound=np.empty_like(mach),
+        )
 
     solved: dict[tuple[float, float], _ThermalFlowState] = {}
 
@@ -1036,45 +1033,26 @@ def _thermal_analysis_arrays(
         extrapolated = extrapolated or state.extrapolated or critical.extrapolated
 
         if total_pressure is not None:
-            assert total_density is not None
-            assert static_temperature is not None
-            assert static_pressure is not None
-            assert static_density is not None
-            assert velocity is not None
-            assert speed_of_sound is not None
+            assert absolute is not None
             properties = _thermal_properties(
                 state.static_temperature,
                 gas,
                 allow_extrapolation=allow_extrapolation,
             )
-            static_temperature[index] = state.static_temperature
-            static_pressure[index] = total_pressure[index] / state.total_pressure_ratio
-            total_density[index] = total_pressure[index] / (
+            absolute.static_temperature[index] = state.static_temperature
+            absolute.static_pressure[index] = (
+                total_pressure[index] / state.total_pressure_ratio
+            )
+            absolute.total_density[index] = total_pressure[index] / (
                 gas.specific_gas_constant * total_temperature[index]
             )
-            static_density[index] = static_pressure[index] / (
-                gas.specific_gas_constant * static_temperature[index]
+            absolute.static_density[index] = absolute.static_pressure[index] / (
+                gas.specific_gas_constant * absolute.static_temperature[index]
             )
-            speed_of_sound[index] = np.sqrt(properties.sound_speed_squared)
-            velocity[index] = mach[index] * speed_of_sound[index]
+            absolute.speed_of_sound[index] = np.sqrt(properties.sound_speed_squared)
+            absolute.velocity[index] = mach[index] * absolute.speed_of_sound[index]
 
     _warn_if_extrapolated(gas, extrapolated)
-    absolute = None
-    if total_pressure is not None:
-        assert total_density is not None
-        assert static_temperature is not None
-        assert static_pressure is not None
-        assert static_density is not None
-        assert velocity is not None
-        assert speed_of_sound is not None
-        absolute = _AbsoluteFlowArrays(
-            total_density=total_density,
-            static_temperature=static_temperature,
-            static_pressure=static_pressure,
-            static_density=static_density,
-            velocity=velocity,
-            speed_of_sound=speed_of_sound,
-        )
     return _AnalysisArrays(
         temperature_ratio=temperature_ratio,
         pressure_ratio=pressure_ratio,
