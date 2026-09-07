@@ -784,7 +784,12 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
             if linked
             else float(inputs.get("edge_dynamic_viscosity", 1.7894e-5))
         )
-        mach_si = linked.mach if linked else float(inputs.get("mach", 0.3))
+        stored_mach = inputs.get("mach")
+        mach_si = (
+            linked.mach
+            if linked
+            else float(0.3 if stored_mach is None else stored_mach)
+        )
         temperature_si = (
             linked.temperature
             if linked
