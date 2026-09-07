@@ -9,7 +9,7 @@ from streamlit.testing.v1 import AppTest
 
 from aerophysics.gui.adapters import FlightCase
 from aerophysics.gui.advanced_adapters import BoundaryLayerCase, BoundaryProfileCase
-from aerophysics.gui.config import make_configuration
+from aerophysics.gui.config import dump_configuration, make_configuration
 from aerophysics.gui.units import UnitPreferences
 
 APP = Path("src/aerophysics/gui/app.py")
@@ -303,6 +303,47 @@ render_boundary_layer(UnitPreferences())
     assert isinstance(
         app.session_state["current_boundary_layer_case"], BoundaryLayerCase
     )
+
+
+@pytest.mark.parametrize(
+    ("mode", "mach"),
+    (("single", None), ("sweep", None), ("single", 0.0), ("single", 2.0)),
+)
+def test_boundary_layer_configuration_round_trip(mode: str, mach: float | None) -> None:
+    script = """
+from aerophysics.gui.pages import render_boundary_layer
+from aerophysics.gui.units import UnitPreferences
+render_boundary_layer(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    if mode == "sweep":
+        app.radio(key="boundary_mode").set_value("距離スイープ").run()
+        app.number_input(key="boundary_sweep_points").set_value(3).run()
+    if mach is not None:
+        app.selectbox(key="boundary_correction").set_value("Eckert基準温度法").run()
+        assert app.number_input(key="boundary_mach").value == 0.3
+        app.number_input(key="boundary_mach").set_value(mach).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    original_result, original_configuration = app.session_state["boundary_payload"]
+    assert original_configuration["inputs_si"]["mach"] == mach
+
+    serialized = dump_configuration(original_configuration)
+    cast(Any, app.get("file_uploader")[0]).upload(
+        "boundary-layer.json", serialized.encode(), "application/json"
+    ).run()
+    app.button(key="boundary_configuration_apply").click().run()
+    assert not app.exception
+    assert not app.error
+    if mach is not None:
+        assert app.number_input(key="boundary_mach").value == mach
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    result, configuration = app.session_state["boundary_payload"]
+    assert configuration == original_configuration
+    assert result == original_result
 
 
 def test_additional_compressible_flow_pages() -> None:

@@ -28,6 +28,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Reload flat-plate GUI settings with an unspecified Mach number when
+  compressibility correction is disabled.
 - Keep Beattie--Bridgeman density inversion on the lowest-density stable gas
   branch when custom coefficients permit multiple roots.
 - Avoid spurious thermally perfect area-inversion applicability warnings caused
