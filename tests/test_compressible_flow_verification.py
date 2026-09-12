@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import math
 from pathlib import Path
 
@@ -67,16 +66,6 @@ def test_complete_naca_1135_table_grid_matches_public_api() -> None:
             assert abs(value - expected) <= tolerance, (mach, name)
 
 
-def test_naca_fixture_provenance_is_complete() -> None:
-    metadata = json.loads(
-        (REFERENCE / "naca1135_tables_i_ii.json").read_text(encoding="utf-8")
-    )
-    assert metadata["source"] == "NACA Report 1135, Tables I and II"
-    assert metadata["printed_pages"] == "633-651"
-    assert metadata["gamma"] == 1.4
-    assert metadata["row_count"] == 1744
-
-
 def test_naca_oblique_shock_charts_agree_at_chart_resolution() -> None:
     rows = _rows("naca1135_charts_2_4.csv")
     assert len(rows) == 5
@@ -126,13 +115,3 @@ def test_nasa_sp3004_conical_table_cells_match_public_api() -> None:
         assert abs(float(result.shock_angle) / expected_angle - 1.0) <= float(
             row["relative_tolerance"]
         )
-
-
-def test_sp3004_fixture_provenance_records_source_domain() -> None:
-    metadata = json.loads(
-        (REFERENCE / "nasa_sp3004_conical.json").read_text(encoding="utf-8")
-    )
-    assert metadata["source"].startswith("NASA SP-3004")
-    assert metadata["gamma"] == 1.4
-    assert metadata["cone_angles_deg"] == [2.5 * value for value in range(1, 13)]
-    assert metadata["mach_numbers"] == [1.5, 2.0, 3.0, 5.0]

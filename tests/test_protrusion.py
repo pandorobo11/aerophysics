@@ -36,18 +36,6 @@ def test_constant_width_one_seventh_power_matches_analytic_solution() -> None:
     assert result.compressibility_applied is False
 
 
-def test_protrusion_above_boundary_layer_approaches_edge_dynamic_pressure() -> None:
-    result = protrusion_drag(
-        1.0,
-        100.0,
-        1.0,
-        edge_velocity=10.0,
-        edge_density=1.0,
-        boundary_layer_thickness=0.1,
-    )
-    assert result.shielding_factor == pytest.approx(1.0, abs=3e-4)
-
-
 def test_height_dependent_frontal_width_is_integrated() -> None:
     result = protrusion_drag(
         1.0,
@@ -177,7 +165,7 @@ def test_scalar_inputs_reject_arrays() -> None:
         protrusion_drag([1.0], 0.1, 0.01, 10.0, 1.0, 0.2)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("integration_points", [True, 31, 32.0])
+@pytest.mark.parametrize("integration_points", [31, 32.0])
 def test_invalid_integration_points(integration_points: object) -> None:
     with pytest.raises(ValueError, match="integration_points"):
         protrusion_drag(

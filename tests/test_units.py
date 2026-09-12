@@ -11,46 +11,49 @@ from aerophysics._array import FloatResult
 
 
 @pytest.mark.parametrize(
-    ("forward", "inverse", "value"),
+    ("forward", "inverse", "expected_factor"),
     [
-        (units.feet_to_meters, units.meters_to_feet, 12_345.678),
-        (units.inches_to_meters, units.meters_to_inches, 123.456),
+        (units.feet_to_meters, units.meters_to_feet, 0.3048),
+        (units.inches_to_meters, units.meters_to_inches, 0.0254),
         (
             units.knots_to_meters_per_second,
             units.meters_per_second_to_knots,
-            456.7,
+            pytest.approx(1852 / 3600),
         ),
-        (units.psi_to_pascals, units.pascals_to_psi, 14.6959),
-        (units.psf_to_pascals, units.pascals_to_psf, 2_116.22),
+        (units.psi_to_pascals, units.pascals_to_psi, pytest.approx(6894.757293168)),
+        (units.psf_to_pascals, units.pascals_to_psf, pytest.approx(47.8802589803)),
         (
             units.pounds_mass_to_kilograms,
             units.kilograms_to_pounds_mass,
-            123.4,
+            0.45359237,
         ),
-        (units.slugs_to_kilograms, units.kilograms_to_slugs, 17.2),
-        (units.pounds_force_to_newtons, units.newtons_to_pounds_force, 42.5),
-        (units.degrees_to_radians, units.radians_to_degrees, 137.5),
+        (
+            units.slugs_to_kilograms,
+            units.kilograms_to_slugs,
+            pytest.approx(14.5939029372),
+        ),
+        (
+            units.pounds_force_to_newtons,
+            units.newtons_to_pounds_force,
+            pytest.approx(4.4482216152605),
+        ),
+        (
+            units.degrees_to_radians,
+            units.radians_to_degrees,
+            pytest.approx(np.pi / 180.0),
+        ),
     ],
 )
-def test_multiplicative_conversions_round_trip(
+def test_multiplicative_conversion_factors_and_round_trip(
     forward: Callable[[float], FloatResult],
     inverse: Callable[[float], FloatResult],
-    value: float,
+    expected_factor: object,
 ) -> None:
+    assert forward(1.0) == expected_factor
+    value = 123.456
     converted = forward(value)
     assert isinstance(converted, float)
     assert inverse(converted) == pytest.approx(value, rel=1e-14)
-
-
-def test_exact_conversion_factors() -> None:
-    assert units.feet_to_meters(1.0) == 0.3048
-    assert units.inches_to_meters(1.0) == 0.0254
-    assert units.knots_to_meters_per_second(1.0) == pytest.approx(1852 / 3600)
-    assert units.pounds_mass_to_kilograms(1.0) == 0.45359237
-    assert units.psi_to_pascals(1.0) == pytest.approx(6894.757293168)
-    assert units.psf_to_pascals(1.0) == pytest.approx(47.8802589803)
-    assert units.slugs_to_kilograms(1.0) == pytest.approx(14.5939029372)
-    assert units.pounds_force_to_newtons(1.0) == pytest.approx(4.4482216152605)
 
 
 def test_temperature_reference_points_and_round_trip() -> None:

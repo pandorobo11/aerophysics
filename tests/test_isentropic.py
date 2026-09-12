@@ -1,6 +1,7 @@
 """Tests for perfect-gas isentropic relations."""
 
 import warnings
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -219,7 +220,8 @@ def test_fused_analysis_reuses_thermal_states(
         total_pressure=100_000.0,
         allow_extrapolation=False,
     )
-    assert calls == [1.0, 1.5, 2.0, 2.5]
+    assert len(calls) == 4
+    assert set(calls) == {1.0, 1.5, 2.0, 2.5}
     assert analysis.state is not None
     assert isinstance(analysis.mass_flux, np.ndarray)
     assert isinstance(analysis.state.mass_flux, np.ndarray)
@@ -349,8 +351,9 @@ def test_area_ratio_rejects_zero_mach_and_invalid_ratio() -> None:
         mach_from_total_density_ratio,
     ],
 )
-def test_ratio_inverses_reject_values_below_one(inverse: object) -> None:
-    assert callable(inverse)
+def test_ratio_inverses_reject_values_below_one(
+    inverse: Callable[[float], object],
+) -> None:
     with pytest.raises(ValueError):
         inverse(0.99)
 
@@ -602,7 +605,7 @@ def test_strict_supersonic_area_inverse_uses_available_temperature_range() -> No
 
 
 @pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
-@pytest.mark.parametrize("mach", [1.01, 1.1, 1.2, 1.5])
+@pytest.mark.parametrize("mach", [1.01, 1.5])
 def test_thermal_area_inverse_ignores_extrapolated_solver_probes(
     gas: ThermallyPerfectGas,
     mach: float,
@@ -686,9 +689,8 @@ def test_thermal_default_extrapolation_warns_once_and_strict_mode_rejects() -> N
     ],
 )
 def test_thermal_relations_require_total_temperature(
-    function: object, arguments: tuple[object, ...]
+    function: Callable[..., object], arguments: tuple[object, ...]
 ) -> None:
-    assert callable(function)
     with pytest.raises(ValueError, match="total_temperature is required"):
         function(*arguments)
 

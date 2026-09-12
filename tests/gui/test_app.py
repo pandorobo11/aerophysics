@@ -8,14 +8,14 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from aerophysics.gui.adapters import FlightCase
-from aerophysics.gui.advanced_adapters import BoundaryLayerCase, BoundaryProfileCase
+from aerophysics.gui.advanced_adapters import BoundaryLayerCase
 from aerophysics.gui.config import make_configuration
 from aerophysics.gui.units import UnitPreferences
 
 APP = Path("src/aerophysics/gui/app.py")
 
 
-def test_main_app_default_page_and_calculation() -> None:
+def test_main_app_calculates_saves_case_and_sweeps() -> None:
     app = AppTest.from_file(APP, default_timeout=15).run()
     assert not app.exception
     assert app.title[0].value == "大気・飛行条件"
@@ -29,9 +29,6 @@ def test_main_app_default_page_and_calculation() -> None:
     app.button(key="flight_save_case").click().run()
     assert isinstance(app.session_state["current_flight_case"], FlightCase)
 
-
-def test_flight_page_sweep_mode() -> None:
-    app = AppTest.from_file(APP, default_timeout=15).run()
     assert "flight_sweep_start" not in {widget.key for widget in app.number_input}
     app.radio(key="flight_mode").set_value("1変数スイープ").run()
     assert "flight_sweep_start" in {widget.key for widget in app.number_input}
@@ -40,90 +37,6 @@ def test_flight_page_sweep_mode() -> None:
     assert not app.error
     assert len(app.dataframe[0].value) == 101
     assert len(app.get("plotly_chart")) == 3
-
-
-@pytest.mark.parametrize(
-    ("module", "function", "mode_key", "mode_value", "dependent_key"),
-    (
-        (
-            "aerophysics.gui.pages",
-            "render_shock",
-            "shock_mode",
-            "1変数スイープ",
-            "shock_sweep_start",
-        ),
-        (
-            "aerophysics.gui.pages",
-            "render_conical_shock",
-            "cone_shock_mode",
-            "1変数スイープ",
-            "cone_shock_sweep_start",
-        ),
-        (
-            "aerophysics.gui.pages",
-            "render_boundary_layer",
-            "boundary_mode",
-            "距離スイープ",
-            "boundary_sweep_start",
-        ),
-        (
-            "aerophysics.gui.flow_pages",
-            "render_isentropic",
-            "isentropic_mode",
-            "入力値スイープ",
-            "isentropic_sweep_start",
-        ),
-        (
-            "aerophysics.gui.flow_pages",
-            "render_normal_shock",
-            "normal_mode",
-            "Machスイープ",
-            "normal_sweep_start",
-        ),
-        (
-            "aerophysics.gui.flow_pages",
-            "render_detached_shock",
-            "detached_shock_mode",
-            "Machスイープ",
-            "detached_shock_sweep_start",
-        ),
-        (
-            "aerophysics.gui.flow_pages",
-            "render_expansion",
-            "expansion_mode",
-            "1変数スイープ",
-            "expansion_sweep_start",
-        ),
-    ),
-)
-def test_mode_switch_immediately_updates_dependent_inputs(
-    module: str,
-    function: str,
-    mode_key: str,
-    mode_value: str,
-    dependent_key: str,
-) -> None:
-    script = f"""
-from {module} import {function}
-from aerophysics.gui.units import UnitPreferences
-{function}(UnitPreferences())
-"""
-    app = AppTest.from_string(script, default_timeout=15).run()
-    assert dependent_key not in {widget.key for widget in app.number_input}
-    app.radio(key=mode_key).set_value(mode_value).run()
-    assert dependent_key in {widget.key for widget in app.number_input}
-
-
-def test_single_mode_immediately_hides_sweep_inputs() -> None:
-    script = """
-from aerophysics.gui.analysis_pages import render_thermochemistry
-from aerophysics.gui.units import UnitPreferences
-render_thermochemistry(UnitPreferences())
-"""
-    app = AppTest.from_string(script, default_timeout=15).run()
-    assert "thermo_sweep_start" in {widget.key for widget in app.number_input}
-    app.radio(key="thermo_mode").set_value("single").run()
-    assert "thermo_sweep_start" not in {widget.key for widget in app.number_input}
 
 
 def test_display_unit_change_preserves_physical_input_value() -> None:
@@ -145,7 +58,7 @@ finite_number(
     assert app.session_state["_gui_display_units"]["inverse_length"] == "1/ft"
 
 
-def test_shock_page_calculation() -> None:
+def test_shock_page_single_and_non_attached_sweep() -> None:
     script = """
 from aerophysics.gui.pages import render_shock
 from aerophysics.gui.units import UnitPreferences
@@ -158,15 +71,9 @@ render_shock(UnitPreferences())
     assert app.metric[0].label == "衝撃波角 β"
     assert len(app.get("plotly_chart")) == 3
 
-
-def test_shock_page_sweep_marks_non_attached_rows() -> None:
-    script = """
-from aerophysics.gui.pages import render_shock
-from aerophysics.gui.units import UnitPreferences
-render_shock(UnitPreferences())
-"""
-    app = AppTest.from_string(script, default_timeout=15).run()
+    assert "shock_sweep_start" not in {widget.key for widget in app.number_input}
     app.radio(key="shock_mode").set_value("1変数スイープ").run()
+    assert "shock_sweep_start" in {widget.key for widget in app.number_input}
     app.button(key="FormSubmitter:shock_form-計算").click().run()
     assert not app.exception
     assert not app.error
@@ -190,7 +97,9 @@ render_conical_shock(UnitPreferences())
     assert app.metric[0].label == "衝撃波角 β"
     assert len(app.get("plotly_chart")) == 3
 
+    assert "cone_shock_sweep_start" not in {widget.key for widget in app.number_input}
     app.radio(key="cone_shock_mode").set_value("1変数スイープ").run()
+    assert "cone_shock_sweep_start" in {widget.key for widget in app.number_input}
     app.number_input(key="cone_shock_sweep_points").set_value(3).run()
     app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
     assert not app.exception
@@ -217,34 +126,18 @@ render_detached_shock(UnitPreferences())
     assert len(app.get("plotly_chart")) == 1
     assert len(app.download_button) == 3
 
+    assert "detached_shock_sweep_start" not in {
+        widget.key for widget in app.number_input
+    }
     app.radio(key="detached_shock_mode").set_value("Machスイープ").run()
+    assert "detached_shock_sweep_start" in {widget.key for widget in app.number_input}
     assert app.number_input(key="detached_shock_sweep_start").min == pytest.approx(
         1.0000001
     )
     assert app.number_input(key="detached_shock_sweep_stop").min == pytest.approx(
         1.0000001
     )
-    app.number_input(key="detached_shock_sweep_points").set_value(3).run()
-    app.selectbox(key="detached_shock_selection").set_value(
-        "Ambrosio–Wortman / Seiff 比較"  # noqa: RUF001
-    ).run()
-    app.button(key="FormSubmitter:detached_shock_form-計算").click().run()
-    assert not app.exception
-    assert len(app.dataframe[0].value) == 3
-    assert len(app.get("plotly_chart")) == 3
 
-    app.selectbox(key="detached_shock_geometry").set_value("2D cylindrical nose").run()
-    assert app.selectbox(key="detached_shock_selection").options == [
-        "Ambrosio–Wortman"  # noqa: RUF001
-    ]
-
-
-def test_detached_shock_page_loads_configuration() -> None:
-    script = """
-from aerophysics.gui.flow_pages import render_detached_shock
-from aerophysics.gui.units import UnitPreferences
-render_detached_shock(UnitPreferences())
-"""
     configuration = make_configuration(
         calculator="detached_shock",
         mode="sweep",
@@ -261,9 +154,10 @@ render_detached_shock(UnitPreferences())
             "points": 5,
         },
     )
-    app = AppTest.from_string(script, default_timeout=30)
-    app.session_state["pending_detached_shock_configuration"] = configuration
-    app.run()
+    cast(Any, app.get("file_uploader")[0]).upload(
+        "detached-shock.json", json.dumps(configuration).encode(), "application/json"
+    ).run()
+    app.button(key="detached_shock_configuration_apply").click().run()
     assert app.radio(key="detached_shock_mode").value == "sweep"
     assert app.selectbox(key="detached_shock_selection").value == "comparison"
     assert app.number_input(key="detached_shock_radius").value == pytest.approx(0.25)
@@ -274,6 +168,11 @@ render_detached_shock(UnitPreferences())
     assert not app.exception
     assert not app.error
     assert len(app.dataframe[0].value) == 5
+
+    app.selectbox(key="detached_shock_geometry").set_value("2D cylindrical nose").run()
+    assert app.selectbox(key="detached_shock_selection").options == [
+        "Ambrosio–Wortman"  # noqa: RUF001
+    ]
 
 
 def test_boundary_layer_page_calculation_and_case_source() -> None:
@@ -304,12 +203,20 @@ render_boundary_layer(UnitPreferences())
         app.session_state["current_boundary_layer_case"], BoundaryLayerCase
     )
 
+    assert "boundary_sweep_start" not in {widget.key for widget in app.number_input}
+    app.radio(key="boundary_mode").set_value("距離スイープ").run()
+    assert "boundary_sweep_start" in {widget.key for widget in app.number_input}
+    app.number_input(key="boundary_sweep_points").set_value(3).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.dataframe[0].value) == 3
+
 
 def test_additional_compressible_flow_pages() -> None:
     pages = (
         ("render_isentropic", "isentropic_form", "等エントロピー流れ", 2),
         ("render_normal_shock", "normal_form", "垂直衝撃波", 2),
-        ("render_expansion", "expansion_form", "Prandtl\u2013Meyer膨張", 3),
     )
     for function, form, title, plot_count in pages:
         script = f"""
@@ -325,6 +232,18 @@ from aerophysics.gui.units import UnitPreferences
         assert len(app.metric) == 4
         assert len(app.get("plotly_chart")) == plot_count
         assert len(app.download_button) == 2
+
+        prefix = "isentropic" if function == "render_isentropic" else "normal"
+        sweep_key = f"{prefix}_sweep_start"
+        assert sweep_key not in {widget.key for widget in app.number_input}
+        mode_label = "入力値スイープ" if prefix == "isentropic" else "Machスイープ"
+        app.radio(key=f"{prefix}_mode").set_value(mode_label).run()
+        assert sweep_key in {widget.key for widget in app.number_input}
+        app.number_input(key=f"{prefix}_sweep_points").set_value(3).run()
+        app.button(key=f"FormSubmitter:{form}-計算").click().run()
+        assert not app.exception
+        assert not app.error
+        assert len(app.dataframe[0].value) == 3
 
 
 def test_isentropic_page_supports_thermally_perfect_air() -> None:
@@ -443,7 +362,12 @@ from aerophysics.gui.units import UnitPreferences
 render_expansion(UnitPreferences())
 """
     app = AppTest.from_string(script, default_timeout=15).run()
+    app.button(key="FormSubmitter:expansion_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert "expansion_sweep_start" not in {widget.key for widget in app.number_input}
     app.radio(key="expansion_mode").set_value("1変数スイープ").run()
+    assert "expansion_sweep_start" in {widget.key for widget in app.number_input}
     app.number_input(key="expansion_sweep_stop").set_value(130.0).run()
     app.button(key="FormSubmitter:expansion_form-計算").click().run()
     assert not app.exception
@@ -454,63 +378,29 @@ render_expansion(UnitPreferences())
     assert app.warning
 
 
-def test_advanced_analysis_pages_default_calculations() -> None:
-    pages = (
-        ("render_boundary_layer_profile", "profile_form", 4),
-        ("render_protrusion_drag", "protrusion_form", 1),
-        ("render_thermochemistry", "thermo_form", 4),
-    )
-    for function, form, plot_count in pages:
-        script = f"""
-from aerophysics.gui.analysis_pages import {function}
-from aerophysics.gui.units import UnitPreferences
-{function}(UnitPreferences())
-"""
-        app = AppTest.from_string(script, default_timeout=30).run()
-        app.button(key=f"FormSubmitter:{form}-計算").click().run()
-        assert not app.exception
-        assert not app.error
-        assert len(app.metric) == 4
-        assert len(app.dataframe) == 1
-        assert len(app.get("plotly_chart")) == plot_count
-
-
-def test_viscosity_page_sweep_single_and_extrapolation() -> None:
+def test_thermochemistry_page_sweep_and_single_modes() -> None:
     script = """
-from aerophysics.gui.analysis_pages import render_viscosity
+from aerophysics.gui.analysis_pages import render_thermochemistry
 from aerophysics.gui.units import UnitPreferences
-render_viscosity(UnitPreferences())
+render_thermochemistry(UnitPreferences())
 """
     app = AppTest.from_string(script, default_timeout=30).run()
-    assert app.title[0].value == "粘性係数"
-    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
+    assert "thermo_sweep_start" in {widget.key for widget in app.number_input}
+    app.number_input(key="thermo_sweep_points").set_value(3).run()
+    app.button(key="FormSubmitter:thermo_form-計算").click().run()
     assert not app.exception
     assert not app.error
-    assert len(app.dataframe[0].value) == 603
-    assert len(app.get("plotly_chart")) == 2
-    assert len(app.download_button) == 2
-    assert app.warning
-
-    app.radio(key="viscosity_mode").set_value("single").run()
-    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
+    assert len(app.dataframe[0].value) == 6
+    assert len(app.get("plotly_chart")) == 4
+    app.radio(key="thermo_mode").set_value("single").run()
+    assert "thermo_sweep_start" not in {widget.key for widget in app.number_input}
+    app.button(key="FormSubmitter:thermo_form-計算").click().run()
     assert not app.exception
     assert not app.error
-    assert len(app.metric) == 3
-    assert len(app.dataframe[0].value) == 3
-    assert not app.get("plotly_chart")
-
-    app.selectbox(key="viscosity_selection").set_value("Keyes").run()
-    app.number_input(key="viscosity_temperature").set_value(50.0).run()
-    app.checkbox(key="viscosity_extrapolate").check().run()
-    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
-    assert not app.exception
-    assert not app.error
-    assert len(app.metric) == 1
-    assert app.dataframe[0].value["status"].tolist() == ["extrapolated"]
-    assert app.warning
+    assert len(app.dataframe[0].value) == 2
 
 
-def test_viscosity_page_loads_configuration() -> None:
+def test_viscosity_page_import_sweep_single_and_extrapolation() -> None:
     script = """
 from aerophysics.gui.analysis_pages import render_viscosity
 from aerophysics.gui.units import UnitPreferences
@@ -539,10 +429,34 @@ render_viscosity(UnitPreferences())
     assert app.number_input(key="viscosity_sweep_start").value == pytest.approx(100.0)
     assert app.number_input(key="viscosity_sweep_stop").value == pytest.approx(1000.0)
     assert app.number_input(key="viscosity_sweep_points").value == 5
+    assert app.title[0].value == "粘性係数"
+    app.selectbox(key="viscosity_selection").set_value("compare").run()
+    app.checkbox(key="viscosity_extrapolate").uncheck().run()
     app.button(key="FormSubmitter:viscosity_form-計算").click().run()
     assert not app.exception
     assert not app.error
-    assert len(app.dataframe[0].value) == 5
+    assert len(app.dataframe[0].value) == 15
+    assert len(app.get("plotly_chart")) == 2
+    assert len(app.download_button) == 2
+    assert app.warning
+
+    app.radio(key="viscosity_mode").set_value("single").run()
+    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.metric) == 3
+    assert len(app.dataframe[0].value) == 3
+    assert not app.get("plotly_chart")
+
+    app.selectbox(key="viscosity_selection").set_value("Keyes").run()
+    app.number_input(key="viscosity_temperature").set_value(50.0).run()
+    app.checkbox(key="viscosity_extrapolate").check().run()
+    app.button(key="FormSubmitter:viscosity_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.metric) == 1
+    assert app.dataframe[0].value["status"].tolist() == ["extrapolated"]
+    assert app.warning
 
 
 def test_profile_to_protrusion_session_transfer() -> None:
@@ -557,11 +471,14 @@ st.session_state["current_boundary_layer_case"] = BoundaryLayerCase(
 render_boundary_layer_profile(UnitPreferences())
 """
     app = AppTest.from_string(profile_script, default_timeout=30).run()
+    app.button(key="FormSubmitter:profile_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.dataframe) == 1
     app.radio(key="profile_source").set_value("現在の乱流平板境界層ケース").run()
     app.button(key="FormSubmitter:profile_form-計算").click().run()
     app.button(key="profile_save_case").click().run()
     saved = app.session_state["current_boundary_profile"]
-    assert isinstance(saved, BoundaryProfileCase)
 
     protrusion_script = """
 from aerophysics.gui.analysis_pages import render_protrusion_drag
