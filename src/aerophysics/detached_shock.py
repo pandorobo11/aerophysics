@@ -26,6 +26,7 @@ Gas Mixtures*, NASA TN D-2780, 1965.
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import cast
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -295,15 +296,16 @@ def billig_shock_shape(
     if not np.all(np.isfinite(shock_x)) or not np.all(np.isfinite(shock_y)):
         raise ValueError("Billig shock coordinates are non-finite")
 
+    coordinate_y = cast(FloatArray, return_float(shock_y, scalar=False))
     return BilligShockShapeResult(
         upstream_mach=return_float(mach, scalar=scalar),
         nose_radius=return_float(radius, scalar=scalar),
         normalized_standoff_distance=return_float(normalized, scalar=scalar),
         standoff_distance=return_float(distance, scalar=scalar),
         vertex_curvature_radius=return_float(curvature, scalar=scalar),
-        transverse_coordinates=np.asarray(shock_y, dtype=np.float64),
-        shock_x=np.asarray(shock_x, dtype=np.float64),
-        shock_y=np.asarray(shock_y, dtype=np.float64),
+        transverse_coordinates=coordinate_y,
+        shock_x=cast(FloatArray, return_float(shock_x, scalar=False)),
+        shock_y=coordinate_y,
         model=DetachedShockModel.BILLIG,
         standoff_model=DetachedShockModel.AMBROSIO_WORTMAN,
         geometry=geometry,
