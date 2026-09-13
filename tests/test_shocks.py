@@ -20,25 +20,7 @@ from aerophysics.shocks import (
 from aerophysics.units import degrees_to_radians, radians_to_degrees
 
 
-def test_normal_shock_mach_two_reference_values() -> None:
-    result = normal_shock(2.0)
-    assert result.downstream_mach == pytest.approx(0.5773502692)
-    assert result.static_pressure_ratio == pytest.approx(4.5)
-    assert result.static_density_ratio == pytest.approx(8.0 / 3.0)
-    assert result.static_temperature_ratio == pytest.approx(1.6875)
-    assert result.total_pressure_ratio == pytest.approx(0.7208738615)
-
-
-def test_normal_shock_at_mach_one_is_degenerate() -> None:
-    result = normal_shock(1.0)
-    assert result.downstream_mach == 1.0
-    assert result.static_pressure_ratio == 1.0
-    assert result.static_density_ratio == 1.0
-    assert result.static_temperature_ratio == 1.0
-    assert result.total_pressure_ratio == 1.0
-
-
-def test_normal_shock_vectorizes() -> None:
+def test_normal_shock_reference_values_and_array_contract() -> None:
     result = normal_shock([[1.0, 2.0], [3.0, 5.0]])
     for value in (
         result.upstream_mach,
@@ -51,7 +33,19 @@ def test_normal_shock_vectorizes() -> None:
         assert isinstance(value, np.ndarray)
         assert value.shape == (2, 2)
         assert value.dtype == np.float64
+    for value, mach_two_reference in (
+        (result.downstream_mach, 0.5773502692),
+        (result.static_pressure_ratio, 4.5),
+        (result.static_density_ratio, 8.0 / 3.0),
+        (result.static_temperature_ratio, 1.6875),
+        (result.total_pressure_ratio, 0.7208738615),
+    ):
+        assert np.asarray(value)[0, 0] == 1.0
+        assert np.asarray(value)[0, 1] == pytest.approx(mach_two_reference)
     assert np.all(np.asarray(result.total_pressure_ratio) <= 1.0)
+    scalar = normal_shock(2.0)
+    assert isinstance(scalar.downstream_mach, float)
+    assert scalar.downstream_mach == pytest.approx(0.5773502692)
 
 
 def test_theta_beta_mach_weak_reference_value() -> None:
@@ -147,31 +141,8 @@ def test_detached_shock_raises_dedicated_error() -> None:
         oblique_shock(2.0, float(degrees_to_radians(30.0)))
 
 
-def test_conical_shock_matches_nasa_sp_3004() -> None:
-    result = conical_shock(2.0, float(degrees_to_radians(10.0)))
-    assert result.shock_angle == pytest.approx(0.54464827, rel=2e-6)
-    # NASA SP-3004 tabulates critical Mach numbers M*=V/a*.  Converting its
-    # surface and post-shock values gives the ordinary local Mach numbers.
-    assert result.surface_mach == pytest.approx(1.83403, rel=2e-5)
-    assert result.post_shock_mach == pytest.approx(1.94679, rel=2e-5)
-    assert result.surface_pressure_ratio == pytest.approx(1.2924832, rel=3e-5)
-    assert result.surface_density_ratio == pytest.approx(1.2011081, rel=3e-5)
-    assert result.surface_temperature_ratio == pytest.approx(1.0760757, rel=3e-5)
-
-
-def test_zero_angle_conical_shock_is_a_mach_wave() -> None:
-    result = conical_shock(2.0, 0.0)
-    assert result.shock_angle == pytest.approx(np.arcsin(0.5))
-    assert result.post_shock_mach == 2.0
-    assert result.surface_mach == 2.0
-    assert result.surface_pressure_ratio == 1.0
-    assert result.surface_density_ratio == 1.0
-    assert result.surface_temperature_ratio == 1.0
-    assert result.total_pressure_ratio == 1.0
-
-
-def test_conical_shock_vectorizes_and_broadcasts() -> None:
-    result = conical_shock([[2.0], [3.0]], degrees_to_radians([0.0, 5.0]))
+def test_conical_shock_nasa_reference_mach_wave_and_broadcasting() -> None:
+    result = conical_shock([[2.0], [3.0]], degrees_to_radians([0.0, 10.0]))
     for value in (
         result.upstream_mach,
         result.cone_half_angle,
@@ -186,11 +157,27 @@ def test_conical_shock_vectorizes_and_broadcasts() -> None:
         assert isinstance(value, np.ndarray)
         assert value.shape == (2, 2)
         assert value.dtype == np.float64
-    assert_allclose(
-        np.asarray(result.surface_pressure_ratio)
-        / np.asarray(result.surface_density_ratio),
+    # NASA SP-3004 tabulates critical Mach numbers M*=V/a*.  Converting its
+    # surface and post-shock values gives the ordinary local Mach numbers.
+    for value, reference, tolerance in (
+        (result.shock_angle, 0.54464827, 2e-6),
+        (result.surface_mach, 1.83403, 2e-5),
+        (result.post_shock_mach, 1.94679, 2e-5),
+        (result.surface_pressure_ratio, 1.2924832, 3e-5),
+        (result.surface_density_ratio, 1.2011081, 3e-5),
+        (result.surface_temperature_ratio, 1.0760757, 3e-5),
+    ):
+        assert np.asarray(value)[0, 1] == pytest.approx(reference, rel=tolerance)
+    assert np.asarray(result.shock_angle)[0, 0] == pytest.approx(np.arcsin(0.5))
+    assert np.asarray(result.post_shock_mach)[0, 0] == 2.0
+    assert np.asarray(result.surface_mach)[0, 0] == 2.0
+    for value in (
+        result.surface_pressure_ratio,
+        result.surface_density_ratio,
         result.surface_temperature_ratio,
-    )
+        result.total_pressure_ratio,
+    ):
+        assert np.asarray(value)[0, 0] == 1.0
     limit = maximum_attached_cone_angle([2.0, 3.0])
     assert isinstance(limit.cone_half_angle, np.ndarray)
     assert np.asarray(limit.cone_half_angle).shape == (2,)
@@ -200,6 +187,7 @@ def test_conical_shock_accepts_custom_perfect_gas() -> None:
     helium = PerfectGas(specific_gas_constant=2077.1, heat_capacity_ratio=5.0 / 3.0)
     air = conical_shock(3.0, float(degrees_to_radians(10.0)))
     result = conical_shock(3.0, float(degrees_to_radians(10.0)), helium)
+    assert isinstance(result.shock_angle, float)
     assert result.shock_angle != pytest.approx(air.shock_angle)
     assert result.surface_pressure_ratio == pytest.approx(
         result.surface_density_ratio * result.surface_temperature_ratio

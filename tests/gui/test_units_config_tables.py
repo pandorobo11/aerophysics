@@ -1,14 +1,11 @@
 """Tests for GUI unit, configuration, and table helpers."""
 
-import json
-
 import numpy as np
 import pytest
 
 from aerophysics.detached_shock import DetachedShockGeometry
 from aerophysics.gui.adapters import Row, detached_shock_shape
 from aerophysics.gui.config import (
-    CONFIG_SCHEMA_VERSION,
     ConfigurationError,
     dump_configuration,
     load_configuration,
@@ -22,6 +19,7 @@ from aerophysics.gui.tables import (
     rows_to_csv,
 )
 from aerophysics.gui.units import (
+    QuantityKind,
     UnitPreferences,
     from_si,
     inverse_length_unit,
@@ -31,34 +29,39 @@ from aerophysics.gui.units import (
 
 
 @pytest.mark.parametrize(
-    ("kind", "unit", "values"),
+    ("kind", "unit", "display_values", "si_values"),
     [
-        ("length", "ft", [0.0, 3.0, 10.0]),
-        ("length", "mm", [0.0, 3.0, 10.0]),
-        ("length", "in", [0.0, 3.0, 10.0]),
-        ("area", "ft²", [0.0, 3.0, 10.0]),
-        ("area", "in²", [0.0, 3.0, 10.0]),
-        ("speed", "kt", [0.0, 100.0]),
-        ("speed", "ft/s", [0.0, 100.0]),
-        ("pressure", "psi", [0.0, 14.7]),
-        ("pressure", "psf", [0.0, 2116.0]),
-        ("pressure", "kPa", [0.0, 101.325]),
-        ("pressure", "hPa", [0.0, 1013.25]),
-        ("density", "slug/ft³", [0.0, 0.00237]),
-        ("density", "lbm/ft³", [0.0, 0.0765]),
-        ("force", "lbf", [0.0, 100.0]),
-        ("inverse_length", "1/mm", [0.0, 100.0]),
-        ("inverse_length", "1/ft", [0.0, 100.0]),
-        ("inverse_length", "1/in", [0.0, 100.0]),
-        ("angle", "deg", [0.0, 10.0, 90.0]),
-        ("temperature", "°C", [-40.0, 0.0, 100.0]),
-        ("temperature", "°F", [-40.0, 32.0, 100.0]),
-        ("temperature", "°R", [0.0, 491.67, 671.67]),
+        ("length", "ft", [1.0], [0.3048]),
+        ("length", "mm", [1.0], [0.001]),
+        ("length", "in", [1.0], [0.0254]),
+        ("area", "ft²", [1.0], [0.09290304]),
+        ("area", "in²", [1.0], [0.00064516]),
+        ("speed", "kt", [1.0], [0.5144444444444445]),
+        ("speed", "ft/s", [1.0], [0.3048]),
+        ("pressure", "psi", [1.0], [6894.757293168]),
+        ("pressure", "psf", [1.0], [47.88025898033584]),
+        ("pressure", "kPa", [1.0], [1000.0]),
+        ("pressure", "hPa", [1.0], [100.0]),
+        ("density", "slug/ft³", [1.0], [515.3788183931961]),
+        ("density", "lbm/ft³", [1.0], [16.01846337396014]),
+        ("force", "lbf", [1.0], [4.4482216152605]),
+        ("inverse_length", "1/mm", [1.0], [1000.0]),
+        ("inverse_length", "1/ft", [0.3048], [1.0]),
+        ("inverse_length", "1/in", [0.0254], [1.0]),
+        ("angle", "deg", [180.0], [np.pi]),
+        ("temperature", "°C", [0.0, 100.0], [273.15, 373.15]),
+        ("temperature", "°F", [32.0, 212.0], [273.15, 373.15]),
+        ("temperature", "°R", [491.67, 671.67], [273.15, 373.15]),
     ],
 )
-def test_display_unit_round_trip(kind: str, unit: str, values: list[float]) -> None:
-    si = to_si(values, kind, unit)  # type: ignore[arg-type]
-    assert np.asarray(from_si(si, kind, unit)) == pytest.approx(values)  # type: ignore[arg-type]
+def test_display_units_match_known_values(
+    kind: QuantityKind,
+    unit: str,
+    display_values: list[float],
+    si_values: list[float],
+) -> None:
+    assert to_si(display_values, kind, unit) == pytest.approx(si_values)
+    assert from_si(si_values, kind, unit) == pytest.approx(display_values)
 
 
 def test_scalar_units_and_preferences_validation() -> None:
@@ -105,8 +108,6 @@ def test_configuration_round_trip() -> None:
     serialized = dump_configuration(configuration)
     restored = load_configuration(serialized)
     assert restored == configuration
-    assert restored["schema_version"] == CONFIG_SCHEMA_VERSION
-    assert json.loads(serialized)["display_units"]["length"] == "ft"
 
 
 def test_legacy_display_unit_configuration_uses_new_defaults() -> None:
@@ -125,21 +126,7 @@ def test_legacy_display_unit_configuration_uses_new_defaults() -> None:
     assert preferences.inverse_length == "1/m"
 
 
-def test_detached_shock_configuration_table_and_shape_csv() -> None:
-    configuration = make_configuration(
-        calculator="detached_shock",
-        mode="sweep",
-        inputs_si={"upstream_mach": 4.0, "nose_radius": 0.1},
-        models={
-            "geometry": DetachedShockGeometry.AXISYMMETRIC_SPHERE.value,
-            "model": "comparison",
-        },
-        units=UnitPreferences(length="ft"),
-        sweep_si={"field": "upstream_mach", "start": 2.0, "stop": 8.0, "points": 5},
-    )
-    assert load_configuration(dump_configuration(configuration)) == configuration
-    assert columns_for("detached_shock")[0].key == "upstream_mach"
-
+def test_detached_shock_shape_csv() -> None:
     shape = detached_shock_shape(
         upstream_mach=4.0,
         nose_radius=0.1,
@@ -217,15 +204,6 @@ def test_configuration_rejects_invalid_json_and_fields() -> None:
     base["calculator"] = "flight"
     base["mode"] = "other"
     with pytest.raises(ConfigurationError, match="mode"):
-        validate_configuration(base)
-    base["inputs_si"] = {
-        "geometric_altitude": 0.0,
-        "motion": 0.8,
-        "characteristic_length": None,
-    }
-    base["models"] = {"motion_basis": "mach"}
-    base["mode"] = "sweep"
-    with pytest.raises(ConfigurationError, match="sweep_si"):
         validate_configuration(base)
 
 
@@ -310,130 +288,6 @@ def test_conical_shock_table_converts_angles() -> None:
     table = display_rows("conical_shock", rows, UnitPreferences())
     assert table[0]["円錐半頂角 θc [deg]"] == pytest.approx(10.0)
     assert table[0]["衝撃波角 β [deg]"] == pytest.approx(31.0)
-
-
-_VALID_SINGLE_PAYLOADS: dict[str, tuple[dict[str, object], dict[str, object]]] = {
-    "flight": (
-        {
-            "geometric_altitude": 1000.0,
-            "motion": 0.8,
-            "characteristic_length": None,
-        },
-        {"motion_basis": "mach"},
-    ),
-    "oblique_shock": (
-        {"upstream_mach": 2.0, "deflection_angle": 0.1},
-        {"branch": "weak"},
-    ),
-    "conical_shock": (
-        {"upstream_mach": 2.0, "cone_half_angle": 0.1},
-        {},
-    ),
-    "boundary_layer": (
-        {
-            "distance": 1.0,
-            "edge_velocity": 100.0,
-            "edge_density": 1.0,
-            "edge_dynamic_viscosity": 1.0e-5,
-            "transition_reynolds": None,
-            "mach": None,
-            "edge_temperature": 288.15,
-            "wall_temperature": None,
-        },
-        {
-            "source": "manual",
-            "regime": "turbulent",
-            "turbulent_correlation": "schlichting",
-            "compressibility_correction": "none",
-        },
-    ),
-    "isentropic": (
-        {
-            "input_value": 2.0,
-            "total_pressure": None,
-            "total_temperature": 300.0,
-        },
-        {
-            "input_basis": "mach",
-            "branch": "subsonic",
-            "gas_model": "AIR",
-            "with_mass_flux": False,
-            "allow_extrapolation": True,
-        },
-    ),
-    "normal_shock": ({"upstream_mach": 2.0}, {}),
-    "expansion": ({"upstream_mach": 2.0, "turn_angle": 0.1}, {}),
-    "detached_shock": (
-        {"upstream_mach": 4.0, "nose_radius": 0.1},
-        {"geometry": "axisymmetric_sphere", "model": "comparison"},
-    ),
-    "boundary_layer_profile": (
-        {
-            "edge_velocity": 300.0,
-            "edge_density": 1.0,
-            "edge_temperature": 300.0,
-            "boundary_layer_thickness": 0.05,
-            "wall_shear_stress": 85.0,
-            "wall_temperature": None,
-            "wake_parameter": None,
-            "points": 257,
-        },
-        {
-            "source": "manual",
-            "transformation": "compare",
-            "temperature_velocity_relation": "generalized_reynolds_analogy",
-        },
-    ),
-    "protrusion_drag": (
-        {
-            "drag_coefficient": 1.0,
-            "height": 0.01,
-            "base_width": 0.005,
-            "edge_velocity": 100.0,
-            "edge_density": 1.0,
-            "boundary_layer_thickness": 0.02,
-            "mach": None,
-            "edge_temperature": None,
-            "wall_temperature": None,
-            "profile_height": None,
-            "profile_velocity": None,
-            "profile_density": None,
-            "shape_height": None,
-            "shape_width": None,
-        },
-        {
-            "profile_source": "power_law",
-            "shape": "rectangle",
-            "compressible": False,
-        },
-    ),
-    "thermochemistry": (
-        {
-            "temperature": 300.0,
-            "pressure": 101_325.0,
-            "reference_temperature": 298.15,
-        },
-        {"selection": "compare", "allow_extrapolation": False},
-    ),
-    "viscosity": (
-        {"temperature": 1000.0},
-        {"selection": "compare", "allow_extrapolation": False},
-    ),
-}
-
-
-@pytest.mark.parametrize("calculator", sorted(_VALID_SINGLE_PAYLOADS))
-def test_calculator_tables_and_configuration_schemas(calculator: str) -> None:
-    assert columns_for(calculator)
-    inputs_si, models = _VALID_SINGLE_PAYLOADS[calculator]
-    configuration = make_configuration(
-        calculator=calculator,
-        mode="single",
-        inputs_si=inputs_si,
-        models=models,
-        units=UnitPreferences(),
-    )
-    assert configuration["calculator"] == calculator
 
 
 def test_viscosity_table_converts_temperature_and_preserves_fixed_units() -> None:

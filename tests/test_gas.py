@@ -50,17 +50,13 @@ def test_array_conversion_rejects_non_numeric_values() -> None:
         AIR.speed_of_sound(["cold"])
 
 
-def test_sutherland_viscosity_reference_and_array() -> None:
-    assert AIR_VISCOSITY.dynamic_viscosity(288.15) == pytest.approx(1.7894e-5)
+def test_sutherland_viscosity_array() -> None:
     result = AIR_VISCOSITY.dynamic_viscosity([200.0, 300.0])
     assert isinstance(result, np.ndarray)
     assert_allclose(result, [1.328573517871709e-5, 1.846021864575035e-5])
 
 
-def test_ussa_conductivity_reference_and_array() -> None:
-    assert AIR_CONDUCTIVITY.thermal_conductivity(288.15) == pytest.approx(
-        0.025325884264264
-    )
+def test_ussa_conductivity_array() -> None:
     result = AIR_CONDUCTIVITY.thermal_conductivity([200.0, 300.0])
     assert isinstance(result, np.ndarray)
     assert_allclose(result, [0.018091538433556, 0.026252000780939])

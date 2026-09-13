@@ -14,8 +14,7 @@ from aerophysics.boundary_layer_profile import (
 )
 from aerophysics.detached_shock import DetachedShockGeometry
 from aerophysics.gui.adapters import (
-    conical_shock_condition,
-    conical_shock_sweep,
+    Row,
     detached_shock_condition,
     detached_shock_shape,
     detached_shock_sweep,
@@ -121,35 +120,42 @@ def test_shock_geometry_and_both_sweep_axes() -> None:
 
 
 def test_conical_shock_geometry_and_sweep_axes() -> None:
-    single = conical_shock_condition(
-        upstream_mach=2.0, cone_half_angle=np.deg2rad(10.0)
+    # Deliberate plotting inputs: physical cone solutions are exercised by AppTest.
+    rows: tuple[Row, ...] = (
+        {
+            "upstream_mach": 2.0,
+            "cone_half_angle": np.deg2rad(10.0),
+            "shock_angle": np.deg2rad(31.0),
+            "maximum_cone_half_angle": np.deg2rad(40.0),
+            "surface_mach": 1.8,
+        },
+        {
+            "upstream_mach": 2.0,
+            "cone_half_angle": np.deg2rad(20.0),
+            "shock_angle": np.deg2rad(38.0),
+            "maximum_cone_half_angle": np.deg2rad(40.0),
+            "surface_mach": 1.6,
+        },
     )
-    geometry = conical_shock_geometry(single.rows[0], UnitPreferences())
+    geometry = conical_shock_geometry(rows[0], UnitPreferences())
     assert len(geometry.data) == 2
     assert "deg" in str(geometry.layout.title.text)
     with pytest.raises(ValueError, match="successful"):
-        conical_shock_geometry(
-            {**single.rows[0], "shock_angle": None}, UnitPreferences()
-        )
-    angles = conical_shock_sweep(
-        fixed_mach=2.0,
-        fixed_cone_half_angle=np.deg2rad(10.0),
-        sweep_field="cone_half_angle",
-        start=0.0,
-        stop=np.deg2rad(20.0),
-        points=3,
+        conical_shock_geometry({**rows[0], "shock_angle": None}, UnitPreferences())
+    angles = conical_shock_trends(rows, UnitPreferences())
+    assert list(angles["角度"].data[0].x) == pytest.approx([10.0, 20.0])
+    assert list(angles["角度"].data[0].y) == pytest.approx([31.0, 38.0])
+    mach_rows = (
+        rows[0],
+        {
+            **rows[1],
+            "upstream_mach": 3.0,
+            "cone_half_angle": rows[0]["cone_half_angle"],
+        },
     )
-    assert len(conical_shock_trends(angles.rows, UnitPreferences())["角度"].data) == 3
-    mach = conical_shock_sweep(
-        fixed_mach=2.0,
-        fixed_cone_half_angle=np.deg2rad(10.0),
-        sweep_field="mach",
-        start=2.0,
-        stop=3.0,
-        points=3,
-    )
-    figures = conical_shock_trends(mach.rows, UnitPreferences())
+    figures = conical_shock_trends(mach_rows, UnitPreferences())
     assert "Mach" in str(figures["状態量"].layout.xaxis.title.text)
+    assert list(figures["状態量"].data[0].x) == pytest.approx([2.0, 3.0])
 
 
 def test_boundary_layer_figures_include_transition_and_thermal() -> None:
@@ -312,8 +318,17 @@ def test_boundary_profile_and_protrusion_figures() -> None:
     assert "抗力係数" in str(coefficient["遮蔽"].layout.xaxis.title.text)
 
 
-@pytest.mark.parametrize("shape", ["rectangle", "triangle", "ellipse"])
-def test_representative_protrusion_shape_figures(shape: str) -> None:
+@pytest.mark.parametrize(
+    ("shape", "expected_widths"),
+    [
+        ("rectangle", [0.005, 0.005, 0.005]),
+        ("triangle", [0.005, 0.0025, 0.0]),
+        ("ellipse", [0.005, 0.004330127018922193, 0.0]),
+    ],
+)
+def test_representative_protrusion_shapes_and_boundary_edge(
+    shape: str, expected_widths: list[float]
+) -> None:
     figure = protrusion_shape_figure(
         height=0.01,
         base_width=0.005,
@@ -321,8 +336,13 @@ def test_representative_protrusion_shape_figures(shape: str) -> None:
         shape=shape,
         preferences=UnitPreferences(),
     )
-    assert len(figure.data) == 1
-    assert len(figure.layout.shapes) == 1
+    width = np.asarray(figure.data[0].x, dtype=float)
+    height = np.asarray(figure.data[0].y, dtype=float)
+    assert np.interp([0.0, 0.005, 0.01], height, width) == pytest.approx(
+        expected_widths
+    )
+    assert figure.layout.shapes[0].y0 == pytest.approx(0.02)
+    assert figure.layout.shapes[0].y1 == pytest.approx(0.02)
 
 
 def test_csv_shape_and_thermochemistry_figures() -> None:

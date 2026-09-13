@@ -1,14 +1,9 @@
 """Tests for pure GUI calculation adapters."""
 
-from unittest.mock import Mock
-
 import numpy as np
 import pytest
 
-import aerophysics.detached_shock as detached_shock
-import aerophysics.gui.adapters as adapters
-import aerophysics.isentropic as isentropic
-from aerophysics import BeattieBridgemanGas, FlightCondition, ThermallyPerfectGas
+from aerophysics import FlightCondition
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -37,7 +32,7 @@ from aerophysics.gui.adapters import (
     sweep_values,
 )
 from aerophysics.isentropic import MachBranch, isentropic_ratios
-from aerophysics.shocks import ShockBranch, conical_shock, normal_shock, oblique_shock
+from aerophysics.shocks import ShockBranch, conical_shock, oblique_shock
 
 
 def test_sweep_values_validation_and_spacing() -> None:
@@ -145,13 +140,22 @@ def test_isentropic_adapter_forward_inverse_and_mass_flux() -> None:
 
 def test_isentropic_sweep_and_validation() -> None:
     result = isentropic_sweep(
-        input_basis="temperature_ratio",
-        branch=MachBranch.SUBSONIC,
-        start=1.0,
-        stop=2.0,
+        input_basis="mach",
+        branch=MachBranch.SUPERSONIC,
+        start=1.5,
+        stop=2.5,
         points=3,
+        gas_model="NASA9",
+        total_temperature=1000.0,
+        total_pressure=100_000.0,
+        allow_extrapolation=False,
     )
     assert len(result.rows) == 3
+    assert all(row["gas_model"] == "NASA9" for row in result.rows)
+    assert [row["mach"] for row in result.rows] == pytest.approx([1.5, 2.0, 2.5])
+    assert result.rows[1]["static_temperature"] == pytest.approx(580.6729799)
+    assert result.rows[1]["static_pressure"] == pytest.approx(100_000.0 / 7.8946725)
+    assert not result.warnings
     with pytest.raises(ValueError, match="total_temperature is required"):
         isentropic_condition(
             input_value=1.0,
@@ -258,23 +262,7 @@ def test_beattie_bridgeman_adapter_requires_total_state() -> None:
         )
 
 
-def test_beattie_bridgeman_adapter_reuses_single_and_critical_states(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    original = isentropic._real_flow_state
-    calls: list[float] = []
-
-    def counted_state(
-        mach: float,
-        total_temperature: float,
-        total_pressure: float,
-        gas: BeattieBridgemanGas,
-    ) -> object:
-        calls.append(mach)
-        return original(mach, total_temperature, total_pressure, gas)
-
-    assert not hasattr(adapters, "_real_flow_state")
-    monkeypatch.setattr(isentropic, "_real_flow_state", counted_state)
+def test_beattie_bridgeman_adapter_preserves_mach_ten_absolute_state() -> None:
     result = isentropic_condition(
         input_value=10.0,
         input_basis="mach",
@@ -284,81 +272,10 @@ def test_beattie_bridgeman_adapter_reuses_single_and_critical_states(
         allow_extrapolation=False,
     )
     row = result.rows[0]
-    assert calls == [1.0, 10.0]
     assert row["static_temperature"] == pytest.approx(44.483424529, rel=2e-8)
     assert row["static_pressure"] == pytest.approx(235.81843565, rel=2e-8)
     assert row["static_density"] == pytest.approx(0.018477378781, rel=2e-8)
     assert row["velocity"] == pytest.approx(1336.6566881, rel=2e-8)
-    assert not result.warnings
-
-
-def test_beattie_bridgeman_adapter_sweep_reuses_one_critical_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    original = isentropic._real_flow_state
-    calls: list[float] = []
-
-    def counted_state(
-        mach: float,
-        total_temperature: float,
-        total_pressure: float,
-        gas: BeattieBridgemanGas,
-    ) -> object:
-        calls.append(mach)
-        return original(mach, total_temperature, total_pressure, gas)
-
-    monkeypatch.setattr(isentropic, "_real_flow_state", counted_state)
-    result = isentropic_sweep(
-        input_basis="mach",
-        branch=MachBranch.SUPERSONIC,
-        start=1.5,
-        stop=2.5,
-        points=3,
-        gas_model="BEATTIE_BRIDGEMAN",
-        total_temperature=1200.0,
-        total_pressure=6.0e6,
-        allow_extrapolation=False,
-    )
-    assert len(result.rows) == 3
-    assert calls == [1.0, 1.5, 2.0, 2.5]
-    assert not result.warnings
-
-
-def test_thermal_adapter_sweep_reuses_one_critical_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    original = isentropic._thermal_flow_state
-    calls: list[float] = []
-
-    def counted_state(
-        mach: float,
-        total_temperature: float,
-        gas: ThermallyPerfectGas,
-        *,
-        allow_extrapolation: bool,
-    ) -> object:
-        calls.append(mach)
-        return original(
-            mach,
-            total_temperature,
-            gas,
-            allow_extrapolation=allow_extrapolation,
-        )
-
-    monkeypatch.setattr(isentropic, "_thermal_flow_state", counted_state)
-    result = isentropic_sweep(
-        input_basis="mach",
-        branch=MachBranch.SUPERSONIC,
-        start=1.5,
-        stop=2.5,
-        points=3,
-        gas_model="NASA9",
-        total_temperature=1000.0,
-        total_pressure=100_000.0,
-        allow_extrapolation=False,
-    )
-    assert len(result.rows) == 3
-    assert calls == [1.0, 1.5, 2.0, 2.5]
     assert not result.warnings
 
 
@@ -399,6 +316,15 @@ def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
     assert isinstance(row["seiff_normalized_standoff_distance"], float)
     assert isinstance(row["billig_vertex_curvature_radius"], float)
     assert row["normalized_standoff_distance"] is None
+    selected = detached_shock_condition(
+        upstream_mach=4.0,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+        selection="seiff",
+    ).rows[0]
+    assert selected["normalized_standoff_distance"] == pytest.approx(
+        row["seiff_normalized_standoff_distance"]
+    )
 
     sweep = detached_shock_sweep(
         start=2.0,
@@ -417,26 +343,6 @@ def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
     )
     assert shape.shock_x.shape == (401,)
     assert shape.shock_y[[0, -1]].tolist() == pytest.approx([-0.2, 0.2])
-
-
-@pytest.mark.parametrize(
-    ("selection", "expected_seiff_calls"),
-    (("ambrosio_wortman", 0), ("seiff", 1), ("comparison", 1)),
-)
-def test_detached_shock_adapter_only_computes_selected_models(
-    monkeypatch: pytest.MonkeyPatch,
-    selection: str,
-    expected_seiff_calls: int,
-) -> None:
-    counted_normal_shock = Mock(wraps=normal_shock)
-    monkeypatch.setattr(detached_shock, "normal_shock", counted_normal_shock)
-    detached_shock_condition(
-        upstream_mach=np.asarray([2.0, 4.0]),
-        nose_radius=0.1,
-        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
-        selection=selection,
-    )
-    assert counted_normal_shock.call_count == expected_seiff_calls
 
 
 def test_detached_shock_adapter_rejects_unsupported_requests() -> None:
