@@ -219,6 +219,18 @@ def test_beattie_bridgeman_pressure_checks_computed_randall_range() -> None:
         assert len(captured) == 1
 
 
+def test_beattie_bridgeman_pressure_outside_temperature_range_only() -> None:
+    gas = AIR_BEATTIE_BRIDGEMAN
+    with pytest.raises(ModelRangeError, match="temperature"):
+        gas.pressure(1300.0, 1.0, allow_extrapolation=False)
+    with pytest.warns(ApplicabilityWarning) as captured:
+        pressure = gas.pressure(1300.0, 1.0, allow_extrapolation=True)
+    assert len(captured) == 1
+    pressure_range = gas.applicable_pressure_range
+    assert pressure_range is not None
+    assert pressure_range[0] <= pressure <= pressure_range[1]
+
+
 def test_beattie_bridgeman_pressure_combines_temperature_and_pressure_range() -> None:
     gas = AIR_BEATTIE_BRIDGEMAN
     with pytest.warns(
