@@ -340,3 +340,31 @@ def test_slender_cone_returns_solution_or_typed_numerical_failure(angle: float) 
         3.0, np.deg2rad(10.0), AIR_HARMONIC_OSCILLATOR, upstream_temperature=500.0
     )
     assert regular.surface_temperature_ratio > 1.1
+
+def test_range_boundary_integration_failure_uses_typed_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aerophysics import _thermal_conical as thermal_conical
+
+    gas = HarmonicOscillatorGas(287.0, 1.4)
+    mach, temperature = 3.0, 500.0
+    mu = float(np.arcsin(1.0 / mach))
+    beta_values = np.linspace(mu, 0.5 * np.pi - 1e-7, 33)
+    failed_beta = float(beta_values[1])
+
+    def fake_surface_state(
+        _mach: float,
+        beta: float,
+        _temperature: float,
+        _gas: object,
+    ) -> None:
+        if beta <= failed_beta:
+            return None
+        raise ModelRangeError("temperature boundary")
+
+    thermal_conical.cone_limit.cache_clear()
+    monkeypatch.setattr(thermal_conical, "surface_state", fake_surface_state)
+    with pytest.raises(ShockConvergenceError, match="range boundary"):
+        thermal_conical.cone_limit(mach, temperature, gas)
+    thermal_conical.cone_limit.cache_clear()
+
