@@ -751,3 +751,44 @@ render_conical_shock(UnitPreferences())
     app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
     assert not app.exception and not app.error
     assert app.dataframe[0].value["status"].tolist() == ["out_of_range", "out_of_range"]
+
+
+def test_conical_numerical_failure_is_displayed_and_sweep_continues() -> None:
+    # Force the backend-dependent 0.1-degree failure, retaining the real solver
+    # for 10 degrees. This verifies the same GUI contract on every CI platform.
+    script = """
+from unittest.mock import patch
+import numpy as np
+from aerophysics.exceptions import ShockConvergenceError
+from aerophysics.gui import adapters
+from aerophysics.gui.pages import render_conical_shock
+from aerophysics.gui.units import UnitPreferences
+original = adapters.conical_shock
+def numerical_failure(*args, **kwargs):
+    if float(args[1]) < np.deg2rad(0.2):
+        raise ShockConvergenceError('conical shock angle is below numerical resolution')
+    return original(*args, **kwargs)
+with patch.object(adapters, 'conical_shock', side_effect=numerical_failure):
+    render_conical_shock(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="cone_shock_gas_model").set_value("HARMONIC_OSCILLATOR").run()
+    app.number_input(key="cone_shock_mach").set_value(3.0).run()
+    app.number_input(key="cone_shock_upstream_temperature").set_value(500.0).run()
+    app.number_input(key="cone_shock_angle").set_value(0.1).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception
+    assert "numerical resolution" in app.error[0].value
+    assert "cone_shock_payload" not in app.session_state
+    app.radio(key="cone_shock_mode").set_value("1変数スイープ").run()
+    app.number_input(key="cone_shock_sweep_start").set_value(0.1).run()
+    app.number_input(key="cone_shock_sweep_stop").set_value(10.0).run()
+    app.number_input(key="cone_shock_sweep_points").set_value(2).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.dataframe[0].value["status"].tolist() == ["error", "ok"]
+    app.radio(key="cone_shock_mode").set_value("single").run()
+    app.number_input(key="cone_shock_angle").set_value(10.0).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.session_state["cone_shock_payload"][0].rows[0]["status"] == "ok"

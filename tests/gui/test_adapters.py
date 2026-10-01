@@ -665,3 +665,54 @@ def test_conical_thermal_adapter_keeps_valid_weak_and_distinguishes_failures() -
         gas_model="unknown",
     )
     assert all(row["status"] == "error" for row in invalid.rows)
+
+
+def test_conical_sweep_keeps_numerical_failure_and_next_valid_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    from aerophysics import AIR_HARMONIC_OSCILLATOR
+    from aerophysics.exceptions import ShockConvergenceError
+
+    regular = conical_shock(
+        3.0, np.deg2rad(10.0), AIR_HARMONIC_OSCILLATOR, upstream_temperature=500.0
+    )
+    message = "conical shock angle is below numerical resolution"
+    monkeypatch.setattr(
+        "aerophysics.gui.adapters.conical_shock",
+        Mock(side_effect=[ShockConvergenceError(message), regular]),
+    )
+    sweep = conical_shock_sweep(
+        fixed_mach=3.0,
+        fixed_cone_half_angle=0.0,
+        sweep_field="cone_half_angle",
+        start=np.deg2rad(0.1),
+        stop=np.deg2rad(10.0),
+        points=2,
+        gas_model="HARMONIC_OSCILLATOR",
+        upstream_temperature=500.0,
+    )
+    assert [row["status"] for row in sweep.rows] == ["error", "ok"]
+    assert sweep.rows[0]["message"] == message
+    assert sweep.rows[0]["surface_temperature"] is None
+    assert sweep.rows[1]["shock_angle"] == regular.shock_angle
+    assert sweep.rows[1]["surface_temperature"] == pytest.approx(
+        500.0 * float(regular.surface_temperature_ratio)
+    )
+    # Unrelated programming/runtime errors must not be silently converted.
+    monkeypatch.setattr(
+        "aerophysics.gui.adapters.conical_shock",
+        Mock(side_effect=RuntimeError("unexpected failure")),
+    )
+    with pytest.raises(RuntimeError, match="unexpected failure"):
+        conical_shock_sweep(
+            fixed_mach=3.0,
+            fixed_cone_half_angle=0.0,
+            sweep_field="cone_half_angle",
+            start=np.deg2rad(0.1),
+            stop=np.deg2rad(10.0),
+            points=2,
+            gas_model="HARMONIC_OSCILLATOR",
+            upstream_temperature=500.0,
+        )

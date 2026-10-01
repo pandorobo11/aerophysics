@@ -26,7 +26,11 @@ from aerophysics.detached_shock import (
     billig_shock_shape,
     seiff_standoff_distance_from_mach,
 )
-from aerophysics.exceptions import ModelRangeError, NoAttachedShockError
+from aerophysics.exceptions import (
+    ModelRangeError,
+    NoAttachedShockError,
+    ShockConvergenceError,
+)
 from aerophysics.expansion import (
     maximum_prandtl_meyer_angle,
     prandtl_meyer_angle,
@@ -925,7 +929,7 @@ def conical_shock_sweep(
                 gas_model=gas_model,
                 upstream_temperature=upstream_temperature,
             )
-        except ValueError as error:
+        except (ValueError, ShockConvergenceError) as error:
             maximum: float | None = None
             if mach > 1.0 and gas_model in _SHOCK_GASES:
                 try:
@@ -936,7 +940,7 @@ def conical_shock_sweep(
                             upstream_temperature=upstream_temperature,
                         ).cone_half_angle
                     )
-                except ValueError:
+                except (ValueError, ShockConvergenceError):
                     pass
             rows.append(
                 {

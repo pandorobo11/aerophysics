@@ -19,7 +19,11 @@ from aerophysics._thermal_shocks import (
     normal_state,
     properties,
 )
-from aerophysics.exceptions import ModelRangeError, NoAttachedShockError
+from aerophysics.exceptions import (
+    ModelRangeError,
+    NoAttachedShockError,
+    ShockConvergenceError,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,7 +207,7 @@ def cone_limit(
                     boundary = middle
                 else:
                     if middle_state is None:
-                        raise RuntimeError(
+                        raise ShockConvergenceError(
                             "Taylor-Maccoll integration failed at range boundary"
                         )
                     lower = middle
@@ -217,7 +221,7 @@ def cone_limit(
         angles.append(-np.inf if state is None else state.cone_half_angle)
     peak = int(np.argmax(angles))
     if peak == 0:
-        raise RuntimeError(
+        raise ShockConvergenceError(
             "Taylor-Maccoll integration could not find an attached shock"
         )
 
@@ -232,15 +236,21 @@ def cone_limit(
         options={"xatol": 1e-12, "maxiter": 100},
     )
     if not optimum.success:
-        raise RuntimeError("thermally perfect cone-angle maximization failed")
+        raise ShockConvergenceError("thermally perfect cone-angle maximization failed")
     beta_peak = float(optimum.x)
     state = surface_state(mach, beta_peak, temperature, gas)
     if state is None:
-        raise RuntimeError("Taylor-Maccoll integration failed at the attached limit")
+        raise ShockConvergenceError(
+            "Taylor-Maccoll integration failed at the attached limit"
+        )
     # The last sample can straddle a physical peak just inside the range.
-    # Optimize that final interval before deciding the curve is truncated.
+    # Near a peak, the angle drop is quadratic and can be smaller than the
+    # angle-root tolerance even with an in-range maximum. Use beta separation
+    # instead, allowing for bounded minimization's sqrt(eps) relative stopping
+    # term and its xatol. A resolved interior maximum is a physical peak.
     if peak == len(angles) - 1 and truncated:
-        if state.cone_half_angle <= angles[-1] + 1e-10:
+        beta_uncertainty = 4.0 * (np.sqrt(np.finfo(float).eps) * abs(beta_peak) + 1e-12)
+        if available[-1] - beta_peak <= beta_uncertainty:
             return angles[-1], available[-1], False
     return state.cone_half_angle, beta_peak, True
 
@@ -271,26 +281,44 @@ def conical_state(
         def residual(beta: float) -> float:
             state = surface_state(mach, beta, temperature, gas)
             if state is None:
-                raise RuntimeError(
+                raise ShockConvergenceError(
                     "Taylor-Maccoll integration failed during root solving"
                 )
             return state.cone_half_angle - angle
 
-        beta = float(brentq(residual, mu, beta_peak, xtol=1e-12, rtol=1e-14))
+        beta, root_result = brentq(
+            residual,
+            mu,
+            beta_peak,
+            xtol=1e-12,
+            rtol=1e-14,
+            full_output=True,
+            disp=False,
+        )
+        if not root_result.converged:
+            raise ShockConvergenceError(
+                "thermally perfect conical angle root did not converge"
+            )
         if abs(residual(beta)) > 1e-10:
             # Slender cones have a steep angle residual near the Mach wave.
-            beta = float(
-                brentq(
-                    residual,
-                    mu,
-                    beta_peak,
-                    xtol=np.finfo(float).eps,
-                    rtol=4.0 * np.finfo(float).eps,
-                )
+            beta, root_result = brentq(
+                residual,
+                mu,
+                beta_peak,
+                xtol=np.finfo(float).eps,
+                rtol=4.0 * np.finfo(float).eps,
+                full_output=True,
+                disp=False,
             )
+            if not root_result.converged:
+                raise ShockConvergenceError(
+                    "thermally perfect conical angle root did not converge"
+                )
     state = surface_state(mach, beta, temperature, gas)
     if state is None:
-        raise RuntimeError("Taylor-Maccoll integration failed for the conical shock")
+        raise ShockConvergenceError(
+            "Taylor-Maccoll integration failed for the conical shock"
+        )
     if abs(state.cone_half_angle - angle) > 1e-10:
-        raise RuntimeError("conical shock angle is below numerical resolution")
+        raise ShockConvergenceError("conical shock angle is below numerical resolution")
     return beta, state

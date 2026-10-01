@@ -8,7 +8,11 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import brentq, root
 
 from aerophysics import AIR_HARMONIC_OSCILLATOR, AIR_NASA7, AIR_NASA9
-from aerophysics.exceptions import ModelRangeError, NoAttachedShockError
+from aerophysics.exceptions import (
+    ModelRangeError,
+    NoAttachedShockError,
+    ShockConvergenceError,
+)
 from aerophysics.gas import PerfectGas
 from aerophysics.real_gas import HarmonicOscillatorGas
 from aerophysics.shocks import (
@@ -258,11 +262,14 @@ def test_thermal_input_validation(solver: object) -> None:
             maximum_attached_cone_angle(3.0, AIR_NASA9, upstream_temperature=100.0)
 
 
-def test_physical_peak_just_inside_surface_temperature_range() -> None:
+@pytest.mark.parametrize("temperature_margin", [0.001, 0.1])
+def test_physical_peak_just_inside_surface_temperature_range(
+    temperature_margin: float,
+) -> None:
     perfect = PerfectGas(287.0, 1.4)
     limit = maximum_attached_cone_angle(3.0, perfect)
     peak = conical_shock(3.0, limit.cone_half_angle, perfect)
-    tmax = 500.0 * float(peak.surface_temperature_ratio) * 1.0001
+    tmax = 500.0 * float(peak.surface_temperature_ratio) + temperature_margin
     gas = HarmonicOscillatorGas(287.0, 1.4, applicable_temperature_range=(200.0, tmax))
     actual = maximum_attached_cone_angle(3.0, gas, upstream_temperature=500.0)
     assert actual.cone_half_angle == pytest.approx(limit.cone_half_angle, abs=2e-10)
@@ -285,3 +292,51 @@ def test_surface_temperature_endpoint_and_true_exceed() -> None:
     assert actual.shock_angle == pytest.approx(expected.shock_angle, abs=2e-10)
     with pytest.raises(ModelRangeError):
         conical_shock(3.0, angle + 1e-6, bounded, upstream_temperature=500.0)
+
+
+@pytest.mark.parametrize("temperature_margin", [0.001, 0.1])
+def test_temperature_boundary_before_physical_peak_is_still_range_limited(
+    temperature_margin: float,
+) -> None:
+    unbounded = HarmonicOscillatorGas(287.0, 1.4)
+    peak = maximum_attached_cone_angle(3.0, unbounded, upstream_temperature=500.0)
+    state = conical_shock(
+        3.0, peak.cone_half_angle, unbounded, upstream_temperature=500.0
+    )
+    gas = HarmonicOscillatorGas(
+        287.0,
+        1.4,
+        applicable_temperature_range=(
+            200.0,
+            500.0 * float(state.surface_temperature_ratio) - temperature_margin,
+        ),
+    )
+    with pytest.raises(ModelRangeError):
+        maximum_attached_cone_angle(3.0, gas, upstream_temperature=500.0)
+    with pytest.raises(ModelRangeError):
+        conical_shock(
+            3.0, float(peak.cone_half_angle) + 1e-6, gas, upstream_temperature=500.0
+        )
+
+
+@pytest.mark.parametrize("angle", [0.01, 0.1])
+def test_slender_cone_returns_solution_or_typed_numerical_failure(angle: float) -> None:
+    # Near-Mach-wave roots depend on floating-point/backend details. A failure
+    # must be identifiable without treating it as range failure or detachment.
+    try:
+        result = conical_shock(
+            3.0, np.deg2rad(angle), AIR_HARMONIC_OSCILLATOR, upstream_temperature=500.0
+        )
+    except ShockConvergenceError as error:
+        assert str(error)
+    else:
+        assert (
+            np.arcsin(1.0 / 3.0)
+            < result.shock_angle
+            < np.deg2rad(10.0) + np.arcsin(1.0 / 3.0)
+        )
+        assert 1.0 < result.surface_temperature_ratio < 1.01
+    regular = conical_shock(
+        3.0, np.deg2rad(10.0), AIR_HARMONIC_OSCILLATOR, upstream_temperature=500.0
+    )
+    assert regular.surface_temperature_ratio > 1.1

@@ -16,6 +16,7 @@ from aerophysics.exceptions import (
     ApplicabilityWarning,
     ModelRangeError,
     NoAttachedShockError,
+    ShockConvergenceError,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -177,6 +178,8 @@ def test_release_install_instructions_follow_package_version() -> None:
 def test_public_diagnostics() -> None:
     assert issubclass(ModelRangeError, ValueError)
     assert issubclass(NoAttachedShockError, ValueError)
+    assert issubclass(ShockConvergenceError, RuntimeError)
+    assert not issubclass(ShockConvergenceError, ValueError)
     assert issubclass(ApplicabilityWarning, UserWarning)
 
 

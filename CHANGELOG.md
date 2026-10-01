@@ -39,6 +39,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Preserve an in-range thermal conical attached limit when its temperature
+  boundary is close to the physical maximum. Distinguish shock convergence
+  failures from range and detachment errors, and retain failed GUI sweep points
+  without discarding later valid results.
+
 - Keep Beattie--Bridgeman density inversion on the lowest-density stable gas
   branch when custom coefficients permit multiple roots.
 - Avoid spurious thermally perfect area-inversion applicability warnings caused

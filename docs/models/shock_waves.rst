@@ -313,6 +313,16 @@ exposed, as in the original conical API. The search assumes the usual
 single-maximum cone-angle curve for a convex caloric gas. Composition changes,
 chemical reactions, and vibrational nonequilibrium are excluded.
 
+The temperature-boundary classification uses the shock-angle separation
+between the optimized maximum and the boundary, accounting for the numerical
+maximizer's stopping precision. An angle-height difference alone is
+insufficient near the flat top of the cone-angle curve. Numerical integration
+or root-resolution failure raises
+:class:`~aerophysics.exceptions.ShockConvergenceError`, distinct from physical
+detachment or temperature-range failure. Very slender cones can reach this
+limit because the shock angle approaches the Mach wave within floating-point
+resolution; the solver does not inflate its angular tolerance to return a state.
+
 >>> from aerophysics import AIR_HARMONIC_OSCILLATOR
 >>> thermal_cone = conical_shock(
 ...     3.0, degrees_to_radians(10.0), gas=AIR_HARMONIC_OSCILLATOR,

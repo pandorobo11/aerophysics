@@ -13,6 +13,7 @@ from aerophysics.boundary_layer import (
     CompressibilityCorrection,
     TurbulentCorrelation,
 )
+from aerophysics.exceptions import ShockConvergenceError
 from aerophysics.gui.adapters import (
     _SHOCK_GASES,
     CalculationResult,
@@ -677,7 +678,7 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                             upstream_temperature=upstream_temperature,
                         ).cone_half_angle
                     )
-                except ValueError:
+                except (ValueError, ShockConvergenceError):
                     default_limit = float(np.deg2rad(30.0))
                 start_si = float(sweep.get("start", 0.0))
                 stop_si = float(sweep.get("stop", default_limit * 1.05))
@@ -761,7 +762,7 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                 units=preferences,
                 sweep_si=sweep_config,
             )
-        except ValueError as error:
+        except (ValueError, ShockConvergenceError) as error:
             st.error(str(error), icon="🚫")
         else:
             st.session_state["cone_shock_payload"] = (result, configuration)

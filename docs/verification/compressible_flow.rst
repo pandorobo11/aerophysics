@@ -110,6 +110,14 @@ does not. Broadcasting, zero-cone limits, physical detachment, and GUI settings
 replay are also checked. These are mathematical model verification cases,
 not experimental validation of frozen high-temperature air.
 
+Additional review regressions place the temperature boundary only 0.001 K
+above or below the surface temperature at the physical maximum, checking
+attached-limit availability and range/detachment classification. Slender-cone
+inputs exercise successful solutions or typed numerical failure, depending on
+the numerical backend. Injected convergence failures test the same 0.1-degree
+error/10-degree success sweep and single-calculation GUI contract on every
+platform without requiring a particular floating-point failure to occur.
+
 Results
 -------
 
