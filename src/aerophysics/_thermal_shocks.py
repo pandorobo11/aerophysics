@@ -107,13 +107,20 @@ def normal_state(
     upper = min(maximum, 2.0 * upstream_temperature)
     while residual(upper) < 0.0:
         if upper == maximum:
+            # The polar endpoint is computed from Tmax; its reconstructed
+            # normal speed can round outward by a few ulps. Adopt Tmax itself
+            # only for a machine-precision residual, never a same-sign bracket.
+            if residual(upper) >= -4.0 * np.finfo(float).eps:
+                temperature = upper
+                break
             raise ModelRangeError(
                 "downstream shock temperature exceeds the gas temperature range"
             )
         upper = min(maximum, 2.0 * upper)
-    temperature = float(
-        brentq(residual, upstream_temperature, upper, xtol=1e-10, rtol=1e-14)
-    )
+    else:
+        temperature = float(
+            brentq(residual, upstream_temperature, upper, xtol=1e-10, rtol=1e-14)
+        )
     _, velocity_ratio = _hugoniot(temperature, upstream_temperature, upstream, gas)
     downstream = properties(temperature, gas)
     temperature_ratio = temperature / upstream_temperature

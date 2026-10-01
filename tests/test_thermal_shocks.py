@@ -275,6 +275,125 @@ def test_temperature_range_does_not_discard_valid_weak_shock() -> None:
         theta_from_shock_angle(20.0, 0.5 * np.pi, AIR_NASA9, upstream_temperature=300.0)
 
 
+def test_harmonic_preset_retains_weak_shock_at_rounded_polar_endpoint() -> None:
+    result = oblique_shock(
+        3.0,
+        np.deg2rad(10.0),
+        gas=AIR_HARMONIC_OSCILLATOR,
+        upstream_temperature=1000.0,
+    )
+    # Independent coupled mass/momentum/enthalpy/turn solution, not a polar
+    # endpoint approximation. Keep full precision for the existing tolerance.
+    assert np.rad2deg(result.shock_angle) == pytest.approx(27.04320626499524, rel=2e-11)
+    temperature = 1000.0 * float(result.static_temperature_ratio)
+    assert temperature == pytest.approx(1196.3981695951495, rel=2e-11)
+    assert temperature <= AIR_HARMONIC_OSCILLATOR.temperature_range[1]
+    with pytest.raises(ModelRangeError):
+        normal_shock(3.0, AIR_HARMONIC_OSCILLATOR, upstream_temperature=1000.0)
+    with pytest.raises(ModelRangeError):
+        oblique_shock(
+            3.0,
+            np.deg2rad(10.0),
+            ShockBranch.STRONG,
+            AIR_HARMONIC_OSCILLATOR,
+            upstream_temperature=1000.0,
+        )
+
+
+@pytest.mark.parametrize("gamma", [1.4, 5.0 / 3.0])
+@pytest.mark.parametrize("temperature", [500.0, 1000.0])
+def test_finite_constant_cp_range_retains_weak_shock_at_polar_endpoint(
+    gamma: float, temperature: float
+) -> None:
+    gas = HarmonicOscillatorGas(
+        287.0, gamma, applicable_temperature_range=(400.0, 2.0 * temperature)
+    )
+    perfect = PerfectGas(heat_capacity_ratio=gamma, specific_gas_constant=287.0)
+    expected = oblique_shock(3.0, np.deg2rad(10.0), gas=perfect)
+    actual = oblique_shock(
+        3.0, np.deg2rad(10.0), gas=gas, upstream_temperature=temperature
+    )
+    for field in fields(expected):
+        assert getattr(actual, field.name) == pytest.approx(
+            getattr(expected, field.name), rel=2e-9, abs=1e-11
+        )
+    assert (
+        temperature * float(actual.static_temperature_ratio) <= gas.temperature_range[1]
+    )
+    # The unavailable maximum must not be reported as an attached limit.
+    with pytest.raises(ModelRangeError):
+        maximum_attached_deflection(3.0, gas, upstream_temperature=temperature)
+    with pytest.raises(ModelRangeError):
+        normal_shock(3.0, gas, upstream_temperature=temperature)
+    with pytest.raises(ModelRangeError):
+        oblique_shock(
+            3.0,
+            np.deg2rad(10.0),
+            ShockBranch.STRONG,
+            gas,
+            upstream_temperature=temperature,
+        )
+    with pytest.raises(ModelRangeError):
+        oblique_shock(3.0, np.deg2rad(30.0), gas=gas, upstream_temperature=temperature)
+
+
+@pytest.mark.parametrize("gamma", [1.4, 5.0 / 3.0])
+def test_normal_shock_accepts_temperature_boundary_but_rejects_range_excess(
+    gamma: float,
+) -> None:
+    gas = HarmonicOscillatorGas(
+        287.0, gamma, applicable_temperature_range=(400.0, 2000.0)
+    )
+    # Invert the independent constant-gamma temperature-ratio quadratic for
+    # T2/T1=2. The boundary root must be adopted without an invalid brentq bracket.
+    a = 2.0 * gamma * (gamma - 1.0)
+    b = 4.0 * gamma - (gamma - 1.0) ** 2 - 2.0 * (gamma + 1.0) ** 2
+    c = -2.0 * (gamma - 1.0)
+    mach = float(np.sqrt((-b + np.sqrt(b * b - 4.0 * a * c)) / (2.0 * a)))
+    result = normal_shock(mach, gas, upstream_temperature=1000.0)
+    assert 1000.0 * float(result.static_temperature_ratio) == pytest.approx(
+        2000.0, rel=2e-11
+    )
+    assert 1000.0 * float(result.static_temperature_ratio) <= 2000.0
+    # This perturbation is far above machine epsilon and requires T2>Tmax.
+    with pytest.raises(ModelRangeError):
+        normal_shock(mach * (1.0 + 1e-10), gas, upstream_temperature=1000.0)
+
+
+def test_truncated_polar_preserves_strong_branch_limit_and_detachment() -> None:
+    gas = HarmonicOscillatorGas(
+        287.0, 1.4, applicable_temperature_range=(400.0, 2500.0)
+    )
+    perfect = PerfectGas(heat_capacity_ratio=1.4, specific_gas_constant=287.0)
+    actual_limit = maximum_attached_deflection(3.0, gas, upstream_temperature=1000.0)
+    expected_limit = maximum_attached_deflection(3.0, perfect)
+    assert actual_limit.deflection_angle == pytest.approx(
+        expected_limit.deflection_angle, abs=1e-11
+    )
+    for branch in ShockBranch:
+        expected = oblique_shock(3.0, np.deg2rad(33.5), branch, perfect)
+        actual = oblique_shock(
+            3.0, np.deg2rad(33.5), branch, gas, upstream_temperature=1000.0
+        )
+        for field in fields(expected):
+            assert getattr(actual, field.name) == pytest.approx(
+                getattr(expected, field.name), rel=2e-9, abs=1e-11
+            )
+        assert 1000.0 * float(actual.static_temperature_ratio) <= 2500.0
+        with pytest.raises(NoAttachedShockError):
+            oblique_shock(
+                3.0,
+                float(actual_limit.deflection_angle) + 0.001,
+                branch,
+                gas,
+                upstream_temperature=1000.0,
+            )
+    with pytest.raises(ModelRangeError):
+        oblique_shock(
+            3.0, np.deg2rad(32.0), ShockBranch.STRONG, gas, upstream_temperature=1000.0
+        )
+
+
 @pytest.mark.parametrize("temperature", [0.0, -1.0, np.nan, np.inf, 199.0, 6001.0])
 def test_invalid_temperature(temperature: float) -> None:
     with pytest.raises(ValueError):
