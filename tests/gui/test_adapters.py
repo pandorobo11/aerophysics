@@ -667,6 +667,25 @@ def test_conical_thermal_adapter_keeps_valid_weak_and_distinguishes_failures() -
     assert all(row["status"] == "error" for row in invalid.rows)
 
 
+def test_conical_condition_keeps_result_when_limit_convergence_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    from aerophysics.exceptions import ShockConvergenceError
+
+    monkeypatch.setattr(
+        "aerophysics.gui.adapters.maximum_attached_cone_angle",
+        Mock(side_effect=ShockConvergenceError("limit solve failed")),
+    )
+    result = conical_shock_condition(
+        upstream_mach=3.0,
+        cone_half_angle=np.deg2rad(10.0),
+    )
+    assert result.rows[0]["status"] == "ok"
+    assert result.rows[0]["maximum_cone_half_angle"] is None
+
+
 def test_conical_sweep_keeps_numerical_failure_and_next_valid_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
