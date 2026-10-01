@@ -83,6 +83,33 @@ invalid inputs, and a Mach-20 weak shock that remains within the NASA fit
 while its normal shock and attached limit are outside it. GUI tests cover
 model selection, static-temperature units, sweeps, and settings replay.
 
+Thermally perfect conical verification
+--------------------------------------
+
+``tests/test_thermal_conical.py`` checks the weak conical solution and its
+physical attached limit. Constant-cp harmonic models recover the existing
+Taylor--Maccoll solver for gamma 1.2, 1.4, and 5/3 at Mach 1.2, 3, and 10;
+state comparisons use ``rtol=3e-9`` and ``atol=2e-10``. The existing
+calorically perfect SP-3004 comparisons remain unchanged.
+
+An independent reference uses :math:`c_p/R=3.5+0.001T`, Mach 4, 500 K, and
+a 15-degree cone. It solves the shock's mass, momentum, and energy equations
+simultaneously, then integrates radial velocity, polar velocity, and
+temperature with RK45 and analytical caloric properties. This avoids the
+production temperature Hugoniot, enthalpy inversion, property evaluator,
+and DOP853 integrator. State ratios and Mach number agree within ``rtol=3e-9``;
+shock angle agrees within ``2e-10`` rad. A nonzero enthalpy reference offset
+also checks that vacuum-velocity normalization is not assumed.
+
+NASA7, NASA9, and harmonic presets satisfy total-enthalpy conservation and
+entropy-based total-pressure loss within ``rtol=3e-10``, and the ideal-gas
+state-ratio identity within ``rtol=2e-12``. Temperature-range regressions
+include valid weak cones with inaccessible normal shocks or attached limits,
+and a case whose shock temperature fits the range but surface temperature
+does not. Broadcasting, zero-cone limits, physical detachment, and GUI settings
+replay are also checked. These are mathematical model verification cases,
+not experimental validation of frozen high-temperature air.
+
 Results
 -------
 

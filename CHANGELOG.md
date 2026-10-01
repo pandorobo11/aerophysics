@@ -7,6 +7,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Extend weak conical shocks and physical attached-cone limits to frozen
+  thermally perfect gases using temperature-dependent Taylor--Maccoll flow.
+  Enforce static temperature ranges through the cone surface and add thermal
+  gas selection, temperatures, sweeps, and settings replay to the conical GUI.
+
 - Extend normal and oblique shock relations to frozen thermally perfect gases
   using NASA7/NASA9 or harmonic-oscillator heat capacities and upstream static
   temperature, including weak/strong angle inversion and attached limits.

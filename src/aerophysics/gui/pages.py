@@ -598,7 +598,7 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     st.title("円錐衝撃波")
     st.caption("Taylor–Maccoll理論による軸対称・付着弱解を計算します。")
     imported = pop_pending_configuration("conical_shock")
-    inputs, _, sweep = _configuration_defaults(imported)
+    inputs, models, sweep = _configuration_defaults(imported)
     render_configuration_import("conical_shock", "cone_shock")
     render_reset_button("cone_shock", "cone_shock_payload")
     default_mode = str(imported.get("mode", "single")) if imported else "single"
@@ -627,6 +627,28 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
             key="cone_shock_angle",
             min_value=0.0,
         )
+        gas_names = tuple(_SHOCK_GASES)
+        gas_model = st.selectbox(
+            "気体モデル",
+            gas_names,
+            index=gas_names.index(str(models.get("gas_model", "AIR"))),
+            key="cone_shock_gas_model",
+        )
+        assert gas_model is not None
+        upstream_temperature = None
+        if gas_model != "AIR":
+            temperature_display = finite_number(
+                f"上流静温 T∞ [{preferences.temperature}]",
+                _display(
+                    float(inputs.get("upstream_temperature") or 500.0),
+                    "temperature",
+                    preferences.temperature,
+                ),
+                key="cone_shock_upstream_temperature",
+            )
+            upstream_temperature = _si(
+                temperature_display, "temperature", preferences.temperature
+            )
         sweep_field = "cone_half_angle"
         sweep_start = sweep_stop = 0.0
         points = 31
@@ -647,7 +669,16 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                 args=(("cone_shock_sweep_start", "cone_shock_sweep_stop"),),
             )
             if sweep_field == "cone_half_angle":
-                default_limit = float(maximum_attached_cone_angle(mach).cone_half_angle)
+                try:
+                    default_limit = float(
+                        maximum_attached_cone_angle(
+                            mach,
+                            _SHOCK_GASES[gas_model],
+                            upstream_temperature=upstream_temperature,
+                        ).cone_half_angle
+                    )
+                except ValueError:
+                    default_limit = float(np.deg2rad(30.0))
                 start_si = float(sweep.get("start", 0.0))
                 stop_si = float(sweep.get("stop", default_limit * 1.05))
                 start_default = _display(start_si, "angle", preferences.angle)
@@ -686,7 +717,10 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
             sweep_config: dict[str, object] | None = None
             if mode == "single":
                 result = conical_shock_condition(
-                    upstream_mach=mach, cone_half_angle=angle_si
+                    upstream_mach=mach,
+                    cone_half_angle=angle_si,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
                 )
             else:
                 start_si = (
@@ -706,6 +740,8 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                     start=start_si,
                     stop=stop_si,
                     points=points,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
                 )
                 sweep_config = {
                     "field": sweep_field,
@@ -719,8 +755,9 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                 inputs_si={
                     "upstream_mach": mach,
                     "cone_half_angle": angle_si,
+                    "upstream_temperature": upstream_temperature,
                 },
-                models={},
+                models={"gas_model": gas_model},
                 units=preferences,
                 sweep_si=sweep_config,
             )
@@ -733,7 +770,8 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
             st.write(
-                "迎角0°の鋭い円錐、完全気体、軸対称・非粘性の付着弱解を仮定します。"
+                "迎角0°の鋭い円錐、組成固定の理想気体、軸対称・非粘性の付着弱解を仮定します。"
+                "温度依存比熱モデルでは衝撃波から円錐表面まで静温が適用範囲内である必要があります。"
             )
         return
     result, configuration = payload
@@ -763,7 +801,9 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     )
     invalid = sum(row["status"] != "ok" for row in result.rows)
     if invalid:
-        st.warning(f"{invalid}点は付着弱解がないため欠損値としました。")
+        st.warning(
+            f"{invalid}点は付着弱解または温度範囲の条件を満たさないため欠損値としました。"
+        )
     with st.expander("モデルの前提・適用範囲"):
         st.write(
             "角度はGUI境界でradianへ変換し、Taylor–Maccoll方程式を数値積分します。"

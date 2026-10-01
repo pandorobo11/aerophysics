@@ -629,3 +629,39 @@ def test_thermal_oblique_adapter_range_errors_keep_distinct_statuses() -> None:
         gas_model="unknown",
     )
     assert all(row["status"] == "error" for row in bad.rows)
+
+
+def test_conical_thermal_adapter_keeps_valid_weak_and_distinguishes_failures() -> None:
+    result = conical_shock_condition(
+        upstream_mach=3.0,
+        cone_half_angle=np.deg2rad(10.0),
+        gas_model="HARMONIC_OSCILLATOR",
+        upstream_temperature=1000.0,
+    )
+    assert result.rows[0]["maximum_cone_half_angle"] is None
+    assert result.rows[0]["status"] == "ok"
+    assert result.rows[0]["surface_temperature"] == pytest.approx(
+        1110.94576617, rel=3e-9
+    )
+    sweep = conical_shock_sweep(
+        fixed_mach=3.0,
+        fixed_cone_half_angle=0.0,
+        sweep_field="cone_half_angle",
+        start=np.deg2rad(10.0),
+        stop=np.deg2rad(50.0),
+        points=2,
+        gas_model="HARMONIC_OSCILLATOR",
+        upstream_temperature=1000.0,
+    )
+    assert [row["status"] for row in sweep.rows] == ["ok", "out_of_range"]
+    assert sweep.rows[1]["surface_temperature"] is None
+    invalid = conical_shock_sweep(
+        fixed_mach=3.0,
+        fixed_cone_half_angle=0.0,
+        sweep_field="mach",
+        start=2.0,
+        stop=3.0,
+        points=2,
+        gas_model="unknown",
+    )
+    assert all(row["status"] == "error" for row in invalid.rows)

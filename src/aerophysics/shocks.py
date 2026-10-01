@@ -1,4 +1,4 @@
-"""Normal and oblique ideal-gas shocks, and calorically perfect conical shocks.
+"""Normal, oblique and conical calorically or thermally perfect gas shocks.
 
 Angles are expressed in radians. Normal- and oblique-shock state ratios use
 downstream over upstream static quantities. Conical-shock static ratios use
@@ -24,6 +24,7 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import brentq, minimize_scalar
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
+from aerophysics._thermal_conical import cone_limit, conical_state
 from aerophysics._thermal_shocks import (
     ThermalShockGas,
     beta_from_theta,
@@ -621,16 +622,38 @@ def _validate_conical_mach(upstream_mach: ArrayLike) -> tuple[FloatArray, bool]:
 
 
 def maximum_attached_cone_angle(
-    upstream_mach: ArrayLike, gas: PerfectGas = AIR
+    upstream_mach: ArrayLike,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> AttachedConicalShockLimit:
-    """Return the largest half-angle permitting an attached conical shock."""
+    """Return the largest half-angle permitting an attached conical shock.
+
+    Thermal gases require upstream static temperature in kelvin. Raise
+    ModelRangeError if the physical limit cannot be reached within the gas
+    temperature range, including the flow between the shock and cone surface.
+    """
     mach, scalar = _validate_conical_mach(upstream_mach)
+    temperature = np.zeros_like(mach)
+    if not isinstance(gas, PerfectGas):
+        mach, _, temperature, scalar = _thermal_inputs(
+            mach, np.zeros_like(mach), scalar, upstream_temperature, gas
+        )
     cone_angle = np.empty_like(mach)
     beta = np.empty_like(mach)
     for index, value in np.ndenumerate(mach):
-        cone_angle[index], beta[index] = _attached_conical_limit_scalar(
-            float(value), gas
-        )
+        if isinstance(gas, PerfectGas):
+            cone_angle[index], beta[index] = _attached_conical_limit_scalar(
+                float(value), gas
+            )
+        else:
+            cone_angle[index], beta[index], full_peak = cone_limit(
+                float(value), float(temperature[index]), gas
+            )
+            if not full_peak:
+                raise ModelRangeError(
+                    "attached conical limit exceeds the gas temperature range"
+                )
 
     def output(values: FloatArray) -> FloatResult:
         return return_float(values, scalar=scalar)
@@ -688,9 +711,17 @@ def _conical_shock_scalar(
 def conical_shock(
     upstream_mach: ArrayLike,
     cone_half_angle: ArrayLike,
-    gas: PerfectGas = AIR,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> ConicalShockResult:
-    """Return the cone-surface state behind an attached Taylor-Maccoll shock."""
+    """Return the cone-surface state on the weak Taylor-Maccoll branch.
+
+    Thermal gases require upstream static temperature in kelvin. All static
+    states from the free stream through the cone surface must lie in the gas
+    temperature range; thermodynamic extrapolation is never used. Angles are
+    radians and the result ratios retain the cone-surface/free-stream convention.
+    """
     mach, mach_scalar = _validate_conical_mach(upstream_mach)
     angle, angle_scalar = as_float_array(cone_half_angle, name="cone_half_angle")
     try:
@@ -702,6 +733,11 @@ def conical_shock(
     if np.any((angle < 0.0) | (angle >= 0.5 * np.pi)):
         raise ValueError("cone_half_angle must be between zero and pi/2")
     scalar = mach_scalar and angle_scalar
+    temperature = np.zeros_like(mach)
+    if not isinstance(gas, PerfectGas):
+        mach, angle, temperature, scalar = _thermal_inputs(
+            mach, angle, scalar, upstream_temperature, gas
+        )
 
     beta = np.empty_like(mach)
     post_shock_mach = np.empty_like(mach)
@@ -710,9 +746,20 @@ def conical_shock(
     surface_density = np.empty_like(mach)
     surface_temperature = np.empty_like(mach)
     total_pressure = np.empty_like(mach)
-    gamma = gas.heat_capacity_ratio
-
     for index, value in np.ndenumerate(mach):
+        if not isinstance(gas, PerfectGas):
+            beta_value, thermal = conical_state(
+                float(value), float(angle[index]), float(temperature[index]), gas
+            )
+            beta[index] = beta_value
+            post_shock_mach[index] = thermal.post_shock_mach
+            surface_mach[index] = thermal.surface_mach
+            surface_pressure[index] = thermal.pressure_ratio
+            surface_density[index] = thermal.density_ratio
+            surface_temperature[index] = thermal.temperature_ratio
+            total_pressure[index] = thermal.total_pressure_ratio
+            continue
+        gamma = gas.heat_capacity_ratio
         beta_value, state = _conical_shock_scalar(
             float(value), float(angle[index]), gas
         )

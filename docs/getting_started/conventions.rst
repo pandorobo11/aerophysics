@@ -102,7 +102,8 @@ Flow and boundary-layer selection
    * - Normal, oblique, conical, or detached shock
      - :doc:`../models/shock_waves`
      - Geometry and weak/strong branch where applicable
-     - Most APIs assume a calorically perfect gas
+     - Attached shocks support frozen thermally perfect gas; detached models
+       are geometric correlations
    * - Centered expansion
      - :mod:`aerophysics.expansion`
      - Upstream Mach and nonnegative turn

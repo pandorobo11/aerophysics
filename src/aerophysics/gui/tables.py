@@ -74,6 +74,9 @@ SHOCK_COLUMNS = (
 )
 
 CONICAL_SHOCK_COLUMNS = (
+    Column("gas_model", "気体モデル"),
+    Column("upstream_temperature", "上流静温 T∞", "temperature"),
+    Column("surface_temperature", "表面静温 Tₛ", "temperature"),
     Column("upstream_mach", "上流 Mach M∞"),
     Column("cone_half_angle", "円錐半頂角 θc", "angle"),
     Column("maximum_cone_half_angle", "最大付着半頂角 θc,max", "angle"),

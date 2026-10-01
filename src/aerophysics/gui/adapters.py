@@ -847,15 +847,33 @@ def oblique_shock_sweep(
 
 
 def conical_shock_condition(
-    *, upstream_mach: float, cone_half_angle: float
+    *,
+    upstream_mach: float,
+    cone_half_angle: float,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
 ) -> CalculationResult:
     """Calculate one axisymmetric Taylor-Maccoll conical-shock state."""
-    result = conical_shock(upstream_mach, cone_half_angle)
-    limit = maximum_attached_cone_angle(upstream_mach)
+    try:
+        gas = _SHOCK_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("unknown shock gas_model") from error
+    result = conical_shock(
+        upstream_mach, cone_half_angle, gas, upstream_temperature=upstream_temperature
+    )
+    maximum: float | None = None
+    try:
+        maximum = float(
+            maximum_attached_cone_angle(
+                upstream_mach, gas, upstream_temperature=upstream_temperature
+            ).cone_half_angle
+        )
+    except ModelRangeError:
+        pass  # A valid weak cone need not have a representable attached limit.
     row: Row = {
         "upstream_mach": float(result.upstream_mach),
         "cone_half_angle": float(result.cone_half_angle),
-        "maximum_cone_half_angle": float(limit.cone_half_angle),
+        "maximum_cone_half_angle": maximum,
         "shock_angle": float(result.shock_angle),
         "post_shock_mach": float(result.post_shock_mach),
         "surface_mach": float(result.surface_mach),
@@ -866,6 +884,16 @@ def conical_shock_condition(
         "status": "ok",
         "message": "",
     }
+    if gas_model != "AIR":
+        assert upstream_temperature is not None
+        row.update(
+            {
+                "gas_model": gas_model,
+                "upstream_temperature": upstream_temperature,
+                "surface_temperature": upstream_temperature
+                * float(result.surface_temperature_ratio),
+            }
+        )
     return CalculationResult((row,))
 
 
@@ -877,6 +905,8 @@ def conical_shock_sweep(
     start: float,
     stop: float,
     points: int,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
 ) -> CalculationResult:
     """Sweep Mach or cone half-angle while retaining non-attached rows."""
     if sweep_field not in {"mach", "cone_half_angle"}:
@@ -889,11 +919,25 @@ def conical_shock_sweep(
             float(value) if sweep_field == "cone_half_angle" else fixed_cone_half_angle
         )
         try:
-            result = conical_shock_condition(upstream_mach=mach, cone_half_angle=angle)
+            result = conical_shock_condition(
+                upstream_mach=mach,
+                cone_half_angle=angle,
+                gas_model=gas_model,
+                upstream_temperature=upstream_temperature,
+            )
         except ValueError as error:
             maximum: float | None = None
-            if mach > 1.0:
-                maximum = float(maximum_attached_cone_angle(mach).cone_half_angle)
+            if mach > 1.0 and gas_model in _SHOCK_GASES:
+                try:
+                    maximum = float(
+                        maximum_attached_cone_angle(
+                            mach,
+                            _SHOCK_GASES[gas_model],
+                            upstream_temperature=upstream_temperature,
+                        ).cone_half_angle
+                    )
+                except ValueError:
+                    pass
             rows.append(
                 {
                     "upstream_mach": mach,
@@ -906,10 +950,24 @@ def conical_shock_sweep(
                     "surface_density_ratio": None,
                     "surface_temperature_ratio": None,
                     "total_pressure_ratio": None,
-                    "status": "no_attached_shock",
+                    "status": (
+                        "no_attached_shock"
+                        if isinstance(error, NoAttachedShockError)
+                        else "out_of_range"
+                        if isinstance(error, ModelRangeError)
+                        else "error"
+                    ),
                     "message": str(error),
                 }
             )
+            if gas_model != "AIR":
+                rows[-1].update(
+                    {
+                        "gas_model": gas_model,
+                        "upstream_temperature": upstream_temperature,
+                        "surface_temperature": None,
+                    }
+                )
         else:
             rows.append(result.rows[0])
     return CalculationResult(tuple(rows))

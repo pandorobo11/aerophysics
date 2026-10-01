@@ -61,6 +61,12 @@ even when its polar maximum exceeds the database range; the unavailable
 maximum is then left blank. See :doc:`../models/shock_waves` for frozen-gas
 assumptions and temperature ranges.
 
+The **Conical shock** page offers the same gas models and static-temperature
+input, with Mach/cone-half-angle sweeps and settings replay. Thermal results
+include upstream and cone-surface temperatures. The entire trajectory from
+the shock to the surface must stay in the model range. An unavailable physical
+attached limit is left blank while valid weak solutions remain usable.
+
 Case handoff
 ------------
 
