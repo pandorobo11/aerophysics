@@ -786,6 +786,7 @@ with patch.object(adapters, 'conical_shock', side_effect=numerical_failure):
     app.number_input(key="cone_shock_sweep_points").set_value(2).run()
     app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
     assert not app.exception and not app.error
+    assert app.warning and "数値" in app.warning[0].value
     assert app.dataframe[0].value["status"].tolist() == ["error", "ok"]
     app.radio(key="cone_shock_mode").set_value("single").run()
     app.number_input(key="cone_shock_angle").set_value(10.0).run()
