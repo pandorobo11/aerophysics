@@ -341,10 +341,11 @@ def test_slender_cone_returns_solution_or_typed_numerical_failure(angle: float) 
     )
     assert regular.surface_temperature_ratio > 1.1
 
+
 def test_range_boundary_integration_failure_uses_typed_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aerophysics import _thermal_conical as thermal_conical
+    import aerophysics._thermal_conical as thermal_conical
 
     gas = HarmonicOscillatorGas(287.0, 1.4)
     mach, temperature = 3.0, 500.0
