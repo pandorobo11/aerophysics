@@ -15,6 +15,9 @@ changing the requested physics.
 Thermally perfect conical numerical integration, maximization, or root
 resolution failures raise :class:`~aerophysics.exceptions.ShockConvergenceError`,
 a subclass of ``RuntimeError``. This does not imply temperature-range failure
-or physical detachment. The conical GUI displays this failure for a single
-calculation; a sweep retains that point with ``status="error"`` and continues
-to the remaining points. Unrelated runtime errors are not suppressed.
+or physical detachment. If the requested state itself fails, the conical GUI
+displays this failure for a single calculation; a sweep retains that point with
+``status="error"`` and continues to the remaining points. If only the auxiliary
+attached-limit calculation fails after a valid state was found, the result is
+kept and the maximum angle is left blank. Unrelated runtime errors are not
+suppressed.
