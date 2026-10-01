@@ -212,7 +212,10 @@ def cone_limit(
                         )
                     lower = middle
             state = surface_state(mach, lower, temperature, gas)
-            assert state is not None
+            if state is None:
+                raise ShockConvergenceError(
+                    "Taylor-Maccoll integration failed at range boundary"
+                )
             available.append(lower)
             angles.append(state.cone_half_angle)
             truncated = True
