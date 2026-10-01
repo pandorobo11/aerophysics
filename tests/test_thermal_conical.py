@@ -340,5 +340,3 @@ def test_slender_cone_returns_solution_or_typed_numerical_failure(angle: float) 
         3.0, np.deg2rad(10.0), AIR_HARMONIC_OSCILLATOR, upstream_temperature=500.0
     )
     assert regular.surface_temperature_ratio > 1.1
-
-
