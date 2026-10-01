@@ -679,3 +679,117 @@ render_protrusion_drag(UnitPreferences())
     assert not app.error
     assert len(app.dataframe[0].value) == 3
     assert app.metric[0].value == "—"
+
+
+@pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
+def test_conical_thermal_settings_replay_and_units(gas_model: str) -> None:
+    from aerophysics.gui.config import dump_configuration, load_configuration
+
+    script = """
+from aerophysics.gui.pages import render_conical_shock
+from aerophysics.gui.components import render_unit_sidebar
+render_conical_shock(render_unit_sidebar())
+"""
+    app = AppTest.from_string(script, default_timeout=60).run()
+    assert app.selectbox(key="cone_shock_gas_model").value == "AIR"
+    app.selectbox(key="cone_shock_gas_model").set_value(gas_model).run()
+    app.number_input(key="cone_shock_mach").set_value(3.0).run()
+    app.number_input(key="cone_shock_upstream_temperature").set_value(1000.0).run()
+    app.selectbox(key="unit_temperature").set_value("°C").run()
+    assert app.number_input(
+        key="cone_shock_upstream_temperature"
+    ).value == pytest.approx(726.85)
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.dataframe[0].value["気体モデル"].tolist() == [gas_model]
+    assert app.dataframe[0].value["上流静温 T∞ [°C]"].iloc[0] == pytest.approx(726.85)
+    assert app.dataframe[0].value["表面静温 Tₛ [°C]"].iloc[0] > 726.85
+    result, configuration = app.session_state["cone_shock_payload"]
+    assert configuration["models"]["gas_model"] == gas_model
+    assert configuration["inputs_si"]["upstream_temperature"] == 1000.0
+    replay = AppTest.from_string(script, default_timeout=60)
+    replay.session_state["pending_conical_shock_configuration"] = load_configuration(
+        dump_configuration(configuration)
+    )
+    replay.run()
+    replay.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert replay.session_state["cone_shock_payload"][0].rows == result.rows
+    replay.radio(key="cone_shock_mode").set_value("1変数スイープ").run()
+    replay.number_input(key="cone_shock_sweep_points").set_value(3).run()
+    replay.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert len(replay.dataframe[0].value) == 3
+
+
+def test_conical_legacy_replay_and_range_error() -> None:
+    script = """
+from aerophysics.gui.pages import render_conical_shock
+from aerophysics.gui.units import UnitPreferences
+render_conical_shock(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_conical_shock_configuration"] = make_configuration(
+        calculator="conical_shock",
+        mode="single",
+        inputs_si={"upstream_mach": 3.0, "cone_half_angle": 0.1},
+        models={},
+        units=UnitPreferences(),
+    )
+    app.run()
+    assert app.selectbox(key="cone_shock_gas_model").value == "AIR"
+    assert "cone_shock_upstream_temperature" not in {
+        widget.key for widget in app.number_input
+    }
+    app.selectbox(key="cone_shock_gas_model").set_value("NASA9").run()
+    app.number_input(key="cone_shock_upstream_temperature").set_value(100.0).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception and app.error
+    app.radio(key="cone_shock_mode").set_value("1変数スイープ").run()
+    app.selectbox(key="cone_shock_sweep_field").set_value("Mach M∞").run()
+    app.number_input(key="cone_shock_sweep_points").set_value(2).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.dataframe[0].value["status"].tolist() == ["out_of_range", "out_of_range"]
+
+
+def test_conical_numerical_failure_is_displayed_and_sweep_continues() -> None:
+    # Force the backend-dependent 0.1-degree failure, retaining the real solver
+    # for 10 degrees. This verifies the same GUI contract on every CI platform.
+    script = """
+from unittest.mock import patch
+import numpy as np
+from aerophysics.exceptions import ShockConvergenceError
+from aerophysics.gui import adapters
+from aerophysics.gui.pages import render_conical_shock
+from aerophysics.gui.units import UnitPreferences
+original = adapters.conical_shock
+def numerical_failure(*args, **kwargs):
+    if float(args[1]) < np.deg2rad(0.2):
+        raise ShockConvergenceError('conical shock angle is below numerical resolution')
+    return original(*args, **kwargs)
+with patch.object(adapters, 'conical_shock', side_effect=numerical_failure):
+    render_conical_shock(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="cone_shock_gas_model").set_value("HARMONIC_OSCILLATOR").run()
+    app.number_input(key="cone_shock_mach").set_value(3.0).run()
+    app.number_input(key="cone_shock_upstream_temperature").set_value(500.0).run()
+    app.number_input(key="cone_shock_angle").set_value(0.1).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception
+    assert "numerical resolution" in app.error[0].value
+    assert "cone_shock_payload" not in app.session_state
+    app.radio(key="cone_shock_mode").set_value("1変数スイープ").run()
+    app.number_input(key="cone_shock_sweep_start").set_value(0.1).run()
+    app.number_input(key="cone_shock_sweep_stop").set_value(10.0).run()
+    app.number_input(key="cone_shock_sweep_points").set_value(2).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.warning and "数値" in app.warning[0].value
+    assert app.dataframe[0].value["status"].tolist() == ["error", "ok"]
+    app.radio(key="cone_shock_mode").set_value("single").run()
+    app.number_input(key="cone_shock_angle").set_value(10.0).run()
+    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.session_state["cone_shock_payload"][0].rows[0]["status"] == "ok"
