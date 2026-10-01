@@ -803,7 +803,8 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     invalid = sum(row["status"] != "ok" for row in result.rows)
     if invalid:
         st.warning(
-            f"{invalid}点は付着弱解または温度範囲の条件を満たさないため欠損値としました。"
+            f"{invalid}点は付着弱解がない、温度範囲外、または数値的に解を"
+            "確定できないため欠損値としました。"
         )
     with st.expander("モデルの前提・適用範囲"):
         st.write(
