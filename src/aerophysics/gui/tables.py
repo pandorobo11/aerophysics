@@ -57,6 +57,9 @@ FLIGHT_COLUMNS = (
 )
 
 SHOCK_COLUMNS = (
+    Column("gas_model", "気体モデル"),
+    Column("upstream_temperature", "上流静温 T₁", "temperature"),
+    Column("downstream_temperature", "下流静温 T₂", "temperature"),
     Column("upstream_mach", "上流 Mach M₁"),
     Column("deflection_angle", "偏向角 θ", "angle"),
     Column("maximum_deflection_angle", "最大付着偏向角 θmax", "angle"),

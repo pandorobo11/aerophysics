@@ -1,6 +1,15 @@
 References
 ==========
 
+.. _ref-tatum-1996:
+
+Tatum, K. E. *Computation of Thermally Perfect Properties of Oblique Shock
+Waves*. NASA Contractor Report 4749, August 1996. Derives the frozen ideal-gas
+mass, momentum, energy, deflection, and entropy relations for variable heat
+capacity, including weak and strong shocks.
+
+https://ntrs.nasa.gov/citations/19960050025
+
 Atmosphere
 ----------
 

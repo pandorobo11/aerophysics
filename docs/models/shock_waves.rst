@@ -6,7 +6,8 @@ and angles are in radians. Convert explicitly with
 :func:`aerophysics.units.degrees_to_radians` and
 :func:`aerophysics.units.radians_to_degrees`.
 
-The normal, oblique, and conical solvers use a calorically perfect gas.
+The normal and oblique solvers accept calorically or thermally perfect gases.
+The conical solver and Rayleigh--Pitot formula use a calorically perfect gas.
 Detached-shock engineering correlations provide standoff distance and shape;
 they do not solve shock-layer thermodynamics. For task-oriented model
 selection and examples, see :doc:`../guides/compressible_flow`.
@@ -122,6 +123,99 @@ The theta--beta--Mach relation and branch convention follow
 ... )
 >>> round(radians_to_degrees(shock.shock_angle), 3)
 39.314
+
+Thermally perfect normal and oblique shocks
+-----------------------------------------------
+
+Pass a :class:`~aerophysics.thermochemistry.ThermallyPerfectGas` (including
+``AIR_NASA7`` or ``AIR_NASA9``) or a
+:class:`~aerophysics.real_gas.HarmonicOscillatorGas`, and provide
+``upstream_temperature`` as the upstream **static** temperature in kelvin.
+Mach number, angle, and temperature broadcast together. The default remains
+the constant-:math:`\gamma` ``AIR`` model, with the original result fields and
+downstream/upstream ratio convention.
+
+The solver assumes steady, inviscid, adiabatic, two-dimensional ideal-gas
+flow with fixed composition, thermal equilibrium, and :math:`p=\rho RT`.
+The normal velocity components :math:`u_n` satisfy
+
+.. math::
+
+   \rho_1 u_{n1}=\rho_2 u_{n2},\qquad
+   p_1+\rho_1u_{n1}^2=p_2+\rho_2u_{n2}^2,\qquad
+   h(T_2)-h(T_1)=\frac{u_{n1}^2-u_{n2}^2}{2}.
+
+Tangential velocity is unchanged. For a trial shock angle,
+:math:`u_{n1}=M_1a(T_1)\sin\beta` and the conservation equations determine
+:math:`T_2` and :math:`\rho_2/\rho_1`. The flow turn follows
+
+.. math::
+
+   \theta=\beta-\tan^{-1}\left[
+      \frac{\rho_1}{\rho_2}\tan\beta\right],\qquad
+   a(T)^2=\gamma(T)RT,\qquad \gamma(T)=\frac{c_p(T)}{c_p(T)-R}.
+
+The temperature Hugoniot eliminates the zero-strength root using
+:math:`x=u_{n2}/u_{n1}`, :math:`\tau=T_2/T_1`, and
+:math:`q=[h(T_2)-h(T_1)]/(RT_1)`:
+
+.. math::
+
+   x^2+(2q+1-\tau)x-\tau=0,\qquad
+   u_{n1}^2=RT_1\frac{\tau/x-1}{1-x}.
+
+The sonic endpoint is evaluated analytically; the positive-temperature
+compressive root is bracketed numerically. The solver then maximizes the
+shock polar and brackets the angle root separately on the weak and strong
+branches. ``theta_from_shock_angle``, ``shock_angle``,
+``maximum_attached_deflection``, ``normal_shock``, and ``oblique_shock`` all
+accept the same thermal gas and static-temperature arguments.
+
+Since total enthalpy, composition, and total temperature are unchanged,
+the total-pressure loss follows directly from entropy production:
+
+.. math::
+
+   \Delta s=s^\circ(T_2)-s^\circ(T_1)-R\ln(p_2/p_1),\qquad
+   p_{02}/p_{01}=\exp(-\Delta s/R).
+
+This does not require stagnation temperature to lie within the polynomial fit.
+The governing thermal shock relations follow
+:ref:`Tatum (1996), NASA CR-4749 <ref-tatum-1996>`.
+Verification includes constant-heat-capacity limits, conservation residuals,
+and an independent variable-heat-capacity solution; see
+:doc:`../verification/compressible_flow`.
+
+Temperature ranges are inclusive: both dry-air NASA presets currently share
+200--6000 K, and ``AIR_HARMONIC_OSCILLATOR`` documents 400--2000 K. A custom
+mixture uses the intersection of its species' fitted ranges. Required static
+states outside these ranges raise :class:`~aerophysics.exceptions.ModelRangeError`;
+the shock solver never extrapolates. A valid weak shock can still be returned
+when the normal shock or polar maximum exceeds the range. An unavailable
+strong root or attached limit raises ``ModelRangeError``, not a claim of
+physical detachment. For custom caloric models, the branch construction
+assumes the usual single-maximum, convex-gas shock polar.
+
+These polynomial ranges describe thermodynamic data, not a certified physical
+validity interval for chemically frozen air. Dissociation, ionization,
+finite-rate chemistry, vibrational nonequilibrium, and dense-gas effects are
+excluded; their importance depends on the actual pressure, composition, and
+flow residence time. A frozen calculation at high temperature must be
+interpreted with those assumptions.
+
+>>> from aerophysics import AIR_NASA9
+>>> thermal = oblique_shock(
+...     3.0, degrees_to_radians(20.0), gas=AIR_NASA9,
+...     upstream_temperature=300.0,
+... )
+>>> round(radians_to_degrees(thermal.shock_angle), 3)
+37.68
+>>> round(300.0 * thermal.static_temperature_ratio, 3)
+466.118
+>>> round(thermal.downstream_mach, 6)
+2.006457
+>>> round(thermal.total_pressure_ratio, 6)
+0.796621
 
 Conical shocks
 --------------
@@ -280,8 +374,8 @@ gives ``0.097734`` for that printed density ratio, within the committed
 These engineering correlations assume continuum, steady, low-temperature
 flow. Their common use is for calorically perfect air; Billig's fitted curves
 are primarily associated with :math:`\gamma=1.4`. They do not solve the
-shock-layer thermodynamics. Real-gas Seiff models, NASA7/NASA9 or harmonic-
-oscillator general normal-shock solvers, Beattie--Bridgeman shock states,
+shock-layer thermodynamics. Real-gas Seiff models, thermally perfect conical
+shocks, Beattie--Bridgeman shock states,
 rarefied-flow corrections, and shock fitting are outside this implementation.
 
 >>> from aerophysics import DetachedShockGeometry, billig_shock_shape

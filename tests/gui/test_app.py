@@ -15,6 +15,76 @@ from aerophysics.gui.units import UnitPreferences
 APP = Path("src/aerophysics/gui/app.py")
 
 
+@pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
+def test_oblique_page_thermal_settings_replay_and_units(gas_model: str) -> None:
+    from aerophysics.gui.config import dump_configuration, load_configuration
+
+    script = """
+from aerophysics.gui.pages import render_shock
+from aerophysics.gui.components import render_unit_sidebar
+render_shock(render_unit_sidebar())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="shock_gas_model").set_value(gas_model).run()
+    app.number_input(key="shock_mach").set_value(3.0).run()
+    app.number_input(key="shock_upstream_temperature").set_value(500.0).run()
+    app.selectbox(key="unit_temperature").set_value("°C").run()
+    assert app.number_input(key="shock_upstream_temperature").value == pytest.approx(
+        226.85
+    )
+    app.button(key="FormSubmitter:shock_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    assert app.dataframe[0].value["気体モデル"].tolist() == [gas_model]
+    assert app.dataframe[0].value["上流静温 T₁ [°C]"].iloc[0] == pytest.approx(226.85)
+    result, configuration = app.session_state["shock_payload"]
+    assert configuration["models"]["gas_model"] == gas_model
+    assert configuration["inputs_si"]["upstream_temperature"] == 500.0
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_oblique_shock_configuration"] = load_configuration(
+        dump_configuration(configuration)
+    )
+    replay.run()
+    replay.button(key="FormSubmitter:shock_form-計算").click().run()
+    assert not replay.exception
+    assert not replay.error
+    assert replay.session_state["shock_payload"][0].rows == result.rows
+    replay.radio(key="shock_mode").set_value("1変数スイープ").run()
+    replay.number_input(key="shock_sweep_points").set_value(3).run()
+    replay.button(key="FormSubmitter:shock_form-計算").click().run()
+    assert not replay.exception
+    assert not replay.error
+    assert len(replay.dataframe[0].value) == 3
+
+
+def test_oblique_page_legacy_settings_and_thermal_error() -> None:
+    script = """
+from aerophysics.gui.pages import render_shock
+from aerophysics.gui.units import UnitPreferences
+render_shock(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_oblique_shock_configuration"] = make_configuration(
+        calculator="oblique_shock",
+        mode="single",
+        inputs_si={"upstream_mach": 3.0, "deflection_angle": 0.1},
+        models={"branch": "weak"},
+        units=UnitPreferences(),
+    )
+    app.run()
+    assert app.selectbox(key="shock_gas_model").value == "AIR"
+    assert "shock_upstream_temperature" not in {
+        widget.key for widget in app.number_input
+    }
+    app.selectbox(key="shock_gas_model").set_value("NASA9").run()
+    app.number_input(key="shock_upstream_temperature").set_value(100.0).run()
+    app.button(key="FormSubmitter:shock_form-計算").click().run()
+    assert not app.exception
+    assert app.error
+    app.radio(key="shock_mode").set_value("1変数スイープ").run()
+    assert not app.exception
+
+
 def test_main_app_calculates_saves_case_and_sweeps() -> None:
     app = AppTest.from_file(APP, default_timeout=15).run()
     assert not app.exception

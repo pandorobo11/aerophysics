@@ -80,8 +80,23 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
         sweep_variables=frozenset({"altitude", "motion"}),
     ),
     "oblique_shock": _CalculatorSchema(
-        inputs={"upstream_mach": _SUPERSONIC, "deflection_angle": _NON_NEGATIVE},
-        models={"branch": _choice("weak", "strong")},
+        inputs={
+            "upstream_mach": _SUPERSONIC,
+            "deflection_angle": _NON_NEGATIVE,
+            "upstream_temperature": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+        },
+        models={
+            "branch": _choice("weak", "strong"),
+            "gas_model": _choice(
+                "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
+            ),
+        },
         sweep_variables=frozenset({"deflection", "mach"}),
     ),
     "conical_shock": _CalculatorSchema(

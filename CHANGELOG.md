@@ -7,6 +7,12 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Extend normal and oblique shock relations to frozen thermally perfect gases
+  using NASA7/NASA9 or harmonic-oscillator heat capacities and upstream static
+  temperature, including weak/strong angle inversion and attached limits.
+  Add gas selection, static temperatures, and settings replay to the oblique
+  shock GUI while preserving the constant-gamma default.
+
 - Add a fused ``isentropic_analysis`` API that reuses solved flow and critical
   states when ratios, area, mass-flow, and absolute-state results are needed
   together.

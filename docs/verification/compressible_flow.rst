@@ -57,6 +57,32 @@ boundary-value ODE whereas the report integrated outward from the cone with a
 documented finite step.  Algebraic conservation checks use ``rtol=1e-12``;
 inverse numerical relations use ``rtol=1e-10``.
 
+Thermally perfect shock verification
+----------------------------------------
+
+``tests/test_thermal_shocks.py`` verifies the frozen ideal-gas shock solver
+described by :ref:`Tatum (1996) <ref-tatum-1996>`. Constant-heat-capacity NASA
+and harmonic models recover the calorically perfect equations. Harmonic
+limits cover :math:`\gamma=1.2,1.4,5/3`, Mach 1.2--10, and both angle roots;
+normal-state comparisons use ``rtol=2e-10`` and oblique comparisons
+``rtol=2e-9``. NASA7, NASA9, and harmonic states on both branches satisfy
+mass, normal momentum, total enthalpy, and tangential velocity conservation
+with ``rtol=2e-11``. Entropy independently determines the pressure loss.
+
+A manufactured gas with :math:`c_p/R=3.5+0.001T` at Mach 4, 500 K, and a
+20-degree turn is independently solved as three simultaneous equations in
+shock angle, temperature ratio, and density ratio. Its analytical enthalpy
+and entropy integrals avoid the production Hugoniot solver and NASA property
+evaluator. Both branches agree within ``2e-11``; coupled-equation residuals
+are below ``2e-12``. These are model verification cases, not a comparison
+against the printed NASA CR-4749 tables or experimental data.
+
+Additional cases cover broadcasting, sonic and zero-turn limits, detachment,
+polynomial-region crossings, near-sonic normal shocks, small deflections,
+invalid inputs, and a Mach-20 weak shock that remains within the NASA fit
+while its normal shock and attached limit are outside it. GUI tests cover
+model selection, static-temperature units, sweeps, and settings replay.
+
 Results
 -------
 

@@ -26,6 +26,7 @@ from aerophysics.detached_shock import (
     billig_shock_shape,
     seiff_standoff_distance_from_mach,
 )
+from aerophysics.exceptions import ModelRangeError, NoAttachedShockError
 from aerophysics.expansion import (
     maximum_prandtl_meyer_angle,
     prandtl_meyer_angle,
@@ -43,6 +44,7 @@ from aerophysics.isentropic import (
 from aerophysics.real_gas import BeattieBridgemanGas, HarmonicOscillatorGas
 from aerophysics.shocks import (
     ShockBranch,
+    ShockGasModel,
     conical_shock,
     maximum_attached_cone_angle,
     maximum_attached_deflection,
@@ -703,21 +705,48 @@ def expansion_sweep(
     return CalculationResult(tuple(rows))
 
 
+_SHOCK_GASES: dict[str, ShockGasModel] = {
+    "AIR": AIR,
+    "NASA7": AIR_NASA7,
+    "NASA9": AIR_NASA9,
+    "HARMONIC_OSCILLATOR": AIR_HARMONIC_OSCILLATOR,
+}
+
+
 def oblique_shock_condition(
     *,
     upstream_mach: float,
     deflection_angle: float,
     branch: ShockBranch,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
 ) -> CalculationResult:
     """Calculate one oblique-shock state."""
-    result = oblique_shock(upstream_mach, deflection_angle, branch)
-    limit = maximum_attached_deflection(upstream_mach)
+    try:
+        gas = _SHOCK_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("unknown shock gas_model") from error
+    result = oblique_shock(
+        upstream_mach,
+        deflection_angle,
+        branch,
+        gas,
+        upstream_temperature=upstream_temperature,
+    )
+    maximum: float | None = None
+    try:
+        limit = maximum_attached_deflection(
+            upstream_mach, gas, upstream_temperature=upstream_temperature
+        )
+        maximum = float(limit.deflection_angle)
+    except ModelRangeError:
+        pass  # A valid weak shock need not have a representable polar peak.
     row: Row = {
         "upstream_mach": float(result.upstream_mach),
         "downstream_mach": float(result.downstream_mach),
         "deflection_angle": float(result.deflection_angle),
         "shock_angle": float(result.shock_angle),
-        "maximum_deflection_angle": float(limit.deflection_angle),
+        "maximum_deflection_angle": maximum,
         "upstream_normal_mach": float(result.upstream_normal_mach),
         "downstream_normal_mach": float(result.downstream_normal_mach),
         "static_pressure_ratio": float(result.static_pressure_ratio),
@@ -727,6 +756,16 @@ def oblique_shock_condition(
         "status": "ok",
         "message": "",
     }
+    if gas_model != "AIR":
+        assert upstream_temperature is not None
+        row.update(
+            {
+                "gas_model": gas_model,
+                "upstream_temperature": upstream_temperature,
+                "downstream_temperature": upstream_temperature
+                * float(result.static_temperature_ratio),
+            }
+        )
     return CalculationResult((row,))
 
 
@@ -739,6 +778,8 @@ def oblique_shock_sweep(
     start: float,
     stop: float,
     points: int,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
 ) -> CalculationResult:
     """Sweep Mach or deflection while retaining non-attached rows."""
     values = sweep_values(start, stop, points)
@@ -751,11 +792,22 @@ def oblique_shock_sweep(
                 upstream_mach=mach,
                 deflection_angle=theta,
                 branch=branch,
+                gas_model=gas_model,
+                upstream_temperature=upstream_temperature,
             )
         except ValueError as error:
             maximum: float | None = None
-            if mach > 1.0:
-                maximum = float(maximum_attached_deflection(mach).deflection_angle)
+            if mach > 1.0 and gas_model in _SHOCK_GASES:
+                try:
+                    maximum = float(
+                        maximum_attached_deflection(
+                            mach,
+                            _SHOCK_GASES[gas_model],
+                            upstream_temperature=upstream_temperature,
+                        ).deflection_angle
+                    )
+                except ValueError:
+                    pass
             rows.append(
                 {
                     "upstream_mach": mach,
@@ -769,10 +821,24 @@ def oblique_shock_sweep(
                     "static_density_ratio": None,
                     "static_temperature_ratio": None,
                     "total_pressure_ratio": None,
-                    "status": "no_attached_shock",
+                    "status": (
+                        "no_attached_shock"
+                        if isinstance(error, NoAttachedShockError)
+                        else "out_of_range"
+                        if isinstance(error, ModelRangeError)
+                        else "error"
+                    ),
                     "message": str(error),
                 }
             )
+            if gas_model != "AIR":
+                rows[-1].update(
+                    {
+                        "gas_model": gas_model,
+                        "upstream_temperature": upstream_temperature,
+                        "downstream_temperature": None,
+                    }
+                )
         else:
             rows.append(result.rows[0])
     if sweep_field not in {"mach", "deflection"}:

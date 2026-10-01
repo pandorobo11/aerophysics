@@ -23,8 +23,9 @@ Choose a workflow
      - Steady, adiabatic flow without entropy production
    * - Cross a normal, oblique, or attached conical shock
      - :doc:`../models/shock_waves`
-     - Upstream Mach number; deflection or cone angle where applicable
-     - Calorically perfect gas
+     - Upstream Mach number; deflection or cone angle where applicable;
+       upstream static temperature for a thermal normal or oblique shock
+     - Frozen ideal gas for normal/oblique shocks; constant gamma for cones
    * - Estimate blunt-body shock standoff or shape
      - :ref:`detached-shocks` in :doc:`../models/shock_waves`
      - Mach number, nose radius, and explicit geometry
