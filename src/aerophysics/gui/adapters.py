@@ -872,7 +872,7 @@ def conical_shock_condition(
                 upstream_mach, gas, upstream_temperature=upstream_temperature
             ).cone_half_angle
         )
-    except ModelRangeError:
+    except (ModelRangeError, ShockConvergenceError):
         pass  # A valid weak cone need not have a representable attached limit.
     row: Row = {
         "upstream_mach": float(result.upstream_mach),
