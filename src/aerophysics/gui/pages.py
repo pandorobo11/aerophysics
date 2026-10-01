@@ -14,6 +14,7 @@ from aerophysics.boundary_layer import (
     TurbulentCorrelation,
 )
 from aerophysics.gui.adapters import (
+    _SHOCK_GASES,
     CalculationResult,
     FlightCase,
     conical_shock_condition,
@@ -372,7 +373,7 @@ def render_flight(preferences: UnitPreferences) -> None:
 def render_shock(preferences: UnitPreferences) -> None:
     """Render attached oblique-shock calculations."""
     st.title("斜め衝撃波")
-    st.caption("theta–beta–Mach関係の弱解・強解を明示的に選択します。")
+    st.caption("一定比熱比または温度依存比熱で、斜め衝撃波の弱解・強解を計算します。")
     imported = pop_pending_configuration("oblique_shock")
     inputs, models, sweep = _configuration_defaults(imported)
     render_configuration_import("oblique_shock", "shock")
@@ -413,6 +414,28 @@ def render_shock(preferences: UnitPreferences) -> None:
             key="shock_branch",
         )
         assert branch is not None
+        gas_names = tuple(_SHOCK_GASES)
+        gas_model = st.selectbox(
+            "気体モデル",
+            gas_names,
+            index=gas_names.index(str(models.get("gas_model", "AIR"))),
+            key="shock_gas_model",
+        )
+        assert gas_model is not None
+        upstream_temperature = None
+        if gas_model != "AIR":
+            temperature_display = finite_number(
+                f"上流静温 T₁ [{preferences.temperature}]",
+                _display(
+                    float(inputs.get("upstream_temperature") or 300.0),
+                    "temperature",
+                    preferences.temperature,
+                ),
+                key="shock_upstream_temperature",
+            )
+            upstream_temperature = _si(
+                temperature_display, "temperature", preferences.temperature
+            )
         sweep_field = "deflection"
         sweep_start = sweep_stop = 0.0
         points = 101
@@ -429,9 +452,16 @@ def render_shock(preferences: UnitPreferences) -> None:
                 args=(("shock_sweep_start", "shock_sweep_stop"),),
             )
             if sweep_field == "deflection":
-                default_limit = float(
-                    maximum_attached_deflection(mach).deflection_angle
-                )
+                try:
+                    default_limit = float(
+                        maximum_attached_deflection(
+                            mach,
+                            _SHOCK_GASES[gas_model],
+                            upstream_temperature=upstream_temperature,
+                        ).deflection_angle
+                    )
+                except ValueError:
+                    default_limit = float(np.deg2rad(30.0))
                 start_si = float(sweep.get("start", 0.0))
                 stop_si = float(sweep.get("stop", default_limit * 1.05))
                 start_default = _display(start_si, "angle", preferences.angle)
@@ -473,6 +503,8 @@ def render_shock(preferences: UnitPreferences) -> None:
                     upstream_mach=mach,
                     deflection_angle=theta_value_si,
                     branch=branch,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
                 )
             else:
                 start_si = (
@@ -493,6 +525,8 @@ def render_shock(preferences: UnitPreferences) -> None:
                     start=start_si,
                     stop=stop_si,
                     points=points,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
                 )
                 sweep_config = {
                     "field": sweep_field,
@@ -506,8 +540,9 @@ def render_shock(preferences: UnitPreferences) -> None:
                 inputs_si={
                     "upstream_mach": mach,
                     "deflection_angle": theta_value_si,
+                    "upstream_temperature": upstream_temperature,
                 },
-                models={"branch": branch.value},
+                models={"branch": branch.value, "gas_model": gas_model},
                 units=preferences,
                 sweep_si=sweep_config,
             )
@@ -519,7 +554,11 @@ def render_shock(preferences: UnitPreferences) -> None:
     payload = _result_payload("shock_payload")
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
-            st.write("定常・熱量的完全気体・付着衝撃波を仮定します。")
+            st.write(
+                "定常・非粘性・断熱の付着衝撃波を仮定します。NASA7/NASA9と"
+                "調和振動子は組成固定の熱的完全気体です。入力は上流の静温です。"
+                "解離・化学反応・振動非平衡は含みません。熱物性の温度範囲外はエラーになります。"
+            )
         return
     result, configuration = payload
 

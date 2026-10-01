@@ -551,3 +551,81 @@ def test_flat_plate_compressible_distance_sweep() -> None:
     assert len(result.rows) == 3
     assert result.rows[-1]["wall_temperature"] is not None
     assert result.rows[-1]["distance"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
+def test_thermal_oblique_adapter_and_sweep(gas_model: str) -> None:
+    from aerophysics.gui.adapters import _SHOCK_GASES
+
+    adapted = oblique_shock_condition(
+        upstream_mach=3.0,
+        deflection_angle=np.deg2rad(20.0),
+        branch=ShockBranch.WEAK,
+        gas_model=gas_model,
+        upstream_temperature=500.0,
+    )
+    direct = oblique_shock(
+        3.0, np.deg2rad(20.0), gas=_SHOCK_GASES[gas_model], upstream_temperature=500.0
+    )
+    assert adapted.rows[0]["shock_angle"] == direct.shock_angle
+    assert adapted.rows[0]["gas_model"] == gas_model
+    assert adapted.rows[0]["downstream_temperature"] == 500.0 * float(
+        direct.static_temperature_ratio
+    )
+    sweep = oblique_shock_sweep(
+        fixed_mach=3.0,
+        fixed_deflection=0.1,
+        branch=ShockBranch.WEAK,
+        sweep_field="deflection",
+        start=0.0,
+        stop=1.0,
+        points=3,
+        gas_model=gas_model,
+        upstream_temperature=500.0,
+    )
+    assert sweep.rows[0]["status"] == "ok"
+    assert sweep.rows[-1]["status"] == "no_attached_shock"
+    assert sweep.rows[-1]["downstream_temperature"] is None
+
+
+def test_thermal_oblique_adapter_range_errors_keep_distinct_statuses() -> None:
+    single = oblique_shock_condition(
+        upstream_mach=20.0,
+        deflection_angle=np.deg2rad(10.0),
+        branch=ShockBranch.WEAK,
+        gas_model="NASA7",
+        upstream_temperature=300.0,
+    )
+    assert single.rows[0]["status"] == "ok"
+    assert single.rows[0]["maximum_deflection_angle"] is None
+    sweep = oblique_shock_sweep(
+        fixed_mach=20.0,
+        fixed_deflection=0.1,
+        branch=ShockBranch.STRONG,
+        sweep_field="deflection",
+        start=0.0,
+        stop=0.1,
+        points=2,
+        gas_model="NASA7",
+        upstream_temperature=300.0,
+    )
+    assert all(row["status"] == "out_of_range" for row in sweep.rows)
+    for model in ("NASA9", "unknown"):
+        with pytest.raises(ValueError):
+            oblique_shock_condition(
+                upstream_mach=3.0,
+                deflection_angle=0.1,
+                branch=ShockBranch.WEAK,
+                gas_model=model,
+            )
+    bad = oblique_shock_sweep(
+        fixed_mach=3.0,
+        fixed_deflection=0.1,
+        branch=ShockBranch.WEAK,
+        sweep_field="mach",
+        start=2.0,
+        stop=3.0,
+        points=2,
+        gas_model="unknown",
+    )
+    assert all(row["status"] == "error" for row in bad.rows)

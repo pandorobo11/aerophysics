@@ -44,6 +44,23 @@ Quantities without a sidebar selector, such as mass flux, drag per unit width,
 and dynamic viscosity in ``Pa s``, remain labelled as such. Always use the unit
 shown beside an input or table column.
 
+Thermally perfect oblique shocks
+--------------------------------
+
+The **Oblique shock** page defaults to constant-gamma ``AIR``. Select
+``NASA7``, ``NASA9``, or ``HARMONIC_OSCILLATOR`` and enter the upstream
+**static** temperature to use temperature-dependent heat capacity. Both
+branches and Mach/deflection sweeps are supported. Results include the gas
+selection and upstream/downstream static temperatures in the selected units;
+settings JSON preserves the gas model and static temperature in SI.
+Older settings without those fields retain the ``AIR`` model.
+
+An unavailable thermodynamic state is marked ``out_of_range`` in a sweep;
+physical detachment is marked ``no_attached_shock``. A weak shock can be valid
+even when its polar maximum exceeds the database range; the unavailable
+maximum is then left blank. See :doc:`../models/shock_waves` for frozen-gas
+assumptions and temperature ranges.
+
 Case handoff
 ------------
 
