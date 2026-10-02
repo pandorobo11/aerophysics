@@ -39,6 +39,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Render conical-shock sweep inputs and the calculation button without solving
+  the attached limit first; use an editable 0--30 degree initial angle range.
+
 - Preserve an in-range thermal conical attached limit when its temperature
   boundary is close to the physical maximum. Distinguish shock convergence
   failures from range and detachment errors, and retain failed GUI sweep points
