@@ -170,6 +170,7 @@ render_conical_shock(UnitPreferences())
     assert "cone_shock_sweep_start" not in {widget.key for widget in app.number_input}
     app.radio(key="cone_shock_mode").set_value("1変数スイープ").run()
     assert "cone_shock_sweep_start" in {widget.key for widget in app.number_input}
+    app.number_input(key="cone_shock_sweep_stop").set_value(60.0).run()
     app.number_input(key="cone_shock_sweep_points").set_value(3).run()
     app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
     assert not app.exception
@@ -178,6 +179,41 @@ render_conical_shock(UnitPreferences())
         for status in app.dataframe[0].value["status"].tolist()
     )
     assert app.warning
+
+
+@pytest.mark.parametrize("sweep_field", ["cone_half_angle", "mach"])
+def test_conical_sweep_controls_do_not_run_solver(sweep_field: str) -> None:
+    script = """
+from unittest.mock import patch
+from aerophysics.gui.pages import render_conical_shock
+from aerophysics.gui.components import render_unit_sidebar
+with patch('aerophysics.shocks.cone_limit',
+           side_effect=AssertionError('solver ran before calculation')):
+    render_conical_shock(render_unit_sidebar())
+"""
+    app = AppTest.from_string(script, default_timeout=10).run()
+    app.selectbox(key="cone_shock_gas_model").set_value("NASA9").run()
+    app.number_input(key="cone_shock_mach").set_value(3.0).run()
+    app.radio(key="cone_shock_mode").set_value("sweep").run()
+    assert not app.exception
+    assert app.number_input(key="cone_shock_sweep_start").value == 0.0
+    assert app.number_input(key="cone_shock_sweep_stop").value == pytest.approx(30.0)
+    assert app.button(key="FormSubmitter:cone_shock_form-計算")
+    app.selectbox(key="cone_shock_sweep_field").set_value(sweep_field).run()
+    app.number_input(key="cone_shock_sweep_points").set_value(3).run()
+    app.number_input(key="cone_shock_upstream_temperature").set_value(600.0).run()
+    app.number_input(key="cone_shock_mach").set_value(4.0).run()
+    app.selectbox(key="unit_angle").set_value("rad").run()
+    assert not app.exception
+    assert app.number_input(key="cone_shock_sweep_points").value == 3
+    assert app.button(key="FormSubmitter:cone_shock_form-計算")
+    assert "cone_shock_payload" not in app.session_state
+    if sweep_field == "cone_half_angle":
+        assert app.number_input(key="cone_shock_sweep_stop").value == pytest.approx(
+            3.141592653589793 / 6.0
+        )
+    else:
+        assert app.number_input(key="cone_shock_sweep_stop").value == 5.0
 
 
 def test_detached_shock_page_single_sweep_and_geometry_options() -> None:

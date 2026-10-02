@@ -49,7 +49,6 @@ from aerophysics.gui.figures import (
 from aerophysics.gui.units import UnitPreferences, from_si, to_si
 from aerophysics.shocks import (
     ShockBranch,
-    maximum_attached_cone_angle,
     maximum_attached_deflection,
 )
 
@@ -670,18 +669,10 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                 args=(("cone_shock_sweep_start", "cone_shock_sweep_stop"),),
             )
             if sweep_field == "cone_half_angle":
-                try:
-                    default_limit = float(
-                        maximum_attached_cone_angle(
-                            mach,
-                            _SHOCK_GASES[gas_model],
-                            upstream_temperature=upstream_temperature,
-                        ).cone_half_angle
-                    )
-                except (ValueError, ShockConvergenceError):
-                    default_limit = float(np.deg2rad(30.0))
+                # Render the controls without running Taylor-Maccoll solves.
+                # Physical limits are evaluated only after explicit submission.
                 start_si = float(sweep.get("start", 0.0))
-                stop_si = float(sweep.get("stop", default_limit * 1.05))
+                stop_si = float(sweep.get("stop", float(np.deg2rad(30.0))))
                 start_default = _display(start_si, "angle", preferences.angle)
                 stop_default = _display(stop_si, "angle", preferences.angle)
                 unit = preferences.angle

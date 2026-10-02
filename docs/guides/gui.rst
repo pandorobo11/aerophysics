@@ -66,6 +66,9 @@ input, with Mach/cone-half-angle sweeps and settings replay. Thermal results
 include upstream and cone-surface temperatures. The entire trajectory from
 the shock to the surface must stay in the model range. An unavailable physical
 attached limit is left blank while valid weak solutions remain usable.
+The angle sweep starts with an editable 0--30 degree range. Switching modes or
+editing inputs does not solve the attached limit; numerical calculations start
+when the calculation button is pressed.
 
 Case handoff
 ------------
