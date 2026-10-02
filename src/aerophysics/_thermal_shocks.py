@@ -151,6 +151,44 @@ def normal_state(
     )
 
 
+def pitot_pressure_ratio(
+    mach: float, upstream_temperature: float, gas: ThermalShockGas
+) -> float:
+    """Return p02/p1, requiring the stagnation state inside the model range."""
+    shock = normal_state(mach, upstream_temperature, gas)
+    upstream = properties(upstream_temperature, gas)
+    kinetic_energy = 0.5 * mach**2 * upstream.sound_speed_squared
+
+    def residual(temperature: float) -> float:
+        total = properties(temperature, gas)
+        return (
+            _enthalpy_jump(temperature, upstream_temperature, upstream, total, gas)
+            / kinetic_energy
+            - 1.0
+        )
+
+    maximum = gas.temperature_range[1]
+    upper = min(maximum, 2.0 * upstream_temperature)
+    while residual(upper) < 0.0:
+        if upper == maximum:
+            if residual(upper) >= -4.0 * np.finfo(float).eps:
+                temperature = upper
+                break
+            raise ModelRangeError(
+                "pitot stagnation temperature exceeds the gas temperature range"
+            )
+        upper = min(maximum, 2.0 * upper)
+    else:
+        temperature = float(
+            brentq(residual, upstream_temperature, upper, xtol=1e-10, rtol=1e-14)
+        )
+    total = properties(temperature, gas)
+    return float(
+        shock.total_pressure_ratio
+        * np.exp((total.entropy - upstream.entropy) / gas.specific_gas_constant)
+    )
+
+
 def theta_from_beta(
     mach: float, beta: float, temperature: float, gas: ThermalShockGas
 ) -> float:

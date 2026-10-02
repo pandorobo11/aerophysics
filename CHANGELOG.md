@@ -7,6 +7,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add thermal gas selection, upstream static temperatures, Mach sweeps, and
+  settings replay to the normal-shock GUI. Extend the supersonic pitot ratio
+  to frozen thermally perfect gases; retain valid shock results when only the
+  pitot stagnation state is outside the model range.
+
 - Extend weak conical shocks and physical attached-cone limits to frozen
   thermally perfect gases using temperature-dependent Taylor--Maccoll flow.
   Enforce static temperature ranges through the cone surface and add thermal

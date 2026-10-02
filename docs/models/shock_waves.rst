@@ -180,6 +180,23 @@ the total-pressure loss follows directly from entropy production:
    p_{02}/p_{01}=\exp(-\Delta s/R).
 
 This does not require stagnation temperature to lie within the polynomial fit.
+In contrast, the absolute pitot ratio
+:func:`~aerophysics.shocks.supersonic_pitot_pressure_ratio` also needs the
+stagnation state. For a thermal gas, supply ``upstream_temperature`` in kelvin;
+Mach and temperature inputs broadcast together. The solver finds :math:`T_0`
+from :math:`h(T_0)=h(T_1)+u_1^2/2`, then evaluates
+
+.. math::
+
+   \frac{p_{02}}{p_1}=\frac{p_{02}}{p_{01}}
+   \exp\!\left(\frac{s^\circ(T_0)-s^\circ(T_1)}{R}\right).
+
+The shock remains frozen, steady, and adiabatic. This calculation raises
+:class:`~aerophysics.exceptions.ModelRangeError` when any required static or
+stagnation temperature is outside the model range; it never extrapolates.
+This stricter requirement does not change ``normal_shock`` or its
+``total_pressure_ratio`` contract.
+
 The governing thermal shock relations follow
 :ref:`Tatum (1996), NASA CR-4749 <ref-tatum-1996>`.
 Verification includes constant-heat-capacity limits, conservation residuals,

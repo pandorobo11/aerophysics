@@ -168,8 +168,21 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
         sweep_variables=frozenset({"input_value"}),
     ),
     "normal_shock": _CalculatorSchema(
-        inputs={"upstream_mach": _number(minimum=1.0)},
-        models={},
+        inputs={
+            "upstream_mach": _number(minimum=1.0),
+            "upstream_temperature": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+        },
+        models={
+            "gas_model": _choice(
+                "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
+            ),
+        },
         sweep_variables=frozenset({"upstream_mach"}),
     ),
     "expansion": _CalculatorSchema(

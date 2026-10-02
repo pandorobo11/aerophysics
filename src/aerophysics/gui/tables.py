@@ -118,6 +118,9 @@ ISENTROPIC_COLUMNS = (
 )
 
 NORMAL_SHOCK_COLUMNS = (
+    Column("gas_model", "気体モデル"),
+    Column("upstream_temperature", "上流静温 T₁", "temperature"),
+    Column("downstream_temperature", "下流静温 T₂", "temperature"),
     Column("upstream_mach", "上流 Mach M₁"),
     Column("downstream_mach", "下流 Mach M₂"),
     Column("static_pressure_ratio", "p₂/p₁"),

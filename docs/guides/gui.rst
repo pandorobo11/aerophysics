@@ -44,8 +44,8 @@ Quantities without a sidebar selector, such as mass flux, drag per unit width,
 and dynamic viscosity in ``Pa s``, remain labelled as such. Always use the unit
 shown beside an input or table column.
 
-Thermally perfect oblique shocks
---------------------------------
+Thermally perfect shocks
+------------------------
 
 The **Oblique shock** page defaults to constant-gamma ``AIR``. Select
 ``NASA7``, ``NASA9``, or ``HARMONIC_OSCILLATOR`` and enter the upstream
@@ -60,6 +60,14 @@ physical detachment is marked ``no_attached_shock``. A weak shock can be valid
 even when its polar maximum exceeds the database range; the unavailable
 maximum is then left blank. See :doc:`../models/shock_waves` for frozen-gas
 assumptions and temperature ranges.
+
+The **Normal shock** page also supports these gas models with upstream static
+temperature, a Mach sweep, and settings replay. Results include upstream and
+downstream temperatures. A range failure is retained as an ``out_of_range``
+sweep row. The pitot ratio ``p02/p1`` additionally requires an in-range
+stagnation temperature: if only that state is unavailable, the pitot value is
+left blank with a warning while the valid shock ratios remain available.
+Legacy settings continue to select ``AIR``.
 
 The **Conical shock** page offers the same gas models and static-temperature
 input, with Mach/cone-half-angle sweeps and settings replay. Thermal results
