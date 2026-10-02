@@ -29,6 +29,7 @@ from aerophysics._thermal_shocks import (
     ThermalShockGas,
     beta_from_theta,
     normal_state,
+    pitot_pressure_ratio,
     polar_limit,
     properties,
     theta_from_beta,
@@ -794,10 +795,28 @@ def conical_shock(
 
 
 def supersonic_pitot_pressure_ratio(
-    upstream_mach: ArrayLike, gas: PerfectGas = AIR
+    upstream_mach: ArrayLike,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> FloatResult:
-    """Return post-shock total pressure over upstream static pressure."""
+    """Return post-shock total pressure over upstream static pressure.
+
+    Thermal gases require upstream static temperature in kelvin. Inputs
+    broadcast together; both static and stagnation states must be within the
+    gas temperature range. No thermodynamic extrapolation is performed.
+    """
     mach, scalar = _validate_supersonic_mach(upstream_mach)
+    if not isinstance(gas, PerfectGas):
+        mach, _, temperatures, scalar = _thermal_inputs(
+            mach, np.zeros_like(mach), scalar, upstream_temperature, gas
+        )
+        ratio = np.empty_like(mach)
+        for index, value in np.ndenumerate(mach):
+            ratio[index] = pitot_pressure_ratio(
+                float(value), float(temperatures[index]), gas
+            )
+        return return_float(ratio, scalar=scalar)
     gamma = gas.heat_capacity_ratio
     mach_squared = mach**2
     ratio = ((gamma + 1.0) * mach_squared / 2.0) ** (gamma / (gamma - 1.0)) * (

@@ -454,13 +454,33 @@ def isentropic_sweep(
     )
 
 
-def normal_shock_condition(*, upstream_mach: float | np.ndarray) -> CalculationResult:
+def normal_shock_condition(
+    *,
+    upstream_mach: float | np.ndarray,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
+) -> CalculationResult:
     """Calculate normal-shock ratios and the Rayleigh pitot relation."""
-    result = normal_shock(upstream_mach)
+    try:
+        gas = _SHOCK_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("unknown shock gas_model") from error
+    result = normal_shock(upstream_mach, gas, upstream_temperature=upstream_temperature)
     mach_values = _array(result.upstream_mach)
-    pitot_values = _array(supersonic_pitot_pressure_ratio(mach_values))
     rows: list[Row] = []
+    messages: list[str] = []
     for index, mach in enumerate(mach_values):
+        pitot: float | None = None
+        message = ""
+        try:
+            pitot = float(
+                supersonic_pitot_pressure_ratio(
+                    float(mach), gas, upstream_temperature=upstream_temperature
+                )
+            )
+        except ModelRangeError as error:
+            message = f"ピトー圧力比は計算できません: {error}"
+            messages.append(message)
         rows.append(
             {
                 "upstream_mach": float(mach),
@@ -477,17 +497,64 @@ def normal_shock_condition(*, upstream_mach: float | np.ndarray) -> CalculationR
                 "total_pressure_ratio": float(
                     _array(result.total_pressure_ratio)[index]
                 ),
-                "pitot_pressure_ratio": float(pitot_values[index]),
+                "pitot_pressure_ratio": pitot,
                 "status": "ok",
-                "message": "",
+                "message": message,
             }
         )
-    return CalculationResult(tuple(rows))
+        if gas_model != "AIR":
+            assert upstream_temperature is not None
+            rows[-1].update(
+                {
+                    "gas_model": gas_model,
+                    "upstream_temperature": upstream_temperature,
+                    "downstream_temperature": upstream_temperature
+                    * float(_array(result.static_temperature_ratio)[index]),
+                }
+            )
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
-def normal_shock_sweep(*, start: float, stop: float, points: int) -> CalculationResult:
+def normal_shock_sweep(
+    *,
+    start: float,
+    stop: float,
+    points: int,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
+) -> CalculationResult:
     """Sweep upstream Mach number through a normal shock."""
-    return normal_shock_condition(upstream_mach=sweep_values(start, stop, points))
+    values = sweep_values(start, stop, points)
+    if gas_model == "AIR":
+        return normal_shock_condition(upstream_mach=values)
+    rows: list[Row] = []
+    messages: list[str] = []
+    for mach in values:
+        try:
+            result = normal_shock_condition(
+                upstream_mach=float(mach),
+                gas_model=gas_model,
+                upstream_temperature=upstream_temperature,
+            )
+        except ValueError as error:
+            rows.append(
+                {
+                    "upstream_mach": float(mach),
+                    "gas_model": gas_model,
+                    "upstream_temperature": upstream_temperature,
+                    "downstream_temperature": None,
+                    "status": (
+                        "out_of_range"
+                        if isinstance(error, ModelRangeError)
+                        else "error"
+                    ),
+                    "message": str(error),
+                }
+            )
+        else:
+            rows.extend(result.rows)
+            messages.extend(result.warnings)
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
 def detached_shock_condition(

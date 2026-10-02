@@ -37,6 +37,35 @@ def _flight_configuration(*, mode: str = "single") -> dict[str, object]:
 
 
 @pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("models", "gas_model", "BEATTIE_BRIDGEMAN"),
+        ("inputs_si", "upstream_temperature", 0.0),
+        ("inputs_si", "upstream_temperature", "500"),
+    ],
+)
+def test_normal_thermal_settings_reject_invalid_fields(
+    section: str,
+    field: str,
+    value: object,
+) -> None:
+    configuration = {
+        "schema_version": 1,
+        "calculator": "normal_shock",
+        "mode": "single",
+        "inputs_si": {"upstream_mach": 3.0, "upstream_temperature": 500.0},
+        "models": {"gas_model": "NASA9"},
+        "display_units": UnitPreferences().to_dict(),
+    }
+    assert load_configuration(dump_configuration(configuration)) == configuration
+    payload = configuration[section]
+    assert isinstance(payload, dict)
+    payload[field] = value
+    with pytest.raises(ConfigurationError):
+        validate_configuration(configuration)
+
+
+@pytest.mark.parametrize(
     ("section", "field", "value", "message"),
     (
         ("inputs_si", "motion", "0.8", "must be a number"),

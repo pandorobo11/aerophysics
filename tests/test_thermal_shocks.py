@@ -16,6 +16,7 @@ from aerophysics.shocks import (
     normal_shock,
     oblique_shock,
     shock_angle,
+    supersonic_pitot_pressure_ratio,
     theta_from_shock_angle,
 )
 from aerophysics.thermochemistry import (
@@ -39,6 +40,99 @@ def polynomial_gas(slope: float = 0.0) -> ThermallyPerfectGas:
         ),
         (1.0,),
     )
+
+
+@pytest.mark.parametrize("gamma", [1.2, 1.4, 5.0 / 3.0])
+def test_thermal_pitot_recovers_constant_cp(gamma: float) -> None:
+    thermal = HarmonicOscillatorGas(287.0, gamma)
+    perfect = PerfectGas(heat_capacity_ratio=gamma, specific_gas_constant=287.0)
+    mach = [1.0, 2.0, 3.0, 7.0]
+    assert supersonic_pitot_pressure_ratio(
+        mach, thermal, upstream_temperature=300.0
+    ) == pytest.approx(supersonic_pitot_pressure_ratio(mach, perfect), rel=2e-11)
+
+
+def test_variable_cp_pitot_against_independent_energy_and_entropy() -> None:
+    gas = polynomial_gas(0.001)
+    mach, t1 = 4.0, 500.0
+    speed_squared_over_r = mach**2 * (4.0 / 3.0) * t1
+
+    def equations(values: np.ndarray) -> list[float]:
+        tau, density = values
+        return [
+            density * tau - 1.0 - speed_squared_over_r / t1 * (1.0 - 1.0 / density),
+            (
+                3.5 * t1 * (tau - 1.0)
+                + 0.0005 * t1**2 * (tau**2 - 1.0)
+                - 0.5 * speed_squared_over_r * (1.0 - 1.0 / density**2)
+            )
+            / t1,
+        ]
+
+    reference = root(equations, [3.0, 5.0], tol=1e-12)
+    assert reference.success
+    np.testing.assert_allclose(equations(reference.x), 0.0, atol=2e-12)
+    tau, density = reference.x
+    t2 = tau * t1
+    # Analytic inversion of h/R = 3.5*T + 0.0005*T**2.
+    t0 = (-3.5 + np.sqrt(4.0**2 + 0.001 * speed_squared_over_r)) / 0.001
+    expected = density * tau * np.exp(3.5 * np.log(t0 / t2) + 0.001 * (t0 - t2))
+    assert supersonic_pitot_pressure_ratio(
+        mach, gas, upstream_temperature=t1
+    ) == pytest.approx(expected, rel=2e-11)
+
+
+@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
+def test_thermal_pitot_presets_and_broadcast(
+    gas: ThermallyPerfectGas | HarmonicOscillatorGas,
+) -> None:
+    temperatures = [400.0, 500.0]
+    actual = supersonic_pitot_pressure_ratio(
+        [[1.0], [3.0]], gas, upstream_temperature=temperatures
+    )
+    assert isinstance(actual, np.ndarray) and actual.shape == (2, 2)
+    for i, mach in enumerate([1.0, 3.0]):
+        for j, temperature in enumerate(temperatures):
+            single = supersonic_pitot_pressure_ratio(
+                mach, gas, upstream_temperature=temperature
+            )
+            assert isinstance(single, float)
+            assert actual[i, j] == pytest.approx(single)
+            shock = normal_shock(mach, gas, upstream_temperature=temperature)
+            assert single > shock.static_pressure_ratio
+
+
+def test_pitot_stagnation_range_does_not_change_normal_shock_contract() -> None:
+    gas = HarmonicOscillatorGas(
+        287.0, 1.4, applicable_temperature_range=(400.0, 1400.0)
+    )
+    assert supersonic_pitot_pressure_ratio(
+        3.0, gas, upstream_temperature=500.0
+    ) == pytest.approx(supersonic_pitot_pressure_ratio(3.0), rel=2e-11)
+    # A reconstructed endpoint can round outward by one ulp; adopt Tmax
+    # directly rather than handing Brent a same-sign interval.
+    endpoint = float(np.nextafter(3.0, np.inf))
+    assert supersonic_pitot_pressure_ratio(
+        endpoint, gas, upstream_temperature=500.0
+    ) == pytest.approx(supersonic_pitot_pressure_ratio(endpoint), rel=2e-11)
+    with pytest.raises(ModelRangeError, match="pitot stagnation"):
+        supersonic_pitot_pressure_ratio(3.0 + 1e-10, gas, upstream_temperature=500.0)
+    bounded = HarmonicOscillatorGas(
+        287.0, 1.4, applicable_temperature_range=(400.0, 1399.0)
+    )
+    assert normal_shock(3.0, bounded, upstream_temperature=500.0).downstream_mach < 1.0
+    with pytest.raises(ModelRangeError, match="pitot stagnation"):
+        supersonic_pitot_pressure_ratio(3.0, bounded, upstream_temperature=500.0)
+    with pytest.raises(ModelRangeError, match="downstream shock"):
+        supersonic_pitot_pressure_ratio(5.0, bounded, upstream_temperature=500.0)
+    with pytest.raises(ModelRangeError, match="within"):
+        supersonic_pitot_pressure_ratio(3.0, bounded, upstream_temperature=300.0)
+    with pytest.raises(ValueError, match="upstream_temperature"):
+        supersonic_pitot_pressure_ratio(3.0, bounded)
+    with pytest.raises(ValueError, match="broadcastable"):
+        supersonic_pitot_pressure_ratio(
+            [2.0, 3.0], bounded, upstream_temperature=[500.0] * 3
+        )
 
 
 @pytest.mark.parametrize("gamma", [1.2, 1.4, 5.0 / 3.0])

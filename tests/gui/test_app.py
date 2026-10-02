@@ -316,6 +316,96 @@ from aerophysics.gui.units import UnitPreferences
         assert len(app.dataframe[0].value) == 3
 
 
+@pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
+def test_normal_thermal_settings_units_and_sweep_replay(gas_model: str) -> None:
+    from aerophysics.gui.config import dump_configuration, load_configuration
+
+    script = """
+from aerophysics.gui.flow_pages import render_normal_shock
+from aerophysics.gui.components import render_unit_sidebar
+render_normal_shock(render_unit_sidebar())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="normal_gas_model").set_value(gas_model).run()
+    app.number_input(key="normal_mach").set_value(3.0).run()
+    app.selectbox(key="unit_temperature").set_value("°C").run()
+    assert app.number_input(key="normal_upstream_temperature").value == pytest.approx(
+        226.85
+    )
+    app.button(key="FormSubmitter:normal_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.dataframe[0].value["気体モデル"].tolist() == [gas_model]
+    assert app.dataframe[0].value["上流静温 T₁ [°C]"].iloc[0] == pytest.approx(226.85)
+    assert app.dataframe[0].value["下流静温 T₂ [°C]"].iloc[0] > 226.85
+    app.radio(key="normal_mode").set_value("sweep").run()
+    app.number_input(key="normal_sweep_start").set_value(3.0).run()
+    app.number_input(key="normal_sweep_stop").set_value(5.4).run()
+    app.number_input(key="normal_sweep_points").set_value(3).run()
+    app.button(key="FormSubmitter:normal_form-計算").click().run()
+    assert not app.exception and not app.error
+    result, configuration = app.session_state["normal_payload"]
+    assert configuration["models"]["gas_model"] == gas_model
+    assert configuration["inputs_si"]["upstream_temperature"] == 500.0
+    assert len(result.rows) == 3
+    if gas_model == "HARMONIC_OSCILLATOR":
+        assert [row["status"] for row in result.rows] == ["ok", "ok", "out_of_range"]
+        assert result.rows[1]["pitot_pressure_ratio"] is None
+        assert app.warning
+    replay_script = """
+from aerophysics.gui.flow_pages import render_normal_shock
+from aerophysics.gui.units import UnitPreferences
+render_normal_shock(UnitPreferences(temperature='°C'))
+"""
+    replay = AppTest.from_string(replay_script, default_timeout=30)
+    replay.session_state["pending_normal_shock_configuration"] = load_configuration(
+        dump_configuration(configuration)
+    )
+    replay.run()
+    assert replay.selectbox(key="normal_gas_model").value == gas_model
+    assert replay.number_input(
+        key="normal_upstream_temperature"
+    ).value == pytest.approx(226.85)
+    replay.button(key="FormSubmitter:normal_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert replay.session_state["normal_payload"][0].rows == result.rows
+    assert replay.session_state["normal_payload"][1] == configuration
+
+
+def test_normal_legacy_settings_and_single_range_error() -> None:
+    script = """
+from aerophysics.gui.flow_pages import render_normal_shock
+from aerophysics.gui.units import UnitPreferences
+render_normal_shock(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_normal_shock_configuration"] = make_configuration(
+        calculator="normal_shock",
+        mode="single",
+        inputs_si={"upstream_mach": 3.0},
+        models={},
+        units=UnitPreferences(),
+    )
+    app.run()
+    assert app.selectbox(key="normal_gas_model").value == "AIR"
+    assert "normal_upstream_temperature" not in {
+        widget.key for widget in app.number_input
+    }
+    app.button(key="FormSubmitter:normal_form-計算").click().run()
+    assert not app.exception and not app.error
+    app.selectbox(key="normal_gas_model").set_value("HARMONIC_OSCILLATOR").run()
+    app.number_input(key="normal_mach").set_value(5.4).run()
+    app.button(key="FormSubmitter:normal_form-計算").click().run()
+    assert not app.exception and app.error
+    assert "normal_payload" not in app.session_state
+    app.number_input(key="normal_mach").set_value(4.2).run()
+    app.button(key="FormSubmitter:normal_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.warning
+    result = app.session_state["normal_payload"][0]
+    assert result.rows[0]["status"] == "ok"
+    assert result.rows[0]["pitot_pressure_ratio"] is None
+
+
 def test_isentropic_page_supports_thermally_perfect_air() -> None:
     script = """
 from aerophysics.gui.flow_pages import render_isentropic

@@ -13,6 +13,7 @@ from aerophysics.detached_shock import (
     DetachedShockGeometry,
 )
 from aerophysics.gui.adapters import (
+    _SHOCK_GASES,
     CalculationResult,
     detached_shock_condition,
     detached_shock_shape,
@@ -362,7 +363,7 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
     st.title("垂直衝撃波")
     st.caption("衝撃波前後の状態量比、全圧損失、超音速ピトー圧力比を計算します。")
     imported = pop_pending_configuration("normal_shock")
-    inputs, _, sweep = _defaults(imported)
+    inputs, models, sweep = _defaults(imported)
     render_configuration_import("normal_shock", "normal")
     render_reset_button("normal", "normal_payload")
     default_mode = str(imported.get("mode", "single")) if imported else "single"
@@ -382,6 +383,28 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
             key="normal_mach",
             min_value=1.0,
         )
+        gas_names = tuple(_SHOCK_GASES)
+        gas_model = st.selectbox(
+            "気体モデル",
+            gas_names,
+            index=gas_names.index(str(models.get("gas_model", "AIR"))),
+            key="normal_gas_model",
+        )
+        assert gas_model is not None
+        upstream_temperature = None
+        if gas_model != "AIR":
+            temperature_display = finite_number(
+                f"上流静温 T₁ [{preferences.temperature}]",
+                _display(
+                    float(inputs.get("upstream_temperature") or 500.0),
+                    "temperature",
+                    preferences.temperature,
+                ),
+                key="normal_upstream_temperature",
+            )
+            upstream_temperature = _si(
+                temperature_display, "temperature", preferences.temperature
+            )
         start = stop = 0.0
         points = 101
         if mode == "sweep":
@@ -418,9 +441,19 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
         try:
             sweep_configuration: dict[str, object] | None = None
             if mode == "single":
-                result = normal_shock_condition(upstream_mach=mach)
+                result = normal_shock_condition(
+                    upstream_mach=mach,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                )
             else:
-                result = normal_shock_sweep(start=start, stop=stop, points=points)
+                result = normal_shock_sweep(
+                    start=start,
+                    stop=stop,
+                    points=points,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                )
                 sweep_configuration = {
                     "field": "upstream_mach",
                     "start": start,
@@ -430,8 +463,11 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
             configuration = make_configuration(
                 calculator="normal_shock",
                 mode=mode,
-                inputs_si={"upstream_mach": mach},
-                models={},
+                inputs_si={
+                    "upstream_mach": mach,
+                    "upstream_temperature": upstream_temperature,
+                },
+                models={"gas_model": gas_model},
                 units=preferences,
                 sweep_si=sweep_configuration,
             )
@@ -443,7 +479,11 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
     payload = _payload("normal_payload")
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
-            st.write("定常・断熱な垂直衝撃波と熱量的完全気体AIRを仮定します。")
+            st.write(
+                "定常・断熱な垂直衝撃波を計算します。AIRは熱量的完全気体、"
+                "NASA7/NASA9と調和振動子は凍結組成の熱的完全気体です。"
+                "熱的完全気体では上流静温を指定し、外挿は行いません。"
+            )
         return
     result, configuration = payload
 
@@ -468,8 +508,20 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
         filename_prefix="aerophysics-normal-shock",
         metrics=metrics,
     )
+    invalid = sum(row.get("status") != "ok" for row in result.rows)
+    if invalid:
+        st.warning(
+            f"{invalid}点は温度範囲外または無効な入力です。"
+            "表のstatus/messageを確認してください。",
+            icon="⚠️",
+        )
     with st.expander("モデルの前提・適用範囲"):
-        st.write("状態量比は下流/上流、全圧比はp₀₂/p₀₁です。")
+        st.write(
+            "状態量比は下流/上流、全圧比はp₀₂/p₀₁です。NASA7/NASA9は"
+            "200–6000 K、調和振動子は400–2000 Kの静温範囲に限ります。"
+            "ピトー比p₀₂/p₁はよどみ温度も範囲内である必要があり、"
+            "範囲外ではその値だけ空欄になります。解離・反応は扱いません。"
+        )
 
 
 def render_expansion(preferences: UnitPreferences) -> None:

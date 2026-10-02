@@ -304,6 +304,63 @@ def test_normal_shock_adapter_and_sweep() -> None:
     assert last_ratio < first_ratio
 
 
+@pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
+def test_normal_shock_thermal_adapter_matches_public_api(gas_model: str) -> None:
+    from aerophysics.gui.adapters import _SHOCK_GASES
+    from aerophysics.shocks import normal_shock, supersonic_pitot_pressure_ratio
+
+    gas = _SHOCK_GASES[gas_model]
+    actual = normal_shock_condition(
+        upstream_mach=np.array([1.0, 2.0, 3.0]),
+        gas_model=gas_model,
+        upstream_temperature=500.0,
+    )
+    assert not actual.warnings
+    for row in actual.rows:
+        mach = float(row["upstream_mach"])  # type: ignore[arg-type]
+        expected = normal_shock(mach, gas, upstream_temperature=500.0)
+        assert row["gas_model"] == gas_model
+        assert row["upstream_temperature"] == 500.0
+        assert row["downstream_temperature"] == pytest.approx(
+            500.0 * float(expected.static_temperature_ratio)
+        )
+        assert row["downstream_mach"] == pytest.approx(expected.downstream_mach)
+        assert row["total_pressure_ratio"] == pytest.approx(
+            expected.total_pressure_ratio
+        )
+        assert row["pitot_pressure_ratio"] == pytest.approx(
+            supersonic_pitot_pressure_ratio(mach, gas, upstream_temperature=500.0)
+        )
+
+
+def test_normal_thermal_sweep_retains_range_failures_and_valid_shocks() -> None:
+    from aerophysics.exceptions import ModelRangeError
+
+    result = normal_shock_sweep(
+        start=3.0,
+        stop=5.4,
+        points=3,
+        gas_model="HARMONIC_OSCILLATOR",
+        upstream_temperature=500.0,
+    )
+    assert [row["status"] for row in result.rows] == ["ok", "ok", "out_of_range"]
+    assert result.rows[1]["pitot_pressure_ratio"] is None
+    assert result.rows[1]["downstream_temperature"] == pytest.approx(1956.579113105)
+    assert "pitot stagnation" in str(result.rows[1]["message"])
+    assert result.rows[2]["downstream_temperature"] is None
+    assert result.warnings
+    with pytest.raises(ModelRangeError):
+        normal_shock_condition(
+            upstream_mach=5.4,
+            gas_model="HARMONIC_OSCILLATOR",
+            upstream_temperature=500.0,
+        )
+    with pytest.raises(ValueError, match="unknown shock"):
+        normal_shock_condition(upstream_mach=2.0, gas_model="unknown")
+    missing = normal_shock_sweep(start=1.0, stop=2.0, points=2, gas_model="NASA9")
+    assert [row["status"] for row in missing.rows] == ["error", "error"]
+
+
 def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
     single = detached_shock_condition(
         upstream_mach=4.0,
