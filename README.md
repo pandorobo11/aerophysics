@@ -18,13 +18,13 @@ available, install the current wheel from the
 [latest GitHub Release](https://github.com/pandorobo11/aerophysics/releases/latest):
 
 ```console
-python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
+python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.7.0/aerophysics-0.7.0-py3-none-any.whl"
 ```
 
 To install and launch the optional local GUI:
 
 ```console
-python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
+python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.7.0/aerophysics-0.7.0-py3-none-any.whl"
 aerophysics-gui
 ```
 
