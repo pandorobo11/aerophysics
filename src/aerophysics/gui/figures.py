@@ -1030,7 +1030,10 @@ def expansion_geometry(row: Row, preferences: UnitPreferences) -> go.Figure:
             bgcolor="rgba(255,255,255,0.9)",
         )
     _flow_direction_arrow(figure, -1.15, 0.4, 0.0, f"上流 M₁ = {mach1:.3g}")
-    flow_start = 1.4 * direction + 0.13 * normal
+    # Keep the whole wall-parallel arrow below the final Mach line, including
+    # narrow downstream sectors at large expansion angles.
+    flow_offset = min(0.13, 1.4 * math.tan(0.5 * mu2))
+    flow_start = 1.4 * direction + flow_offset * normal
     _flow_direction_arrow(
         figure,
         float(flow_start[0]),

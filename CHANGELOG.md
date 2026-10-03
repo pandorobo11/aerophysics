@@ -55,6 +55,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Keep the downstream Mach arrow between the convex wall and the final Mach
+  line in expansion schematics, including narrow sectors at large turns.
+
 - Render conical-shock sweep inputs and the calculation button without solving
   the attached limit first; use an editable 0--30 degree initial angle range.
 

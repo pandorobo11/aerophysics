@@ -106,7 +106,7 @@ def test_normal_geometry_uses_solved_mach_and_collinear_flow(
 @pytest.mark.parametrize("unit", ["deg", "rad"])
 @pytest.mark.parametrize(
     ("mach", "theta_degrees"),
-    [(1.0, 15.0), (2.0, 0.0), (2.0, 15.0), (2.0, 80.0), (1.05, 110.0)],
+    [(1.0, 15.0), (2.0, 0.0), (2.0, 15.0), (2.0, 80.0), (2.0, 100.0), (1.05, 110.0)],
 )
 def test_expansion_geometry_fan_and_local_mach_angles(
     mach: float, theta_degrees: float, unit: str
@@ -146,6 +146,16 @@ def test_expansion_geometry_fan_and_local_mach_angles(
         downstream.y - downstream.ay, downstream.x - downstream.ax
     ) == pytest.approx(-theta)
     assert np.cos(theta) * downstream.ay + np.sin(theta) * downstream.ax > 0.0
+    # The segment must lie in uniform downstream flow, above the wall and
+    # below the final Mach line; its direction alone does not establish that.
+    points = np.linspace(
+        [downstream.ax, downstream.ay], [downstream.x, downstream.y], 17
+    )
+    wall_normal = np.array([np.sin(theta), np.cos(theta)])
+    final_angle = np.arctan2(fan[-1].y[-1], fan[-1].x[-1])
+    final_normal = np.array([-np.sin(final_angle), np.cos(final_angle)])
+    assert np.all(points @ wall_normal > 0.0)
+    assert np.all(points @ final_normal < 0.0)
     for trace in figure.data:
         assert np.all(np.isfinite(trace.x)) and np.all(np.isfinite(trace.y))
     if theta == 0.0:
