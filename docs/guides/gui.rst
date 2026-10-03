@@ -71,7 +71,9 @@ the selected display angle unit.
 
 Blue arrows show flow directions, rather than Mach-label leader lines. The
 upstream arrow is horizontal; the oblique downstream arrow is parallel to the
-wedge. The conical downstream arrow denotes only the surface direction and
+wedge. Labels include the solved Mach numbers to three significant figures,
+matching the normal-shock and expansion schematics. The conical downstream
+arrow denotes only the surface direction and
 surface Mach ``M_s``: the intervening Taylor--Maccoll flow turns continuously
 from the shock toward the surface. Arrow lengths are schematic and do not
 encode velocity magnitude. The cone view is a meridional section with its

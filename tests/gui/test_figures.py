@@ -210,6 +210,9 @@ def test_shock_geometry_and_both_sweep_axes() -> None:
     geometry = shock_geometry(single.rows[0], UnitPreferences())
     assert len(geometry.data) == 4
     assert "deg" in str(geometry.layout.title.text)
+    text = " ".join(str(item.text) for item in geometry.layout.annotations)
+    assert "上流 M₁ = 2" in text
+    assert f"下流 M₂ = {single.rows[0]['downstream_mach']:.3g}" in text
     bad_row = {**single.rows[0], "shock_angle": None}
     with pytest.raises(ValueError, match="successful"):
         shock_geometry(bad_row, UnitPreferences())
@@ -246,6 +249,7 @@ def test_conical_shock_geometry_and_sweep_axes() -> None:
             "cone_half_angle": np.deg2rad(10.0),
             "shock_angle": np.deg2rad(31.0),
             "maximum_cone_half_angle": np.deg2rad(40.0),
+            "post_shock_mach": 1.9,
             "surface_mach": 1.8,
         },
         {
@@ -259,6 +263,10 @@ def test_conical_shock_geometry_and_sweep_axes() -> None:
     geometry = conical_shock_geometry(rows[0], UnitPreferences())
     assert len(geometry.data) == 4
     assert "deg" in str(geometry.layout.title.text)
+    text = " ".join(str(item.text) for item in geometry.layout.annotations)
+    assert "上流 M∞ = 2" in text
+    assert "表面 Mₛ = 1.8" in text
+    assert "表面 Mₛ = 1.9" not in text
     with pytest.raises(ValueError, match="successful"):
         conical_shock_geometry({**rows[0], "shock_angle": None}, UnitPreferences())
     angles = conical_shock_trends(rows, UnitPreferences())
@@ -295,7 +303,12 @@ def test_attached_geometry_preserves_angles_and_flow_directions(
     angle_key = "cone_half_angle" if conical else "deflection_angle"
     plot = conical_shock_geometry if conical else shock_geometry
     figure = plot(
-        {angle_key: float(theta), "shock_angle": float(beta)},
+        {
+            angle_key: float(theta),
+            "shock_angle": float(beta),
+            "upstream_mach": 3.0,
+            "surface_mach" if conical else "downstream_mach": 1.81234,
+        },
         UnitPreferences(angle=unit),
     )
     assert figure.layout.yaxis.scaleanchor == "x"
@@ -323,7 +336,8 @@ def test_attached_geometry_preserves_angles_and_flow_directions(
             angle, abs=1e-14
         )
     text = " ".join(str(item.text) for item in figure.layout.annotations)
-    assert ("表面 Mₛ" if conical else "下流 M₂") in text
+    assert ("上流 M∞ = 3" if conical else "上流 M₁ = 3") in text
+    assert ("表面 Mₛ = 1.81" if conical else "下流 M₂ = 1.81") in text
     assert "角度の基準" in text or "円錐軸" in text
 
 

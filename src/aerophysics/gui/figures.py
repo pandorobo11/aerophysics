@@ -141,6 +141,8 @@ def _attached_shock_geometry(
     preferences: UnitPreferences,
     *,
     conical: bool,
+    upstream_mach: float,
+    downstream_mach: float,
 ) -> go.Figure:
     """Draw true angles and flow directions in an equally scaled section."""
     wall_name = "円錐面" if conical else "くさび面"
@@ -234,8 +236,18 @@ def _attached_shock_geometry(
         flow_x = 0.95 * math.cos(0.5 * (theta + beta))
         flow_y = 0.95 * math.sin(0.5 * (theta + beta))
     for x, y, direction, text in (
-        (-0.68, 0.34, 0.0, "上流 M∞" if conical else "上流 M₁"),
-        (flow_x, flow_y, theta, "表面 Mₛ" if conical else "下流 M₂"),
+        (
+            -0.68,
+            0.34,
+            0.0,
+            f"{'上流 M∞' if conical else '上流 M₁'} = {upstream_mach:.3g}",
+        ),
+        (
+            flow_x,
+            flow_y,
+            theta,
+            f"{'表面 Mₛ' if conical else '下流 M₂'} = {downstream_mach:.3g}",
+        ),
     ):
         dx, dy = 0.46 * math.cos(direction), 0.46 * math.sin(direction)
         figure.add_annotation(
@@ -321,9 +333,22 @@ def shock_geometry(row: Row, preferences: UnitPreferences) -> go.Figure:
     """Create a schematic wedge and attached-shock diagram."""
     theta = row.get("deflection_angle")
     beta = row.get("shock_angle")
-    if not isinstance(theta, float) or not isinstance(beta, float):
+    mach1, mach2 = row.get("upstream_mach"), row.get("downstream_mach")
+    if (
+        not isinstance(theta, float)
+        or not isinstance(beta, float)
+        or not isinstance(mach1, float)
+        or not isinstance(mach2, float)
+    ):
         raise ValueError("geometry requires a successful shock result")
-    return _attached_shock_geometry(theta, beta, preferences, conical=False)
+    return _attached_shock_geometry(
+        theta,
+        beta,
+        preferences,
+        conical=False,
+        upstream_mach=mach1,
+        downstream_mach=mach2,
+    )
 
 
 def shock_trends(
@@ -385,9 +410,22 @@ def conical_shock_geometry(row: Row, preferences: UnitPreferences) -> go.Figure:
     """Create a meridional schematic of a cone and its attached shock."""
     cone_angle = row.get("cone_half_angle")
     shock_angle = row.get("shock_angle")
-    if not isinstance(cone_angle, float) or not isinstance(shock_angle, float):
+    mach1, surface_mach = row.get("upstream_mach"), row.get("surface_mach")
+    if (
+        not isinstance(cone_angle, float)
+        or not isinstance(shock_angle, float)
+        or not isinstance(mach1, float)
+        or not isinstance(surface_mach, float)
+    ):
         raise ValueError("geometry requires a successful conical-shock result")
-    return _attached_shock_geometry(cone_angle, shock_angle, preferences, conical=True)
+    return _attached_shock_geometry(
+        cone_angle,
+        shock_angle,
+        preferences,
+        conical=True,
+        upstream_mach=mach1,
+        downstream_mach=surface_mach,
+    )
 
 
 def conical_shock_trends(

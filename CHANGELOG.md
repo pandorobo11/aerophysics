@@ -38,6 +38,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
   arrows. Use bounded shock rays to keep near-normal shocks readable, and show
   detached-shock nose radius, standoff distance and upstream coordinate direction.
   Display flow from left to right consistently across all three schematics.
+  Label oblique upstream/downstream and conical upstream/surface arrows with
+  solved Mach numbers, matching the normal-shock and expansion schematics.
 - Validate imported GUI settings against calculator-specific input, model, and
   sweep schemas before applying them, including finite and JSON-safe values.
 - Use the fused isentropic analysis path in GUI sweeps so thermally perfect and
