@@ -523,7 +523,7 @@ def detached_shock_geometry(
         y=0.0,
         text="O",
         showarrow=False,
-        xshift=-14,
+        xshift=14,
         yshift=-16,
         font={"color": "#555", "size": 14},
     )
@@ -553,7 +553,7 @@ def detached_shock_geometry(
         y=0.68 * display_radius,
         text=f"Rₙ = {display_radius:.3g} {unit}",
         showarrow=False,
-        xanchor="right",
+        xanchor="left",
         font={"color": "#555", "size": 14},
         bgcolor="rgba(255,255,255,0.9)",
     )
@@ -582,13 +582,14 @@ def detached_shock_geometry(
         y=dimension_y,
         text=f"Δ = {distance:.3g} {unit}",
         showarrow=False,
-        xanchor="left",
-        xshift=12,
+        xanchor="right",
+        xshift=-12,
         yshift=-15,
         font={"color": "#64748b", "size": 14},
     )
 
-    # Positive x points upstream, so the freestream velocity points left.
+    # Preserve the upstream-positive coordinates; the reversed display axis
+    # makes the -x freestream velocity point right, as in the attached views.
     flow_y = 0.65 * extent
     figure.add_annotation(
         x=vertex + 0.5 * display_radius,
@@ -636,7 +637,7 @@ def detached_shock_geometry(
         y=-0.2,
         xref="paper",
         yref="paper",
-        text="O：頭部曲率中心　+x：上流側　青矢印：流れ方向（−x、長さは模式的）",
+        text="O：頭部曲率中心　+x：上流（左側）　青矢印：流れ方向（−x、長さは模式的）",
         showarrow=False,
         font={"color": "#64748b", "size": 13},
     )
@@ -646,10 +647,10 @@ def detached_shock_geometry(
         height=560,
         showlegend=False,
         xaxis={
-            "title": f"x [{unit}]（+x：上流側）",
+            "title": f"x [{unit}]（+x：上流・左側）",
             "scaleanchor": "y",
             "scaleratio": 1,
-            "range": [x_min, x_max],
+            "range": [x_max, x_min],
             "showgrid": False,
             "zeroline": False,
         },

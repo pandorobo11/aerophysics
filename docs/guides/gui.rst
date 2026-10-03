@@ -64,7 +64,10 @@ upper shock shown.
 
 The detached-shock view uses the same grey body, red shock and blue freestream
 arrow. Its origin ``O`` is the nose-curvature centre, with positive ``x``
-pointing upstream and the flow arrow toward negative ``x``. The radius
+pointing upstream and the flow arrow toward negative ``x``. The horizontal
+axis is reversed so upstream appears on the left and the flow runs left to
+right, matching the attached-shock views. Plot coordinates, hover values and
+exported CSV coordinates retain the upstream-positive convention. The radius
 dimension ``Rn`` runs from that centre to the circular nose. The standoff
 bracket ``Delta`` spans from the body vertex at ``x = Rn`` to the shock vertex
 at ``x = Rn + Delta``; both lengths use the selected display unit. The shock

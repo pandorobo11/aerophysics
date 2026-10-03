@@ -330,7 +330,10 @@ def test_detached_geometry_dimensions_and_upstream_coordinates(
     assert "Billig" in figure.layout.title.text
     assert "Ambrosio" in figure.layout.title.text
     assert "+x" in figure.layout.xaxis.title.text
-    assert "上流側" in figure.layout.xaxis.title.text
+    assert "上流" in figure.layout.xaxis.title.text
+    assert "左側" in figure.layout.xaxis.title.text
+    x_left, x_right = figure.layout.xaxis.range
+    assert x_left > x_right
 
     bracket = next(
         line
@@ -362,6 +365,13 @@ def test_detached_geometry_dimensions_and_upstream_coordinates(
     assert flow_arrow.axref == flow_arrow.xref == "x"
     assert flow_arrow.ayref == flow_arrow.yref == "y"
     assert flow_arrow.arrowhead > 0
+    # Rendering reverses x only: the arrow runs left-to-right, and both the
+    # arrow and shock vertex stay upstream (left) of the body vertex.
+    tail_fraction = (flow_arrow.ax - x_left) / (x_right - x_left)
+    tip_fraction = (flow_arrow.x - x_left) / (x_right - x_left)
+    shock_fraction = (radius + distance - x_left) / (x_right - x_left)
+    body_fraction = (radius - x_left) / (x_right - x_left)
+    assert 0.0 <= tail_fraction < tip_fraction < shock_fraction < body_fraction <= 1.0
     text = " ".join(str(item.text) for item in figure.layout.annotations)
     assert f"Rₙ = {radius:.3g} {unit}" in text
     assert f"Δ = {distance:.3g} {unit}" in text
