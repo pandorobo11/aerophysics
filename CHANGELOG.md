@@ -14,6 +14,18 @@ uses Semantic Versioning, including during the pre-1.0 period.
   when only the sonic reference for the absolute Prandtl--Meyer angle is outside
   the model range.
 
+- Add single-point normal-shock and Prandtl--Meyer expansion GUI schematics
+  with solved Mach labels, physical flow directions, a convex-wall expansion
+  fan and angle arcs in the selected display unit.
+
+- Add local gamma, full velocity ratios, sound speeds, dynamic-pressure ratios
+  and entropy rise to shock GUI results, with optional cp/cv detail columns.
+  Add optional static pressure, dry-air viscosity selection and local unit
+  Reynolds numbers to normal, oblique and conical shocks; the isentropic page
+  uses its existing total pressure. Optional length supplies Re_L. Preserve
+  valid flow states when a viscosity correlation is outside its fitted range,
+  and retain all output options through unit changes and settings replay.
+
 - Add thermal gas selection, upstream static temperatures, Mach sweeps, and
   settings replay to the normal-shock GUI. Extend the supersonic pitot ratio
   to frozen thermally perfect gases; retain valid shock results when only the
@@ -36,6 +48,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Clarify oblique, conical and detached shock GUI schematics with shaded bodies,
+  horizontal angle references, labelled angle arcs and physical flow-direction
+  arrows. Use bounded shock rays to keep near-normal shocks readable, and show
+  detached-shock nose radius, standoff distance and upstream coordinate direction.
+  Display flow from left to right consistently across all three schematics.
+  Label oblique upstream/downstream and conical upstream/surface arrows with
+  solved Mach numbers, matching the normal-shock and expansion schematics.
 - Validate imported GUI settings against calculator-specific input, model, and
   sweep schemas before applying them, including finite and JSON-safe values.
 - Use the fused isentropic analysis path in GUI sweeps so thermally perfect and
@@ -50,6 +69,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
   regenerate that record before documentation builds.
 
 ### Fixed
+
+- Keep the downstream Mach arrow between the convex wall and the final Mach
+  line in expansion schematics, including narrow sectors at large turns.
 
 - Render conical-shock sweep inputs and the calculation button without solving
   the attached limit first; use an editable 0--30 degree initial angle range.

@@ -14,13 +14,16 @@ from aerophysics.boundary_layer_profile import (
     TemperatureVelocityRelation,
     compressible_turbulent_boundary_layer_profile,
 )
+from aerophysics.gui._flow_outputs import (
+    VISCOSITY_MODELS as _VISCOSITY_MODELS,
+)
+from aerophysics.gui._flow_outputs import (
+    VISCOSITY_RANGES as _VISCOSITY_RANGES,
+)
 from aerophysics.gui.adapters import CalculationResult, Row, sweep_values
 from aerophysics.protrusion import protrusion_drag
 from aerophysics.transport import (
-    AIR_BLOTTNER_VISCOSITY,
-    AIR_KEYES_VISCOSITY,
     AIR_VISCOSITY,
-    DynamicViscosityModel,
 )
 
 
@@ -461,18 +464,6 @@ def thermochemistry_sweep(
         models=models,
         allow_extrapolation=allow_extrapolation,
     )
-
-
-_VISCOSITY_MODELS: dict[str, DynamicViscosityModel] = {
-    "Sutherland": AIR_VISCOSITY,
-    "Keyes": AIR_KEYES_VISCOSITY,
-    "Blottner/Wilke": AIR_BLOTTNER_VISCOSITY,
-}
-_VISCOSITY_RANGES: dict[str, tuple[float, float] | None] = {
-    "Sutherland": None,
-    "Keyes": (79.0, 1845.0),
-    "Blottner/Wilke": (1000.0, 30_000.0),
-}
 
 
 def viscosity_condition(
