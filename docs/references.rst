@@ -1,6 +1,13 @@
 References
 ==========
 
+.. _ref-noyes-1950:
+
+Noyes, R. N. *Prandtl--Meyer Flow for a Diatomic Gas of Variable Specific Heat*.
+NACA Technical Note 2125, 1950.
+
+https://ntrs.nasa.gov/citations/19930082823
+
 .. _ref-tatum-1996:
 
 Tatum, K. E. *Computation of Thermally Perfect Properties of Oblique Shock

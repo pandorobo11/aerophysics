@@ -7,6 +7,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Extend centered Prandtl--Meyer expansions to frozen thermally perfect gases
+  with upstream static temperature, variable heat capacity, and strict static
+  temperature bounds. Add thermal gas selection, temperature results,
+  Mach/turn sweeps, and settings replay to the expansion GUI. Keep valid states
+  when only the sonic reference for the absolute Prandtl--Meyer angle is outside
+  the model range.
+
 - Add thermal gas selection, upstream static temperatures, Mach sweeps, and
   settings replay to the normal-shock GUI. Extend the supersonic pitot ratio
   to frozen thermally perfect gases; retain valid shock results when only the

@@ -78,6 +78,25 @@ The angle sweep starts with an editable 0--30 degree range. Switching modes or
 editing inputs does not solve the attached limit; numerical calculations start
 when the calculation button is pressed.
 
+Thermally perfect expansions
+----------------------------
+
+The **Prandtl--Meyer expansion** page supports ``AIR``, ``NASA7``, ``NASA9``,
+and ``HARMONIC_OSCILLATOR`` with upstream static temperature for thermal gases.
+Results include downstream Mach, static temperature/pressure/density ratios,
+upstream/downstream static temperatures, and the maximum turn allowed by the
+temperature lower bound. This limit is labelled separately from the perfect
+gas's physical limiting turn.
+
+Mach and turn sweeps retain range failures as ``out_of_range`` rows; numerical
+convergence failures are ``error`` rows and do not discard successful points.
+Single-point failures are displayed on the page. If the sonic reference is
+outside the gas range, the valid expansion still appears while only
+``nu1/nu2`` are blank, with an explanation. Settings JSON stores gas selection
+and SI static temperature; older settings retain ``AIR``. Display-unit changes
+preserve the input temperature. See :doc:`../models/expansion_waves` for the
+governing equations and model ranges.
+
 Case handoff
 ------------
 

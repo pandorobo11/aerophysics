@@ -618,7 +618,10 @@ def expansion_figures(
         ("upstream_prandtl_meyer_angle", "ν₁"),
         ("downstream_prandtl_meyer_angle", "ν₂"),
         ("maximum_turn_angle", "最大膨張角"),
+        ("temperature_limited_turn_angle", "温度範囲内の最大膨張角"),
     ):
+        if not any(row.get(key) is not None for row in rows):
+            continue
         angles.add_trace(
             go.Scatter(
                 x=x,

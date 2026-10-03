@@ -22,5 +22,9 @@ Detached shock waves
 Expansion waves
 ---------------
 
+.. py:type:: aerophysics.expansion.ExpansionGasModel
+
+   ``PerfectGas | ThermallyPerfectGas | HarmonicOscillatorGas``.
+
 .. automodule:: aerophysics.expansion
    :members:

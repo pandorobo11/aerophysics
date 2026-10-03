@@ -1,4 +1,4 @@
-"""Prandtl-Meyer expansion of a calorically perfect gas.
+"""Prandtl-Meyer expansion of calorically or thermally perfect ideal gases.
 
 Angles are expressed in radians. Expansion state ratios are downstream over
 upstream static quantities; total temperature and total pressure remain
@@ -18,7 +18,12 @@ from numpy.typing import ArrayLike
 from scipy.optimize import brentq
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
+from aerophysics._thermal_expansion import expansion_state
 from aerophysics.gas import AIR, PerfectGas
+from aerophysics.real_gas import HarmonicOscillatorGas
+from aerophysics.thermochemistry import ThermallyPerfectGas
+
+type ExpansionGasModel = PerfectGas | ThermallyPerfectGas | HarmonicOscillatorGas
 
 _ROOT_XTOL: Final = 1e-12
 _ROOT_RTOL: Final = 4.0 * np.finfo(np.float64).eps
@@ -33,11 +38,12 @@ class PrandtlMeyerExpansionResult:
     upstream_mach: FloatResult
     downstream_mach: FloatResult
     turn_angle: FloatResult
-    upstream_prandtl_meyer_angle: FloatResult
-    downstream_prandtl_meyer_angle: FloatResult
+    upstream_prandtl_meyer_angle: FloatResult | None
+    downstream_prandtl_meyer_angle: FloatResult | None
     static_temperature_ratio: FloatResult
     static_pressure_ratio: FloatResult
     static_density_ratio: FloatResult
+    available_turn_angle: FloatResult | None = None
 
 
 def _validate_supersonic_mach(mach: ArrayLike) -> tuple[FloatArray, bool]:
@@ -111,9 +117,20 @@ def mach_from_prandtl_meyer(angle: ArrayLike, gas: PerfectGas = AIR) -> FloatRes
 def prandtl_meyer_expansion(
     upstream_mach: ArrayLike,
     turn_angle: ArrayLike,
-    gas: PerfectGas = AIR,
+    gas: ExpansionGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> PrandtlMeyerExpansionResult:
-    """Return the state after an isentropic centered expansion."""
+    """Return the state after an isentropic centered expansion.
+
+    Thermal models require upstream static temperature in K, broadcast with
+    Mach and turn angle (rad). Composition is frozen and no extrapolation is
+    performed. ``available_turn_angle`` is the turn to the temperature lower
+    bound for thermal gases, or the exclusive vacuum limit for perfect gases.
+    Absolute nu uses the sonic state at the same total enthalpy. If that state
+    is outside the model range, nu is None for scalars or NaN in array entries;
+    this does not discard valid downstream states.
+    """
     mach, mach_scalar = _validate_supersonic_mach(upstream_mach)
     turn, turn_scalar = as_float_array(turn_angle, name="turn_angle")
     try:
@@ -124,6 +141,60 @@ def prandtl_meyer_expansion(
         ) from error
     if np.any(turn < 0.0):
         raise ValueError("turn_angle must be non-negative")
+
+    if not isinstance(gas, PerfectGas):
+        if not isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
+            raise TypeError(
+                "gas must be a PerfectGas, ThermallyPerfectGas, "
+                "or HarmonicOscillatorGas"
+            )
+        if upstream_temperature is None:
+            raise ValueError(
+                "upstream_temperature is required for a thermally perfect gas"
+            )
+        temperature, temperature_scalar = as_float_array(
+            upstream_temperature, name="upstream_temperature"
+        )
+        if np.any(temperature <= 0.0):
+            raise ValueError("upstream_temperature must be greater than zero")
+        try:
+            mach, turn, temperature = np.broadcast_arrays(mach, turn, temperature)
+        except ValueError as error:
+            raise ValueError(
+                "Mach, angle, and upstream_temperature must be broadcastable"
+            ) from error
+        scalar = mach_scalar and turn_scalar and temperature_scalar
+        values = np.empty((6, *mach.shape), dtype=np.float64)
+        for index in np.ndindex(mach.shape):
+            state = expansion_state(
+                float(mach[index]), float(turn[index]), float(temperature[index]), gas
+            )
+            values[(slice(None), *index)] = (
+                state.downstream_mach,
+                state.temperature_ratio,
+                state.pressure_ratio,
+                state.density_ratio,
+                state.upstream_angle,
+                state.available_turn_angle,
+            )
+
+        def thermal_output(value: FloatArray) -> FloatResult:
+            return return_float(value, scalar=scalar)
+
+        def angle_output(value: FloatArray) -> FloatResult | None:
+            return None if scalar and np.isnan(value) else thermal_output(value)
+
+        return PrandtlMeyerExpansionResult(
+            upstream_mach=thermal_output(mach),
+            downstream_mach=thermal_output(values[0]),
+            turn_angle=thermal_output(turn),
+            upstream_prandtl_meyer_angle=angle_output(values[4]),
+            downstream_prandtl_meyer_angle=angle_output(values[4] + turn),
+            static_temperature_ratio=thermal_output(values[1]),
+            static_pressure_ratio=thermal_output(values[2]),
+            static_density_ratio=thermal_output(values[3]),
+            available_turn_angle=thermal_output(values[5]),
+        )
 
     upstream_angle = _prandtl_meyer_array(mach, gas)
     downstream_angle = upstream_angle + turn
@@ -154,10 +225,12 @@ def prandtl_meyer_expansion(
         static_temperature_ratio=output(temperature_ratio),
         static_pressure_ratio=output(pressure_ratio),
         static_density_ratio=output(density_ratio),
+        available_turn_angle=output(maximum - upstream_angle),
     )
 
 
 __all__ = [
+    "ExpansionGasModel",
     "PrandtlMeyerExpansionResult",
     "mach_from_prandtl_meyer",
     "maximum_prandtl_meyer_angle",
