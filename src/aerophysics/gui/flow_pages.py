@@ -31,6 +31,7 @@ from aerophysics.gui.components import (
     finite_number,
     pop_pending_configuration,
     render_configuration_import,
+    render_flow_output_controls,
     render_reset_button,
     render_result_bundle,
 )
@@ -195,7 +196,7 @@ def render_isentropic(preferences: UnitPreferences) -> None:
             assert branch is not None
         requires_pressure = gas_model == "BEATTIE_BRIDGEMAN"
         with_mass_flux_selection = st.checkbox(
-            "全圧を指定して質量流束を計算",
+            "全圧を指定して絶対状態・質量流束・単位Reを計算",
             value=requires_pressure or bool(models.get("with_mass_flux", False)),
             disabled=requires_pressure,
             key="isentropic_with_flux",
@@ -232,6 +233,16 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                 min_value=1e-12,
             )
             total_pressure = _si(pressure_display, "pressure", preferences.pressure)
+        _, viscosity_model, characteristic_length, with_heat_capacities = (
+            render_flow_output_controls(
+                "isentropic",
+                inputs,
+                models,
+                preferences,
+                isentropic=True,
+                pressure=total_pressure,
+            )
+        )
         start = stop = 0.0
         points = 101
         if mode == "sweep":
@@ -275,6 +286,9 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                     total_pressure=total_pressure,
                     total_temperature=total_temperature,
                     allow_extrapolation=allow_extrapolation,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                    with_heat_capacities=with_heat_capacities,
                 )
             else:
                 result = isentropic_sweep(
@@ -287,6 +301,9 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                     total_pressure=total_pressure,
                     total_temperature=total_temperature,
                     allow_extrapolation=allow_extrapolation,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                    with_heat_capacities=with_heat_capacities,
                 )
                 sweep_configuration = {
                     "field": "input_value",
@@ -301,12 +318,15 @@ def render_isentropic(preferences: UnitPreferences) -> None:
                     "input_value": input_value,
                     "total_pressure": total_pressure,
                     "total_temperature": total_temperature,
+                    "characteristic_length": characteristic_length,
                 },
                 models={
                     "input_basis": basis,
                     "branch": branch.value,
                     "gas_model": gas_model,
                     "with_mass_flux": with_mass_flux,
+                    "viscosity_model": viscosity_model,
+                    "with_heat_capacities": with_heat_capacities,
                     "allow_extrapolation": allow_extrapolation,
                 },
                 units=preferences,
@@ -391,8 +411,29 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
             key="normal_gas_model",
         )
         assert gas_model is not None
+        (
+            upstream_pressure,
+            viscosity_model,
+            characteristic_length,
+            with_heat_capacities,
+        ) = render_flow_output_controls(
+            "normal",
+            inputs,
+            models,
+            preferences,
+            pressure_label="上流静圧 p₁",
+        )
+        with_temperature = gas_model != "AIR" or upstream_pressure is not None
+        if gas_model == "AIR":
+            selected_temperature = st.checkbox(
+                "上流静温を指定して速度・音速を表示",
+                value=inputs.get("upstream_temperature") is not None,
+                disabled=upstream_pressure is not None,
+                key="normal_with_temperature",
+            )
+            with_temperature = with_temperature or selected_temperature
         upstream_temperature = None
-        if gas_model != "AIR":
+        if with_temperature:
             temperature_display = finite_number(
                 f"上流静温 T₁ [{preferences.temperature}]",
                 _display(
@@ -445,6 +486,10 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
                     upstream_mach=mach,
                     gas_model=gas_model,
                     upstream_temperature=upstream_temperature,
+                    upstream_pressure=upstream_pressure,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                    with_heat_capacities=with_heat_capacities,
                 )
             else:
                 result = normal_shock_sweep(
@@ -453,6 +498,10 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
                     points=points,
                     gas_model=gas_model,
                     upstream_temperature=upstream_temperature,
+                    upstream_pressure=upstream_pressure,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                    with_heat_capacities=with_heat_capacities,
                 )
                 sweep_configuration = {
                     "field": "upstream_mach",
@@ -466,8 +515,14 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
                 inputs_si={
                     "upstream_mach": mach,
                     "upstream_temperature": upstream_temperature,
+                    "upstream_pressure": upstream_pressure,
+                    "characteristic_length": characteristic_length,
                 },
-                models={"gas_model": gas_model},
+                models={
+                    "gas_model": gas_model,
+                    "viscosity_model": viscosity_model,
+                    "with_heat_capacities": with_heat_capacities,
+                },
                 units=preferences,
                 sweep_si=sweep_configuration,
             )

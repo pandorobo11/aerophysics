@@ -205,3 +205,52 @@ def test_validation_returns_a_detached_normalized_payload() -> None:
     assert isinstance(normalized_inputs, dict)
     source_inputs["motion"] = 2.0
     assert normalized_inputs["motion"] == 0.8
+
+
+@pytest.mark.parametrize(
+    "calculator", ["normal_shock", "oblique_shock", "conical_shock", "isentropic"]
+)
+@pytest.mark.parametrize(
+    "section,field,value",
+    [
+        ("models", "viscosity_model", "other"),
+        ("models", "with_heat_capacities", "true"),
+        ("inputs_si", "characteristic_length", 0.0),
+        ("inputs_si", "characteristic_length", float("inf")),
+    ],
+)
+def test_flow_output_configuration_validation(
+    calculator: str, section: str, field: str, value: object
+) -> None:
+    inputs: dict[str, object] = {"upstream_mach": 3.0}
+    models: dict[str, object] = {}
+    if calculator == "oblique_shock":
+        inputs["deflection_angle"] = 0.1
+        models["branch"] = "weak"
+    elif calculator == "conical_shock":
+        inputs["cone_half_angle"] = 0.1
+    elif calculator == "isentropic":
+        inputs = {
+            "input_value": 2.0,
+            "total_pressure": None,
+            "total_temperature": 1000.0,
+        }
+        models = {
+            "input_basis": "mach",
+            "branch": "supersonic",
+            "with_mass_flux": False,
+        }
+    configuration: dict[str, object] = {
+        "schema_version": 1,
+        "calculator": calculator,
+        "mode": "single",
+        "inputs_si": inputs,
+        "models": models,
+        "display_units": UnitPreferences().to_dict(),
+    }
+    validate_configuration(configuration)
+    payload = configuration[section]
+    assert isinstance(payload, dict)
+    payload[field] = value
+    with pytest.raises(ConfigurationError):
+        validate_configuration(configuration)
