@@ -78,6 +78,57 @@ The angle sweep starts with an editable 0--30 degree range. Switching modes or
 editing inputs does not solve the attached limit; numerical calculations start
 when the calculation button is pressed.
 
+Local flow properties and unit Reynolds number
+----------------------------------------------
+
+The normal, oblique and conical shock tables include local heat-capacity
+ratios, the full velocity-magnitude ratio, dynamic-pressure ratio and
+dimensionless entropy rise. Oblique-shock ``V2/V1`` uses the full speed,
+including the tangential component; it is different from the normal velocity
+ratio. Conical outputs compare the freestream with the cone surface, rather
+than the state immediately behind the shock. For frozen ideal gases,
+``Delta s / R = -ln(p02/p01)``. Local sound speeds and velocities use
+``a = sqrt(gamma(T) R T)`` and ``V = M a``. These require static temperature
+but no pressure. Constant-gamma ``AIR`` offers an optional temperature input.
+The isentropic page likewise displays local gamma, sound speed and velocity
+whenever temperature is available. Select the heat-capacity details checkbox
+to include local ``cp`` and ``cv`` in the table and CSV.
+
+Enable absolute-state outputs on a shock page and enter the upstream
+**static pressure** (freestream pressure for cones). The isentropic page uses
+its existing **total pressure** input. Pressure-dependent columns include
+local static pressure, density, dynamic pressure, dynamic viscosity and
+unit Reynolds number:
+
+.. math::
+
+   Re' = \frac{\rho V}{\mu(T)},\qquad Re_L = Re' L.
+
+Unit Reynolds number has units of inverse length. Its display follows the
+length selector (1/m, 1/mm, 1/ft or 1/in). A separate optional representative
+length adds dimensionless ``Re_L``. Ideal-gas shock density is ``p/(R T)``;
+the Beattie--Bridgeman isentropic page retains its actual equation-of-state
+density and sound speed.
+
+Select a viscosity model independently of the heat-capacity model. These are
+the existing dry-air Sutherland, Keyes (79--1845 K) and frozen Blottner/Wilke
+(1000--30000 K) correlations from :doc:`../models/transport_properties`.
+They evaluate **local static temperature**, never total temperature. Keyes
+and Blottner/Wilke are not extrapolated: an unavailable local viscosity leaves
+only that state's viscosity and Reynolds columns blank, with a warning. Valid
+flow states and other sweep rows remain available. Sutherland has no registered
+upper bound; this does not establish accuracy throughout a thermal gas model's
+temperature range. These temperature-only transport models describe dilute
+air; a high-density thermodynamic model does not add pressure-dependent
+transport corrections. The definition follows the `NASA Reynolds-number
+description <https://www.grc.nasa.gov/www/BGH/viscosity.html>`_; use of local
+static temperature follows the `NASA Wind-US transport documentation
+<https://www.grc.nasa.gov/www/winddocs/user/keywords/viscosity.html>`_.
+
+All optional inputs and output selections survive settings JSON replay.
+Older settings retain the pressure-free defaults; optional columns appear
+when requested and are shared by the displayed table and CSV.
+
 Case handoff
 ------------
 

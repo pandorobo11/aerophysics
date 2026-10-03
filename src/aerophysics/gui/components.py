@@ -7,6 +7,7 @@ from typing import Any
 
 import streamlit as st
 
+from aerophysics.gui._flow_outputs import VISCOSITY_MODELS
 from aerophysics.gui.adapters import CalculationResult
 from aerophysics.gui.config import (
     ConfigurationError,
@@ -86,6 +87,10 @@ def _convert_display_input_state() -> None:
             "protrusion_thickness",
             "protrusion_height",
             "protrusion_width",
+            "normal_characteristic_length",
+            "shock_characteristic_length",
+            "cone_shock_characteristic_length",
+            "isentropic_characteristic_length",
         ),
         "speed": (
             "boundary_velocity",
@@ -96,6 +101,9 @@ def _convert_display_input_state() -> None:
             "isentropic_total_pressure",
             "profile_shear",
             "thermo_pressure",
+            "normal_upstream_pressure",
+            "shock_upstream_pressure",
+            "cone_shock_upstream_pressure",
         ),
         "temperature": (
             "shock_upstream_temperature",
@@ -343,6 +351,82 @@ def render_result_bundle(
         mime="application/json",
         key=f"{filename_prefix}_json",
     )
+
+
+def render_flow_output_controls(
+    prefix: str,
+    inputs: Mapping[str, Any],
+    models: Mapping[str, Any],
+    preferences: UnitPreferences,
+    *,
+    isentropic: bool = False,
+    pressure: float | None = None,
+    pressure_label: str = "上流静圧 p₁",
+) -> tuple[float | None, str, float | None, bool]:
+    """Render optional absolute states, transport and heat-capacity details."""
+    with_heat_capacities = st.checkbox(
+        "詳細列に定圧・定容比熱 cₚ・cᵥ を表示",
+        value=bool(models.get("with_heat_capacities", False)),
+        key=f"{prefix}_with_heat_capacities",
+    )
+    if not isentropic:
+        with_pressure = st.checkbox(
+            "圧力を指定して絶対状態・単位Reを表示",
+            value=inputs.get("upstream_pressure") is not None,
+            key=f"{prefix}_with_pressure",
+        )
+        if with_pressure:
+            pressure_display = finite_number(
+                f"{pressure_label} [{preferences.pressure}]",
+                float(
+                    from_si(
+                        float(inputs.get("upstream_pressure") or 101_325.0),
+                        "pressure",
+                        preferences.pressure,
+                    )
+                ),
+                key=f"{prefix}_upstream_pressure",
+                min_value=1e-12,
+            )
+            pressure = float(to_si(pressure_display, "pressure", preferences.pressure))
+    viscosity_model = str(models.get("viscosity_model", "Sutherland"))
+    characteristic_length = None
+    if pressure is not None:
+        names = tuple(VISCOSITY_MODELS)
+        viscosity_model = st.selectbox(
+            "粘性モデル",
+            names,
+            index=names.index(viscosity_model),
+            key=f"{prefix}_viscosity_model",
+        )
+        assert viscosity_model is not None
+        st.caption(
+            "粘性は局所静温で評価します。Keyes: 79–1845 K、Blottner/Wilke: "
+            "1000–30000 K。範囲外では μ・Re のみ空欄になります。"
+            "Sutherlandには登録された上限がなく、高温での精度保証はありません。"
+        )
+        with_length = st.checkbox(
+            "代表長さを指定して Re_L も表示",
+            value=inputs.get("characteristic_length") is not None,
+            key=f"{prefix}_with_length",
+        )
+        if with_length:
+            length_display = finite_number(
+                f"代表長さ L [{preferences.length}]",
+                float(
+                    from_si(
+                        float(inputs.get("characteristic_length") or 1.0),
+                        "length",
+                        preferences.length,
+                    )
+                ),
+                key=f"{prefix}_characteristic_length",
+                min_value=1e-12,
+            )
+            characteristic_length = float(
+                to_si(length_display, "length", preferences.length)
+            )
+    return pressure, viscosity_model, characteristic_length, with_heat_capacities
 
 
 def finite_number(
