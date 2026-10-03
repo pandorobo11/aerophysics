@@ -23,6 +23,8 @@ from aerophysics.gui.{module} import {function}
 from aerophysics.gui.components import render_unit_sidebar
 {function}(render_unit_sidebar())
 """
+    # Match existing thermal cone tests for explicit integration, not controls.
+    calculation_timeout = 60 if calculator == "conical_shock" else 30
     app = AppTest.from_string(script, default_timeout=30).run()
     app.selectbox(key=f"{prefix}_gas_model").set_value("NASA9").run()
     app.checkbox(key=f"{prefix}_with_heat_capacities").check().run()
@@ -48,7 +50,9 @@ from aerophysics.gui.components import render_unit_sidebar
     assert app.number_input(key=pressure_key).value == pytest.approx(30)
     assert not app.exception
     assert f"{prefix}_payload" not in app.session_state
-    app.button(key=f"FormSubmitter:{prefix}_form-計算").click().run()
+    app.button(key=f"FormSubmitter:{prefix}_form-計算").click().run(
+        timeout=calculation_timeout
+    )
     assert not app.exception and not app.error
     table = app.dataframe[0].value
     assert any("単位Re" in heading and "1/mm" in heading for heading in table.columns)
@@ -62,7 +66,9 @@ from aerophysics.gui.components import render_unit_sidebar
         2.0 if prefix == "isentropic" else 5.4 if prefix == "normal" else 10.0
     ).run()
     app.number_input(key=f"{prefix}_sweep_points").set_value(2).run()
-    app.button(key=f"FormSubmitter:{prefix}_form-計算").click().run()
+    app.button(key=f"FormSubmitter:{prefix}_form-計算").click().run(
+        timeout=calculation_timeout
+    )
     assert not app.exception and not app.error
     result, configuration = app.session_state[f"{prefix}_payload"]
     assert len(result.rows) == 2
@@ -84,7 +90,9 @@ from aerophysics.gui.components import render_unit_sidebar
     assert replay.checkbox(key=f"{prefix}_with_heat_capacities").value
     assert replay.checkbox(key=f"{prefix}_with_length").value
     assert replay.selectbox(key=f"{prefix}_viscosity_model").value == "Keyes"
-    replay.button(key=f"FormSubmitter:{prefix}_form-計算").click().run()
+    replay.button(key=f"FormSubmitter:{prefix}_form-計算").click().run(
+        timeout=calculation_timeout
+    )
     assert not replay.exception and not replay.error
     assert replay.session_state[f"{prefix}_payload"][0].rows == result.rows
     assert replay.session_state[f"{prefix}_payload"][1] == configuration
