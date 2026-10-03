@@ -16,14 +16,14 @@ Python 3.12 以上が必要です。PyPI での配布を開始するまでは、
 に添付された wheel をインストールしてください。
 
 ```console
-python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
+python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.7.0/aerophysics-0.7.0-py3-none-any.whl"
 ```
 
 ローカル GUI を利用する場合は、追加依存関係を含めてインストールして
 起動します。
 
 ```console
-python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
+python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.7.0/aerophysics-0.7.0-py3-none-any.whl"
 aerophysics-gui
 ```
 

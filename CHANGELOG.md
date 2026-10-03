@@ -5,6 +5,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-03
+
 ### Added
 
 - Extend centered Prandtl--Meyer expansions to frozen thermally perfect gases
@@ -48,6 +50,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Build and validate release artifacts before publishing them from a separate
+  job with repository write access. Verify wheel and source-distribution
+  installations in clean environments.
 - Clarify oblique, conical and detached shock GUI schematics with shaded bodies,
   horizontal angle references, labelled angle arcs and physical flow-direction
   arrows. Use bounded shock rays to keep near-normal shocks readable, and show
@@ -69,6 +74,12 @@ uses Semantic Versioning, including during the pre-1.0 period.
   regenerate that record before documentation builds.
 
 ### Fixed
+
+- Update locked urllib3 to 2.8.0 to address streaming-response and HTTPS-proxy
+  TLS vulnerabilities reported by the release dependency audit.
+- Use the supplied boundary-layer edge viscosity consistently in Eckert and
+  Van Driest II compressibility corrections.
+- Bind the GUI launcher to the loopback interface by default.
 
 - Keep the downstream Mach arrow between the convex wall and the final Mach
   line in expansion schematics, including narrow sectors at large turns.
@@ -220,7 +231,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Typed public APIs, cross-platform CI, Sphinx documentation, and validated
   examples.
 
-[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/pandorobo11/aerophysics/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pandorobo11/aerophysics/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.5.0
 [0.4.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.4.0
