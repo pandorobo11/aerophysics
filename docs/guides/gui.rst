@@ -44,6 +44,54 @@ Quantities without a sidebar selector, such as mass flux, drag per unit width,
 and dynamic viscosity in ``Pa s``, remain labelled as such. Always use the unit
 shown beside an input or table column.
 
+Flow schematics
+---------------
+
+Single-point normal-shock results show a red shock perpendicular to the
+left-to-right flow, with solved upstream and downstream Mach numbers.
+Velocity directions are collinear; arrow lengths do not encode velocity
+magnitude. At upstream Mach 1, the caption identifies the zero-strength limit.
+
+Single-point Prandtl--Meyer results show a grey convex wall turning clockwise
+through the positive expansion angle ``theta``, with flow above it. A green
+fan spans directions ``mu_1`` and ``mu_2 - theta``, where each Mach angle
+``mu = asin(1/M)`` is measured from its local flow direction. The downstream
+arrow follows the wall at ``-theta``; large supported turns retain that actual
+direction. The fan's interior rays are representative Mach lines. At zero
+turn, only one Mach line is shown and labelled as no expansion. Angle arcs
+use the selected degree/radian unit; the Prandtl--Meyer function ``nu`` is
+not drawn as a geometric Mach angle. Sweep results retain the trend plots.
+
+Single-point oblique and conical results include an equally scaled section:
+the grey filled body is bounded by its wall, and the red ray is the attached
+shock. The dashed horizontal line is the upstream direction and, for a cone,
+its axis. Angle arcs measure both the wall angle (``theta`` or cone half-angle
+``theta_c``) and shock angle ``beta`` from that horizontal reference, using
+the selected display angle unit.
+
+Blue arrows show flow directions, rather than Mach-label leader lines. The
+upstream arrow is horizontal; the oblique downstream arrow is parallel to the
+wedge. Labels include the solved Mach numbers to three significant figures,
+matching the normal-shock and expansion schematics. The conical downstream
+arrow denotes only the surface direction and
+surface Mach ``M_s``: the intervening Taylor--Maccoll flow turns continuously
+from the shock toward the surface. Arrow lengths are schematic and do not
+encode velocity magnitude. The cone view is a meridional section with its
+upper shock shown.
+
+The detached-shock view uses the same grey body, red shock and blue freestream
+arrow. Its origin ``O`` is the nose-curvature centre, with positive ``x``
+pointing upstream and the flow arrow toward negative ``x``. The horizontal
+axis is reversed so upstream appears on the left and the flow runs left to
+right, matching the attached-shock views. Plot coordinates, hover values and
+exported CSV coordinates retain the upstream-positive convention. The radius
+dimension ``Rn`` runs from that centre to the circular nose. The standoff
+bracket ``Delta`` spans from the body vertex at ``x = Rn`` to the shock vertex
+at ``x = Rn + Delta``; both lengths use the selected display unit. The shock
+curve is Billig's shape with Ambrosio--Wortman standoff, including when the
+table also compares a Seiff estimate. See :doc:`../models/shock_waves` for
+the correlation assumptions and coordinate conventions.
+
 Thermally perfect shocks
 ------------------------
 

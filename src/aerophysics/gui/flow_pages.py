@@ -40,8 +40,10 @@ from aerophysics.gui.figures import (
     detached_shock_geometry,
     detached_shock_trends,
     expansion_figures,
+    expansion_geometry,
     isentropic_figures,
     normal_shock_figures,
+    normal_shock_geometry,
 )
 from aerophysics.gui.tables import detached_shock_shape_csv
 from aerophysics.gui.units import UnitPreferences, from_si, to_si
@@ -554,12 +556,15 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
             with column:
                 _metric(row, label, contains)
 
+    figures = normal_shock_figures(result.rows)
+    if configuration.get("mode") == "single" and result.rows[0].get("status") == "ok":
+        figures = {"流れ模式図": normal_shock_geometry(result.rows[0]), **figures}
     render_result_bundle(
         calculator="normal_shock",
         result=result,
         configuration=configuration,
         preferences=preferences,
-        figures=normal_shock_figures(result.rows),
+        figures=figures,
         filename_prefix="aerophysics-normal-shock",
         metrics=metrics,
     )
@@ -741,12 +746,18 @@ def render_expansion(preferences: UnitPreferences) -> None:
         if isinstance(config_sweep, dict)
         else "mach"
     )
+    figures = expansion_figures(result.rows, preferences, sweep_field=figure_field)
+    if configuration.get("mode") == "single" and result.rows[0].get("status") == "ok":
+        figures = {
+            "流れ模式図": expansion_geometry(result.rows[0], preferences),
+            **figures,
+        }
     render_result_bundle(
         calculator="expansion",
         result=result,
         configuration=configuration,
         preferences=preferences,
-        figures=expansion_figures(result.rows, preferences, sweep_field=figure_field),
+        figures=figures,
         filename_prefix="aerophysics-expansion",
         metrics=metrics,
     )
