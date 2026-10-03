@@ -44,6 +44,24 @@ Quantities without a sidebar selector, such as mass flux, drag per unit width,
 and dynamic viscosity in ``Pa s``, remain labelled as such. Always use the unit
 shown beside an input or table column.
 
+Shock schematics
+----------------
+
+Single-point oblique and conical results include an equally scaled section:
+the grey filled body is bounded by its wall, and the red ray is the attached
+shock. The dashed horizontal line is the upstream direction and, for a cone,
+its axis. Angle arcs measure both the wall angle (``theta`` or cone half-angle
+``theta_c``) and shock angle ``beta`` from that horizontal reference, using
+the selected display angle unit.
+
+Blue arrows show flow directions, rather than Mach-label leader lines. The
+upstream arrow is horizontal; the oblique downstream arrow is parallel to the
+wedge. The conical downstream arrow denotes only the surface direction and
+surface Mach ``M_s``: the intervening Taylor--Maccoll flow turns continuously
+from the shock toward the surface. Arrow lengths are schematic and do not
+encode velocity magnitude. The cone view is a meridional section with its
+upper shock shown.
+
 Thermally perfect shocks
 ------------------------
 

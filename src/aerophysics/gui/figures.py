@@ -135,63 +135,195 @@ def flight_figures(
     }
 
 
+def _attached_shock_geometry(
+    theta: float,
+    beta: float,
+    preferences: UnitPreferences,
+    *,
+    conical: bool,
+) -> go.Figure:
+    """Draw true angles and flow directions in an equally scaled section."""
+    wall_name = "円錐面" if conical else "くさび面"
+    theta_name = "θc" if conical else "θ"
+    steep_shock = beta > math.pi / 3.0
+    wall_x, wall_y = 1.8 * math.cos(theta), 1.8 * math.sin(theta)
+    # A bounded ray also represents a normal shock without tan(pi / 2).
+    shock_x, shock_y = 2.0 * math.cos(beta), 2.0 * math.sin(beta)
+    body_bottom = -wall_y if conical else -0.24
+    figure = go.Figure()
+    figure.add_shape(
+        type="path",
+        path=f"M 0,0 L {wall_x},{wall_y} L {wall_x},{body_bottom} Z",
+        fillcolor="#e2e8f0",
+        line={"width": 0},
+        layer="below",
+    )
+    if conical:
+        figure.add_shape(
+            type="line",
+            x0=0.0,
+            y0=0.0,
+            x1=wall_x,
+            y1=-wall_y,
+            line={"color": "#555", "width": 2},
+        )
+    figure.add_shape(
+        type="line",
+        x0=-0.72,
+        y0=0.0,
+        x1=1.95,
+        y1=0.0,
+        line={"color": "#94a3b8", "width": 1.5, "dash": "dash"},
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=[0.0, wall_x],
+            y=[0.0, wall_y],
+            mode="lines",
+            line={"width": 4, "color": "#555"},
+            name=wall_name,
+            hoverinfo="name",
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=[0.0, shock_x],
+            y=[0.0, shock_y],
+            mode="lines",
+            line={"width": 3, "color": "#d62728"},
+            name="円錐衝撃波" if conical else "衝撃波",
+            hoverinfo="name",
+        )
+    )
+    unit = preferences.angle
+    for angle, radius, name, color in (
+        (theta, 0.43, theta_name, "#555"),
+        (beta, 0.67, "β", "#d62728"),
+    ):
+        arc = np.linspace(0.0, angle, 41)
+        value = float(from_si(angle, "angle", unit))
+        figure.add_trace(
+            go.Scatter(
+                x=radius * np.cos(arc),
+                y=radius * np.sin(arc),
+                mode="lines",
+                line={"color": color, "width": 1.5},
+                name=f"{name} = {value:.3g} {unit}",
+                hoverinfo="name",
+            )
+        )
+        figure.add_annotation(
+            x=radius * math.cos(angle),
+            y=radius * math.sin(angle),
+            text=f"{name} = {value:.3g} {unit}",
+            showarrow=False,
+            xanchor="right" if name == "β" and steep_shock else "center",
+            xshift=-12 if name == "β" and steep_shock else 0,
+            yshift=-28 if name == theta_name else 22,
+            font={"color": color, "size": 14},
+            bgcolor="rgba(255,255,255,0.9)",
+        )
+
+    if conical:
+        # Only the surface velocity is parallel to the cone. Do not imply a
+        # uniform downstream direction throughout Taylor--Maccoll flow.
+        offset = min(0.08, 0.24 * math.sin(beta - theta))
+        flow_x = 0.95 * math.cos(theta) - offset * math.sin(theta)
+        flow_y = 0.95 * math.sin(theta) + offset * math.cos(theta)
+    else:
+        flow_x = 0.95 * math.cos(0.5 * (theta + beta))
+        flow_y = 0.95 * math.sin(0.5 * (theta + beta))
+    for x, y, direction, text in (
+        (-0.68, 0.34, 0.0, "上流 M∞" if conical else "上流 M₁"),
+        (flow_x, flow_y, theta, "表面 Mₛ" if conical else "下流 M₂"),
+    ):
+        dx, dy = 0.46 * math.cos(direction), 0.46 * math.sin(direction)
+        figure.add_annotation(
+            x=x + dx,
+            y=y + dy,
+            ax=x,
+            ay=y,
+            xref="x",
+            yref="y",
+            axref="x",
+            ayref="y",
+            text="",
+            showarrow=True,
+            arrowhead=3,
+            arrowsize=1.2,
+            arrowwidth=2.5,
+            arrowcolor="#2463a5",
+        )
+        figure.add_annotation(
+            x=x + 0.5 * dx,
+            y=y + 0.5 * dy,
+            text=text,
+            showarrow=False,
+            yshift=22,
+            font={"color": "#2463a5", "size": 14},
+            bgcolor="rgba(255,255,255,0.9)",
+        )
+    figure.add_annotation(
+        x=1.5 * math.cos(theta),
+        y=1.5 * math.sin(theta),
+        text=wall_name,
+        showarrow=False,
+        yshift=-24,
+        font={"color": "#555", "size": 14},
+    )
+    figure.add_annotation(
+        x=1.55 * math.cos(beta),
+        y=1.55 * math.sin(beta),
+        text="衝撃波",
+        showarrow=False,
+        xanchor="right" if steep_shock else "center",
+        xshift=-14 if steep_shock else 0,
+        yshift=0 if steep_shock else 20,
+        font={"color": "#d62728", "size": 14},
+    )
+    figure.add_annotation(
+        x=0.5,
+        y=-0.15,
+        xref="paper",
+        yref="paper",
+        text=(
+            "破線：円錐軸・上流方向　青矢印：上流と表面の流れ方向（長さは模式的）"
+            if conical
+            else "破線：上流方向（角度の基準）　青矢印：流れ方向（長さは模式的）"
+        ),
+        showarrow=False,
+        font={"color": "#64748b", "size": 13},
+    )
+    theta_display = float(from_si(theta, "angle", unit))
+    beta_display = float(from_si(beta, "angle", unit))
+    title = "円錐衝撃波" if conical else "斜め衝撃波"
+    figure.update_layout(
+        title=(
+            f"{title} — {theta_name}={theta_display:.3g} {unit}, "
+            f"β={beta_display:.3g} {unit}"
+        ),
+        template="plotly_white",
+        showlegend=False,
+        height=480,
+        xaxis={"visible": False, "range": [-0.85, 2.1]},
+        yaxis={
+            "visible": False,
+            "scaleanchor": "x",
+            "scaleratio": 1,
+            "range": [min(-0.38, body_bottom - 0.15), max(0.95, shock_y + 0.25)],
+        },
+        margin={"l": 25, "r": 25, "t": 60, "b": 65},
+    )
+    return figure
+
+
 def shock_geometry(row: Row, preferences: UnitPreferences) -> go.Figure:
     """Create a schematic wedge and attached-shock diagram."""
     theta = row.get("deflection_angle")
     beta = row.get("shock_angle")
     if not isinstance(theta, float) or not isinstance(beta, float):
         raise ValueError("geometry requires a successful shock result")
-    length = 1.0
-    wedge_y = math.tan(theta)
-    shock_y = math.tan(beta)
-    figure = go.Figure()
-    figure.add_trace(
-        go.Scatter(
-            x=[0.0, length],
-            y=[0.0, wedge_y],
-            mode="lines",
-            line={"width": 8, "color": "#555"},
-            name="くさび面",
-        )
-    )
-    figure.add_trace(
-        go.Scatter(
-            x=[0.0, length],
-            y=[0.0, shock_y],
-            mode="lines",
-            line={"width": 4, "color": "#d62728"},
-            name="衝撃波",
-        )
-    )
-    figure.add_annotation(x=0.45, y=-0.08, text="M₁", showarrow=True, ax=-70, ay=0)
-    figure.add_annotation(
-        x=0.62,
-        y=0.62 * math.tan(0.5 * (theta + beta)),
-        text="M₂",
-        showarrow=True,
-        ax=-55,
-        ay=30,
-    )
-    unit = preferences.angle
-    theta_display = float(from_si(theta, "angle", unit))
-    beta_display = float(from_si(beta, "angle", unit))
-    figure.update_layout(
-        title=(
-            f"付着衝撃波模式図 — θ={theta_display:.3g} {unit}, "
-            f"β={beta_display:.3g} {unit}"
-        ),
-        template="plotly_white",
-        height=430,
-        xaxis={"visible": False, "range": [-0.15, 1.1]},
-        yaxis={
-            "visible": False,
-            "scaleanchor": "x",
-            "scaleratio": 1,
-            "range": [-0.15, min(max(shock_y * 1.1, 0.5), 5.0)],
-        },
-        margin={"l": 20, "r": 20, "t": 70, "b": 20},
-    )
-    return figure
+    return _attached_shock_geometry(theta, beta, preferences, conical=False)
 
 
 def shock_trends(
@@ -255,57 +387,7 @@ def conical_shock_geometry(row: Row, preferences: UnitPreferences) -> go.Figure:
     shock_angle = row.get("shock_angle")
     if not isinstance(cone_angle, float) or not isinstance(shock_angle, float):
         raise ValueError("geometry requires a successful conical-shock result")
-    length = 1.0
-    cone_y = math.tan(cone_angle)
-    shock_y = math.tan(shock_angle)
-    figure = go.Figure()
-    figure.add_trace(
-        go.Scatter(
-            x=[0.0, length],
-            y=[0.0, cone_y],
-            mode="lines",
-            line={"width": 8, "color": "#555"},
-            name="円錐面",
-        )
-    )
-    figure.add_trace(
-        go.Scatter(
-            x=[0.0, length],
-            y=[0.0, shock_y],
-            mode="lines",
-            line={"width": 4, "color": "#d62728"},
-            name="円錐衝撃波",
-        )
-    )
-    figure.add_annotation(x=0.45, y=-0.08, text="M∞", showarrow=True, ax=-70, ay=0)
-    figure.add_annotation(
-        x=0.68,
-        y=0.68 * cone_y,
-        text="Mₛ",
-        showarrow=True,
-        ax=-45,
-        ay=30,
-    )
-    unit = preferences.angle
-    cone_display = float(from_si(cone_angle, "angle", unit))
-    shock_display = float(from_si(shock_angle, "angle", unit))
-    figure.update_layout(
-        title=(
-            f"円錐衝撃波模式図 — θc={cone_display:.3g} {unit}, "
-            f"β={shock_display:.3g} {unit}"
-        ),
-        template="plotly_white",
-        height=430,
-        xaxis={"visible": False, "range": [-0.15, 1.1]},
-        yaxis={
-            "visible": False,
-            "scaleanchor": "x",
-            "scaleratio": 1,
-            "range": [-0.15, min(max(shock_y * 1.1, 0.5), 5.0)],
-        },
-        margin={"l": 20, "r": 20, "t": 70, "b": 20},
-    )
-    return figure
+    return _attached_shock_geometry(cone_angle, shock_angle, preferences, conical=True)
 
 
 def conical_shock_trends(

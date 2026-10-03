@@ -89,7 +89,7 @@ def test_shock_geometry_and_both_sweep_axes() -> None:
         branch=ShockBranch.WEAK,
     )
     geometry = shock_geometry(single.rows[0], UnitPreferences())
-    assert len(geometry.data) == 2
+    assert len(geometry.data) == 4
     assert "deg" in str(geometry.layout.title.text)
     bad_row = {**single.rows[0], "shock_angle": None}
     with pytest.raises(ValueError, match="successful"):
@@ -138,7 +138,7 @@ def test_conical_shock_geometry_and_sweep_axes() -> None:
         },
     )
     geometry = conical_shock_geometry(rows[0], UnitPreferences())
-    assert len(geometry.data) == 2
+    assert len(geometry.data) == 4
     assert "deg" in str(geometry.layout.title.text)
     with pytest.raises(ValueError, match="successful"):
         conical_shock_geometry({**rows[0], "shock_angle": None}, UnitPreferences())
@@ -156,6 +156,56 @@ def test_conical_shock_geometry_and_sweep_axes() -> None:
     figures = conical_shock_trends(mach_rows, UnitPreferences())
     assert "Mach" in str(figures["状態量"].layout.xaxis.title.text)
     assert list(figures["状態量"].data[0].x) == pytest.approx([2.0, 3.0])
+
+
+@pytest.mark.parametrize("unit", ["deg", "rad"])
+@pytest.mark.parametrize(
+    ("conical", "theta_degrees", "beta_degrees"),
+    [
+        (False, 0.0, 90.0),
+        (False, 10.0, 27.3),
+        (False, 10.0, 86.8),
+        (True, 10.0, 21.7),
+        (True, 40.0, 65.0),
+    ],
+)
+def test_attached_geometry_preserves_angles_and_flow_directions(
+    conical: bool, theta_degrees: float, beta_degrees: float, unit: str
+) -> None:
+    theta, beta = np.deg2rad([theta_degrees, beta_degrees])
+    angle_key = "cone_half_angle" if conical else "deflection_angle"
+    plot = conical_shock_geometry if conical else shock_geometry
+    figure = plot(
+        {angle_key: float(theta), "shock_angle": float(beta)},
+        UnitPreferences(angle=unit),
+    )
+    assert figure.layout.yaxis.scaleanchor == "x"
+    assert figure.layout.yaxis.scaleratio == 1
+    if conical:
+        assert "円錐軸" in str(figure.layout.annotations[-1].text)
+
+    # Wall/shock rays and the two angle arcs must use the same physical angles,
+    # independently of display units, including the vertical strong-shock limit.
+    for trace, angle in zip(figure.data, (theta, beta, theta, beta), strict=True):
+        x, y = np.asarray(trace.x), np.asarray(trace.y)
+        assert np.all(np.isfinite(x)) and np.all(np.isfinite(y))
+        assert max(np.max(np.abs(x)), np.max(np.abs(y))) <= 2.0
+        assert np.arctan2(y[-1], x[-1]) == pytest.approx(angle, abs=1e-14)
+    theta_display = theta_degrees if unit == "deg" else theta
+    assert f"{theta_display:.3g} {unit}" in figure.data[2].name
+
+    arrows = [item for item in figure.layout.annotations if item.showarrow]
+    assert len(arrows) == 2
+    for arrow, angle in zip(arrows, (0.0, theta), strict=True):
+        assert arrow.axref == arrow.xref == "x"
+        assert arrow.ayref == arrow.yref == "y"
+        assert arrow.arrowhead > 0
+        assert np.arctan2(arrow.y - arrow.ay, arrow.x - arrow.ax) == pytest.approx(
+            angle, abs=1e-14
+        )
+    text = " ".join(str(item.text) for item in figure.layout.annotations)
+    assert ("表面 Mₛ" if conical else "下流 M₂") in text
+    assert "角度の基準" in text or "円錐軸" in text
 
 
 def test_boundary_layer_figures_include_transition_and_thermal() -> None:
