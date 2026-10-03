@@ -62,6 +62,16 @@ from the shock toward the surface. Arrow lengths are schematic and do not
 encode velocity magnitude. The cone view is a meridional section with its
 upper shock shown.
 
+The detached-shock view uses the same grey body, red shock and blue freestream
+arrow. Its origin ``O`` is the nose-curvature centre, with positive ``x``
+pointing upstream and the flow arrow toward negative ``x``. The radius
+dimension ``Rn`` runs from that centre to the circular nose. The standoff
+bracket ``Delta`` spans from the body vertex at ``x = Rn`` to the shock vertex
+at ``x = Rn + Delta``; both lengths use the selected display unit. The shock
+curve is Billig's shape with Ambrosio--Wortman standoff, including when the
+table also compares a Seiff estimate. See :doc:`../models/shock_waves` for
+the correlation assumptions and coordinate conventions.
+
 Thermally perfect shocks
 ------------------------
 

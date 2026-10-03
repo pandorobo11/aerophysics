@@ -466,6 +466,17 @@ def detached_shock_geometry(
     outline_x = np.concatenate(([-2.0 * radius, 0.0], body_x, [afterbody_x]))
     outline_y = np.concatenate(([radius, radius], body_y, [-radius]))
     unit = preferences.length
+    display_radius = float(from_si(radius, "length", unit))
+    distance = float(from_si(shape.standoff_distance, "length", unit))
+    vertex = display_radius + distance
+    shock_x = np.asarray(from_si(shape.shock_x, "length", unit))
+    shock_y = np.asarray(from_si(shape.shock_y, "length", unit))
+    extent = max(display_radius, float(np.max(np.abs(shock_y))))
+    body_name = (
+        "半球頭部（断面）"
+        if shape.geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE
+        else "円柱頭部（2D）"
+    )
 
     figure = go.Figure()
     figure.add_trace(
@@ -473,41 +484,182 @@ def detached_shock_geometry(
             x=from_si(outline_x, "length", unit),
             y=from_si(outline_y, "length", unit),
             mode="lines",
-            line={"width": 5, "color": "#555"},
+            line={"width": 3, "color": "#555"},
             fill="toself",
-            fillcolor="rgba(100,100,100,0.12)",
-            name=(
-                "半球頭部"
-                if shape.geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE
-                else "2D円柱頭部"
-            ),
+            fillcolor="#e2e8f0",
+            name=body_name,
         )
     )
     figure.add_trace(
         go.Scatter(
-            x=from_si(shape.shock_x, "length", unit),
-            y=from_si(shape.shock_y, "length", unit),
+            x=shock_x,
+            y=shock_y,
             mode="lines",
-            line={"width": 4, "color": "#d62728"},
+            line={"width": 3, "color": "#d62728"},
             name="Billig衝撃波",
         )
     )
+    x_min = min(-2.0 * display_radius, float(np.min(shock_x))) - 0.3 * display_radius
+    x_max = vertex + 2.0 * display_radius
+    figure.add_shape(
+        type="line",
+        x0=x_min,
+        x1=x_max,
+        y0=0.0,
+        y1=0.0,
+        line={"color": "#94a3b8", "width": 1.5, "dash": "dash"},
+    )
+    figure.add_shape(
+        type="circle",
+        x0=-0.025 * display_radius,
+        x1=0.025 * display_radius,
+        y0=-0.025 * display_radius,
+        y1=0.025 * display_radius,
+        fillcolor="#555",
+        line={"width": 0},
+    )
     figure.add_annotation(
-        x=float(from_si(1.6 * radius, "length", unit)),
-        y=float(from_si(1.7 * radius, "length", unit)),
-        text="M∞",
+        x=0.0,
+        y=0.0,
+        text="O",
+        showarrow=False,
+        xshift=-14,
+        yshift=-16,
+        font={"color": "#555", "size": 14},
+    )
+    # Radius runs from the curvature centre to a point on the circular nose.
+    radius_end = display_radius / math.sqrt(2.0)
+    figure.add_annotation(
+        x=radius_end,
+        y=radius_end,
+        ax=0.0,
+        ay=0.0,
+        xref="x",
+        yref="y",
+        axref="x",
+        ayref="y",
+        text="",
         showarrow=True,
-        ax=60,
-        ay=0,
+        arrowside="end+start",
+        arrowhead=2,
+        startarrowhead=2,
+        arrowsize=0.8,
+        startarrowsize=0.8,
+        arrowwidth=1.5,
+        arrowcolor="#555",
+    )
+    figure.add_annotation(
+        x=-0.08 * display_radius,
+        y=0.68 * display_radius,
+        text=f"Rₙ = {display_radius:.3g} {unit}",
+        showarrow=False,
+        xanchor="right",
+        font={"color": "#555", "size": 14},
+        bgcolor="rgba(255,255,255,0.9)",
+    )
+    # Extension lines and a bracket remain readable even for a short gap;
+    # their endpoints are exactly the body and shock vertices on y=0.
+    dimension_y = -0.48 * display_radius
+    for x in (display_radius, vertex):
+        figure.add_shape(
+            type="line",
+            x0=x,
+            x1=x,
+            y0=0.0,
+            y1=dimension_y - 0.1 * display_radius,
+            line={"color": "#64748b", "width": 1},
+        )
+    figure.add_shape(
+        type="line",
+        x0=display_radius,
+        x1=vertex,
+        y0=dimension_y,
+        y1=dimension_y,
+        line={"color": "#64748b", "width": 1.7},
+    )
+    figure.add_annotation(
+        x=vertex,
+        y=dimension_y,
+        text=f"Δ = {distance:.3g} {unit}",
+        showarrow=False,
+        xanchor="left",
+        xshift=12,
+        yshift=-15,
+        font={"color": "#64748b", "size": 14},
+    )
+
+    # Positive x points upstream, so the freestream velocity points left.
+    flow_y = 0.65 * extent
+    figure.add_annotation(
+        x=vertex + 0.5 * display_radius,
+        y=flow_y,
+        ax=vertex + 1.5 * display_radius,
+        ay=flow_y,
+        xref="x",
+        yref="y",
+        axref="x",
+        ayref="y",
+        text="",
+        showarrow=True,
+        arrowhead=3,
+        arrowsize=1.2,
+        arrowwidth=2.5,
+        arrowcolor="#2463a5",
+    )
+    figure.add_annotation(
+        x=vertex + display_radius,
+        y=flow_y,
+        text="上流 M∞",
+        showarrow=False,
+        yshift=22,
+        font={"color": "#2463a5", "size": 14},
+    )
+    figure.add_annotation(
+        x=-display_radius,
+        y=-0.4 * display_radius,
+        text=body_name,
+        showarrow=False,
+        font={"color": "#555", "size": 14},
+    )
+    label_index = int(np.argmin(np.abs(shock_y - 0.55 * extent)))
+    figure.add_annotation(
+        x=float(shock_x[label_index]),
+        y=float(shock_y[label_index]),
+        text="衝撃波（Billig）",
+        showarrow=False,
+        yshift=24,
+        font={"color": "#d62728", "size": 14},
+        bgcolor="rgba(255,255,255,0.9)",
+    )
+    figure.add_annotation(
+        x=0.5,
+        y=-0.2,
+        xref="paper",
+        yref="paper",
+        text="O：頭部曲率中心　+x：上流側　青矢印：流れ方向（−x、長さは模式的）",
+        showarrow=False,
+        font={"color": "#64748b", "size": 13},
     )
     figure.update_layout(
-        title="離脱衝撃波形状（Billig、離脱距離はAmbrosio–Wortman）",
+        title="離脱衝撃波 — Billig形状 / Ambrosio–Wortman離脱距離",
         template="plotly_white",
         height=560,
-        xaxis={"title": f"x [{unit}]", "scaleanchor": "y", "scaleratio": 1},
-        yaxis={"title": f"y [{unit}]"},
-        margin={"l": 60, "r": 30, "t": 70, "b": 55},
-        legend={"orientation": "h", "y": 1.08, "x": 0.0},
+        showlegend=False,
+        xaxis={
+            "title": f"x [{unit}]（+x：上流側）",
+            "scaleanchor": "y",
+            "scaleratio": 1,
+            "range": [x_min, x_max],
+            "showgrid": False,
+            "zeroline": False,
+        },
+        yaxis={
+            "title": f"y [{unit}]",
+            "range": [-extent - 0.35 * display_radius, extent + 0.35 * display_radius],
+            "showgrid": False,
+            "zeroline": False,
+        },
+        margin={"l": 60, "r": 30, "t": 65, "b": 95},
     )
     return figure
 

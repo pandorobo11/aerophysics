@@ -313,6 +313,66 @@ def test_detached_shock_geometry_and_trends() -> None:
     assert seiff_figures["無次元離脱距離"].data[0].name == "Seiff"
 
 
+@pytest.mark.parametrize("geometry", list(DetachedShockGeometry))
+@pytest.mark.parametrize(
+    ("unit", "factor"), [("m", 1.0), ("mm", 1000.0), ("ft", 1.0 / 0.3048)]
+)
+def test_detached_geometry_dimensions_and_upstream_coordinates(
+    geometry: DetachedShockGeometry, unit: str, factor: float
+) -> None:
+    shape = detached_shock_shape(upstream_mach=4.0, nose_radius=0.1, geometry=geometry)
+    figure = detached_shock_geometry(shape, UnitPreferences(length=unit))
+    radius = 0.1 * factor
+    distance = float(shape.standoff_distance) * factor
+    assert np.asarray(figure.data[1].x) == pytest.approx(shape.shock_x * factor)
+    assert np.asarray(figure.data[1].y) == pytest.approx(shape.shock_y * factor)
+    assert figure.layout.xaxis.scaleratio == 1
+    assert "Billig" in figure.layout.title.text
+    assert "Ambrosio" in figure.layout.title.text
+    assert "+x" in figure.layout.xaxis.title.text
+    assert "上流側" in figure.layout.xaxis.title.text
+
+    bracket = next(
+        line
+        for line in figure.layout.shapes
+        if line.type == "line" and line.y0 == line.y1 and line.y0 < 0.0
+    )
+    assert bracket.x0 == pytest.approx(radius)
+    assert bracket.x1 == pytest.approx(radius + distance)
+    assert bracket.x1 - bracket.x0 == pytest.approx(distance)
+    extensions = [
+        line
+        for line in figure.layout.shapes
+        if line.type == "line" and line.x0 == line.x1
+    ]
+    assert [line.x0 for line in extensions] == pytest.approx(
+        [radius, radius + distance]
+    )
+    assert all(line.y0 == 0.0 for line in extensions)
+
+    arrows = [item for item in figure.layout.annotations if item.showarrow]
+    assert len(arrows) == 2
+    radius_arrow = next(item for item in arrows if item.arrowcolor == "#555")
+    assert radius_arrow.ax == radius_arrow.ay == 0.0
+    assert np.hypot(radius_arrow.x, radius_arrow.y) == pytest.approx(radius)
+    flow_arrow = next(item for item in arrows if item.arrowcolor == "#2463a5")
+    assert flow_arrow.x < flow_arrow.ax  # Freestream velocity points toward -x.
+    assert flow_arrow.y == flow_arrow.ay
+    assert flow_arrow.x > radius + distance  # Arrow stays upstream of the shock.
+    assert flow_arrow.axref == flow_arrow.xref == "x"
+    assert flow_arrow.ayref == flow_arrow.yref == "y"
+    assert flow_arrow.arrowhead > 0
+    text = " ".join(str(item.text) for item in figure.layout.annotations)
+    assert f"Rₙ = {radius:.3g} {unit}" in text
+    assert f"Δ = {distance:.3g} {unit}" in text
+    assert "頭部曲率中心" in text and "流れ方向" in text
+    assert (
+        "半球頭部"
+        if geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE
+        else "円柱頭部"
+    ) in text
+
+
 def test_boundary_profile_and_protrusion_figures() -> None:
     profile = boundary_layer_profiles(
         edge_velocity=300.0,
