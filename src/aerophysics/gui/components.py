@@ -109,6 +109,7 @@ def _convert_display_input_state() -> None:
             "shock_upstream_temperature",
             "cone_shock_upstream_temperature",
             "normal_upstream_temperature",
+            "expansion_temperature",
             "isentropic_total_temperature",
             "boundary_temperature",
             "boundary_wall_temperature",

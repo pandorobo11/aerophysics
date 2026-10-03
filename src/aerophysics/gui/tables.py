@@ -278,9 +278,13 @@ DETACHED_SHOCK_COLUMNS = (
 )
 
 EXPANSION_COLUMNS = (
+    Column("gas_model", "気体モデル"),
+    Column("upstream_temperature", "上流静温 T₁", "temperature"),
+    Column("downstream_temperature", "下流静温 T₂", "temperature"),
     Column("upstream_mach", "上流 Mach M₁"),
     Column("turn_angle", "膨張角 θ", "angle"),
     Column("maximum_turn_angle", "最大膨張角", "angle"),
+    Column("temperature_limited_turn_angle", "温度範囲内の最大膨張角", "angle"),
     Column("downstream_mach", "下流 Mach M₂"),
     Column("upstream_prandtl_meyer_angle", "ν₁", "angle"),
     Column("downstream_prandtl_meyer_angle", "ν₂", "angle"),

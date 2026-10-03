@@ -28,6 +28,7 @@ from aerophysics.detached_shock import (
 )
 from aerophysics.exceptions import (
     ApplicabilityWarning,
+    ExpansionConvergenceError,
     ModelRangeError,
     NoAttachedShockError,
     ShockConvergenceError,
@@ -796,34 +797,56 @@ def detached_shock_shape(
 
 
 def expansion_condition(
-    *, upstream_mach: float, turn_angle: float
+    *,
+    upstream_mach: float,
+    turn_angle: float,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
 ) -> CalculationResult:
     """Calculate one centered Prandtl-Meyer expansion."""
-    result = prandtl_meyer_expansion(upstream_mach, turn_angle)
-    maximum_turn = maximum_prandtl_meyer_angle() - float(
-        prandtl_meyer_angle(upstream_mach)
+    try:
+        gas = _SHOCK_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("unknown expansion gas_model") from error
+    result = prandtl_meyer_expansion(
+        upstream_mach,
+        turn_angle,
+        gas,
+        upstream_temperature=upstream_temperature,
     )
-    return CalculationResult(
-        (
+    row: Row = {
+        "upstream_mach": float(result.upstream_mach),
+        "downstream_mach": float(result.downstream_mach),
+        "turn_angle": float(result.turn_angle),
+        "maximum_turn_angle": float(result.available_turn_angle)
+        if gas_model == "AIR" and result.available_turn_angle is not None
+        else None,
+        "upstream_prandtl_meyer_angle": _optional_at(
+            result.upstream_prandtl_meyer_angle, 0
+        ),
+        "downstream_prandtl_meyer_angle": _optional_at(
+            result.downstream_prandtl_meyer_angle, 0
+        ),
+        "static_temperature_ratio": float(result.static_temperature_ratio),
+        "static_pressure_ratio": float(result.static_pressure_ratio),
+        "static_density_ratio": float(result.static_density_ratio),
+        "status": "ok",
+        "message": "",
+    }
+    if gas_model != "AIR":
+        assert upstream_temperature is not None
+        row.update(
             {
-                "upstream_mach": float(result.upstream_mach),
-                "downstream_mach": float(result.downstream_mach),
-                "turn_angle": float(result.turn_angle),
-                "maximum_turn_angle": maximum_turn,
-                "upstream_prandtl_meyer_angle": float(
-                    result.upstream_prandtl_meyer_angle
-                ),
-                "downstream_prandtl_meyer_angle": float(
-                    result.downstream_prandtl_meyer_angle
-                ),
-                "static_temperature_ratio": float(result.static_temperature_ratio),
-                "static_pressure_ratio": float(result.static_pressure_ratio),
-                "static_density_ratio": float(result.static_density_ratio),
-                "status": "ok",
-                "message": "",
-            },
+                "gas_model": gas_model,
+                "upstream_temperature": upstream_temperature,
+                "downstream_temperature": upstream_temperature
+                * float(result.static_temperature_ratio),
+                "temperature_limited_turn_angle": float(result.available_turn_angle)
+                if result.available_turn_angle is not None
+                else None,
+            }
         )
-    )
+    return CalculationResult((row,))
 
 
 def expansion_sweep(
@@ -834,6 +857,8 @@ def expansion_sweep(
     start: float,
     stop: float,
     points: int,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
 ) -> CalculationResult:
     """Sweep expansion Mach or turn angle while retaining limit failures."""
     if sweep_field not in {"mach", "turn_angle"}:
@@ -844,12 +869,17 @@ def expansion_sweep(
         turn = float(value) if sweep_field == "turn_angle" else fixed_turn_angle
         try:
             rows.append(
-                expansion_condition(upstream_mach=mach, turn_angle=turn).rows[0]
+                expansion_condition(
+                    upstream_mach=mach,
+                    turn_angle=turn,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                ).rows[0]
             )
-        except ValueError as error:
+        except (ValueError, ExpansionConvergenceError) as error:
             maximum_turn = (
                 maximum_prandtl_meyer_angle() - float(prandtl_meyer_angle(mach))
-                if mach >= 1.0
+                if mach >= 1.0 and gas_model == "AIR"
                 else None
             )
             rows.append(
@@ -863,10 +893,23 @@ def expansion_sweep(
                     "static_temperature_ratio": None,
                     "static_pressure_ratio": None,
                     "static_density_ratio": None,
-                    "status": "limit_exceeded",
+                    "status": "out_of_range"
+                    if isinstance(error, ModelRangeError)
+                    else "error"
+                    if isinstance(error, ExpansionConvergenceError)
+                    else "limit_exceeded",
                     "message": str(error),
                 }
             )
+            if gas_model != "AIR":
+                rows[-1].update(
+                    {
+                        "gas_model": gas_model,
+                        "upstream_temperature": upstream_temperature,
+                        "downstream_temperature": None,
+                        "temperature_limited_turn_angle": None,
+                    }
+                )
     return CalculationResult(tuple(rows))
 
 

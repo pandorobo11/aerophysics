@@ -12,6 +12,7 @@ from aerophysics.detached_shock import (
     BilligShockShapeResult,
     DetachedShockGeometry,
 )
+from aerophysics.exceptions import ExpansionConvergenceError
 from aerophysics.gui.adapters import (
     _SHOCK_GASES,
     CalculationResult,
@@ -589,10 +590,11 @@ def render_expansion(preferences: UnitPreferences) -> None:
     st.title("Prandtl–Meyer膨張")
     st.caption("超音速流の中心膨張におけるMach数、角度、静的状態量比を計算します。")
     imported = pop_pending_configuration("expansion")
-    inputs, _, sweep = _defaults(imported)
+    inputs, models, sweep = _defaults(imported)
     render_configuration_import("expansion", "expansion")
     render_reset_button("expansion", "expansion_payload")
     default_mode = str(imported.get("mode", "single")) if imported else "single"
+    default_gas_model = str(models.get("gas_model", "AIR"))
 
     with st.container():
         mode = st.radio(
@@ -603,6 +605,32 @@ def render_expansion(preferences: UnitPreferences) -> None:
             horizontal=True,
             key="expansion_mode",
         )
+        gas_models = tuple(_SHOCK_GASES)
+        gas_model = st.selectbox(
+            "気体モデル",
+            gas_models,
+            index=gas_models.index(default_gas_model)
+            if default_gas_model in gas_models
+            else 0,
+            key="expansion_gas_model",
+        )
+        assert gas_model is not None
+        upstream_temperature = None
+        if gas_model != "AIR":
+            stored_temperature = inputs.get("upstream_temperature", 1000.0)
+            default_temperature = (
+                float(stored_temperature)
+                if isinstance(stored_temperature, (int, float))
+                else 1000.0
+            )
+            temperature_display = finite_number(
+                f"上流静温 T₁ [{preferences.temperature}]",
+                _display(default_temperature, "temperature", preferences.temperature),
+                key="expansion_temperature",
+            )
+            upstream_temperature = _si(
+                temperature_display, "temperature", preferences.temperature
+            )
         mach = finite_number(
             "上流 Mach M₁",
             float(inputs.get("upstream_mach", 2.0)),
@@ -682,7 +710,12 @@ def render_expansion(preferences: UnitPreferences) -> None:
             turn_angle = _si(turn_display, "angle", preferences.angle)
             sweep_configuration: dict[str, object] | None = None
             if mode == "single":
-                result = expansion_condition(upstream_mach=mach, turn_angle=turn_angle)
+                result = expansion_condition(
+                    upstream_mach=mach,
+                    turn_angle=turn_angle,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                )
             else:
                 start_si = (
                     _si(start, "angle", preferences.angle)
@@ -701,6 +734,8 @@ def render_expansion(preferences: UnitPreferences) -> None:
                     start=start_si,
                     stop=stop_si,
                     points=points,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
                 )
                 sweep_configuration = {
                     "field": sweep_field,
@@ -711,12 +746,16 @@ def render_expansion(preferences: UnitPreferences) -> None:
             configuration = make_configuration(
                 calculator="expansion",
                 mode=mode,
-                inputs_si={"upstream_mach": mach, "turn_angle": turn_angle},
-                models={},
+                inputs_si={
+                    "upstream_mach": mach,
+                    "turn_angle": turn_angle,
+                    "upstream_temperature": upstream_temperature,
+                },
+                models={"gas_model": gas_model},
                 units=preferences,
                 sweep_si=sweep_configuration,
             )
-        except ValueError as error:
+        except (ValueError, ExpansionConvergenceError) as error:
             st.error(str(error), icon="🚫")
         else:
             st.session_state["expansion_payload"] = (result, configuration)
@@ -724,7 +763,9 @@ def render_expansion(preferences: UnitPreferences) -> None:
     payload = _payload("expansion_payload")
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
-            st.write("定常・等エントロピーな中心膨張と熱量的完全気体AIRを仮定します。")
+            st.write(
+                "定常・等エントロピーな二次元中心膨張です。AIRは定比熱、NASA7/NASA9と調和振動子は凍結組成の熱的完全気体です。熱的完全気体は上流静温を指定し、外挿は行いません。"
+            )
         return
     result, configuration = payload
 
@@ -763,9 +804,23 @@ def render_expansion(preferences: UnitPreferences) -> None:
     )
     invalid = sum(row["status"] != "ok" for row in result.rows)
     if invalid:
-        st.warning(f"{invalid}点はPrandtl–Meyer角の極限を超えるため欠損値としました。")
+        st.warning(
+            f"{invalid}点は温度範囲外、膨張角の極限超過、または数値収束失敗です。表のstatus/messageを確認してください。"
+        )
+    if any(
+        row.get("status") == "ok" and row.get("upstream_prandtl_meyer_angle") is None
+        for row in result.rows
+    ):
+        st.info(
+            "同じ全エンタルピーの音速基準状態が温度範囲外のため、ν₁・ν₂は空欄です。上流から下流までの膨張解は温度範囲内です。"
+        )
     with st.expander("モデルの前提・適用範囲"):
-        st.write("膨張前後で全温・全圧は一定です。角度はGUI境界でradianへ変換します。")
+        st.write(
+            "膨張前後で全エンタルピー・全圧は一定です。NASA7/NASA9は"
+            "200–6000 K、調和振動子は400–2000 Kです。熱的完全気体の"
+            "最大膨張角は温度下限までの角度で、真空への物理的極限とは異なります。"
+            "νは同じ全エンタルピーの音速状態を基準とします。解離・反応は扱いません。"
+        )
 
 
 def render_detached_shock(preferences: UnitPreferences) -> None:
