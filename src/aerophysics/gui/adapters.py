@@ -27,6 +27,7 @@ from aerophysics.detached_shock import (
     seiff_standoff_distance_from_mach,
 )
 from aerophysics.exceptions import (
+    ApplicabilityWarning,
     ModelRangeError,
     NoAttachedShockError,
     ShockConvergenceError,
@@ -37,6 +38,13 @@ from aerophysics.expansion import (
     prandtl_meyer_expansion,
 )
 from aerophysics.gas import AIR, PerfectGas
+from aerophysics.gui._flow_outputs import (
+    add_shock_outputs,
+    add_transport,
+    heat_capacities,
+    restore_static_temperature,
+    validate_output_inputs,
+)
 from aerophysics.isentropic import (
     MachBranch,
     isentropic_analysis,
@@ -275,8 +283,12 @@ def isentropic_condition(
     total_pressure: float | None = None,
     total_temperature: float | None = None,
     allow_extrapolation: bool = True,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Calculate isentropic state, inverse, area, and mass-flow relations."""
+    validate_output_inputs(total_pressure, viscosity_model, characteristic_length)
     try:
         gas = _ISENTROPIC_GASES[gas_model]
     except KeyError as error:
@@ -301,6 +313,7 @@ def isentropic_condition(
         )
 
     rows: list[Row] = []
+    transport_messages: list[str] = []
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
         input_values = [float(raw_value) for raw_value in _array(input_value)]
@@ -426,7 +439,49 @@ def isentropic_condition(
                     "message": "",
                 }
             )
-    messages = tuple(dict.fromkeys(str(item.message) for item in captured))
+            row = rows[-1]
+            temperature = row["static_temperature"]
+            pressure = row["static_pressure"]
+            assert temperature is None or isinstance(temperature, float)
+            assert pressure is None or isinstance(pressure, float)
+            if temperature is not None:
+                temperature = restore_static_temperature(
+                    temperature, gas, allow_extrapolation=allow_extrapolation
+                )
+                row["static_temperature"] = temperature
+            # The fused isentropic solve already reports state applicability.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", ApplicabilityWarning)
+                gamma, cp, cv = heat_capacities(
+                    gas, temperature, pressure, allow_extrapolation=allow_extrapolation
+                )
+            row["heat_capacity_ratio"] = gamma
+            if with_heat_capacities:
+                row.update({"cp": cp, "cv": cv})
+            if temperature is not None and not isinstance(gas, BeattieBridgemanGas):
+                sound_speed = float(
+                    np.sqrt(gamma * gas.specific_gas_constant * temperature)
+                )
+                row["speed_of_sound"] = sound_speed
+                row["velocity"] = mach * sound_speed
+            if absolute_state is not None:
+                assert temperature is not None
+                density = float(_array(absolute_state.static_density)[index])
+                velocity = float(_array(absolute_state.velocity)[index])
+                message = add_transport(
+                    row,
+                    temperature=temperature,
+                    density=density,
+                    velocity=velocity,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                )
+                if message:
+                    row["message"] = message
+                    transport_messages.append(message)
+    messages = tuple(
+        dict.fromkeys([str(item.message) for item in captured] + transport_messages)
+    )
     return CalculationResult(tuple(rows), messages)
 
 
@@ -441,8 +496,12 @@ def isentropic_sweep(
     total_pressure: float | None = None,
     total_temperature: float | None = None,
     allow_extrapolation: bool = True,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Sweep the selected isentropic input quantity."""
+    validate_output_inputs(total_pressure, viscosity_model, characteristic_length)
     return isentropic_condition(
         input_value=sweep_values(start, stop, points),
         input_basis=input_basis,
@@ -451,6 +510,9 @@ def isentropic_sweep(
         total_pressure=total_pressure,
         total_temperature=total_temperature,
         allow_extrapolation=allow_extrapolation,
+        viscosity_model=viscosity_model,
+        characteristic_length=characteristic_length,
+        with_heat_capacities=with_heat_capacities,
     )
 
 
@@ -459,8 +521,13 @@ def normal_shock_condition(
     upstream_mach: float | np.ndarray,
     gas_model: str = "AIR",
     upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Calculate normal-shock ratios and the Rayleigh pitot relation."""
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
     try:
         gas = _SHOCK_GASES[gas_model]
     except KeyError as error:
@@ -512,6 +579,17 @@ def normal_shock_condition(
                     * float(_array(result.static_temperature_ratio)[index]),
                 }
             )
+        messages.extend(
+            add_shock_outputs(
+                rows[-1],
+                gas,
+                upstream_temperature,
+                upstream_pressure,
+                viscosity_model,
+                characteristic_length,
+                with_heat_capacities,
+            )
+        )
     return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
@@ -522,11 +600,23 @@ def normal_shock_sweep(
     points: int,
     gas_model: str = "AIR",
     upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Sweep upstream Mach number through a normal shock."""
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
     values = sweep_values(start, stop, points)
     if gas_model == "AIR":
-        return normal_shock_condition(upstream_mach=values)
+        return normal_shock_condition(
+            upstream_mach=values,
+            upstream_temperature=upstream_temperature,
+            upstream_pressure=upstream_pressure,
+            viscosity_model=viscosity_model,
+            characteristic_length=characteristic_length,
+            with_heat_capacities=with_heat_capacities,
+        )
     rows: list[Row] = []
     messages: list[str] = []
     for mach in values:
@@ -535,6 +625,10 @@ def normal_shock_sweep(
                 upstream_mach=float(mach),
                 gas_model=gas_model,
                 upstream_temperature=upstream_temperature,
+                viscosity_model=viscosity_model,
+                characteristic_length=characteristic_length,
+                with_heat_capacities=with_heat_capacities,
+                upstream_pressure=upstream_pressure,
             )
         except ValueError as error:
             rows.append(
@@ -791,8 +885,13 @@ def oblique_shock_condition(
     branch: ShockBranch,
     gas_model: str = "AIR",
     upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Calculate one oblique-shock state."""
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
     try:
         gas = _SHOCK_GASES[gas_model]
     except KeyError as error:
@@ -837,7 +936,16 @@ def oblique_shock_condition(
                 * float(result.static_temperature_ratio),
             }
         )
-    return CalculationResult((row,))
+    messages = add_shock_outputs(
+        row,
+        gas,
+        upstream_temperature,
+        upstream_pressure,
+        viscosity_model,
+        characteristic_length,
+        with_heat_capacities,
+    )
+    return CalculationResult((row,), messages)
 
 
 def oblique_shock_sweep(
@@ -851,10 +959,16 @@ def oblique_shock_sweep(
     points: int,
     gas_model: str = "AIR",
     upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Sweep Mach or deflection while retaining non-attached rows."""
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
     values = sweep_values(start, stop, points)
     rows: list[Row] = []
+    messages: list[str] = []
     for value in values:
         mach = float(value) if sweep_field == "mach" else fixed_mach
         theta = float(value) if sweep_field == "deflection" else fixed_deflection
@@ -865,6 +979,10 @@ def oblique_shock_sweep(
                 branch=branch,
                 gas_model=gas_model,
                 upstream_temperature=upstream_temperature,
+                viscosity_model=viscosity_model,
+                characteristic_length=characteristic_length,
+                with_heat_capacities=with_heat_capacities,
+                upstream_pressure=upstream_pressure,
             )
         except ValueError as error:
             maximum: float | None = None
@@ -912,9 +1030,10 @@ def oblique_shock_sweep(
                 )
         else:
             rows.append(result.rows[0])
+            messages.extend(result.warnings)
     if sweep_field not in {"mach", "deflection"}:
         raise ValueError("sweep_field must be mach or deflection")
-    return CalculationResult(tuple(rows))
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
 def conical_shock_condition(
@@ -923,8 +1042,13 @@ def conical_shock_condition(
     cone_half_angle: float,
     gas_model: str = "AIR",
     upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Calculate one axisymmetric Taylor-Maccoll conical-shock state."""
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
     try:
         gas = _SHOCK_GASES[gas_model]
     except KeyError as error:
@@ -965,7 +1089,17 @@ def conical_shock_condition(
                 * float(result.surface_temperature_ratio),
             }
         )
-    return CalculationResult((row,))
+    messages = add_shock_outputs(
+        row,
+        gas,
+        upstream_temperature,
+        upstream_pressure,
+        viscosity_model,
+        characteristic_length,
+        with_heat_capacities,
+        surface=True,
+    )
+    return CalculationResult((row,), messages)
 
 
 def conical_shock_sweep(
@@ -978,12 +1112,18 @@ def conical_shock_sweep(
     points: int,
     gas_model: str = "AIR",
     upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Sweep Mach or cone half-angle while retaining non-attached rows."""
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
     if sweep_field not in {"mach", "cone_half_angle"}:
         raise ValueError("sweep_field must be mach or cone_half_angle")
     values = sweep_values(start, stop, points)
     rows: list[Row] = []
+    messages: list[str] = []
     for value in values:
         mach = float(value) if sweep_field == "mach" else fixed_mach
         angle = (
@@ -995,6 +1135,10 @@ def conical_shock_sweep(
                 cone_half_angle=angle,
                 gas_model=gas_model,
                 upstream_temperature=upstream_temperature,
+                viscosity_model=viscosity_model,
+                characteristic_length=characteristic_length,
+                with_heat_capacities=with_heat_capacities,
+                upstream_pressure=upstream_pressure,
             )
         except (ValueError, ShockConvergenceError) as error:
             maximum: float | None = None
@@ -1041,7 +1185,8 @@ def conical_shock_sweep(
                 )
         else:
             rows.append(result.rows[0])
-    return CalculationResult(tuple(rows))
+            messages.extend(result.warnings)
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
 def flat_plate(

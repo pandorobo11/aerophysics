@@ -81,6 +81,20 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
     ),
     "oblique_shock": _CalculatorSchema(
         inputs={
+            "characteristic_length": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_pressure": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
             "upstream_mach": _SUPERSONIC,
             "deflection_angle": _NON_NEGATIVE,
             "upstream_temperature": _FieldRule(
@@ -92,6 +106,10 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
             ),
         },
         models={
+            "viscosity_model": _choice(
+                "Sutherland", "Keyes", "Blottner/Wilke", required=False
+            ),
+            "with_heat_capacities": _FieldRule("bool", required=False),
             "branch": _choice("weak", "strong"),
             "gas_model": _choice(
                 "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
@@ -101,6 +119,20 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
     ),
     "conical_shock": _CalculatorSchema(
         inputs={
+            "characteristic_length": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_pressure": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
             "upstream_mach": _SUPERSONIC,
             "cone_half_angle": _NON_NEGATIVE,
             "upstream_temperature": _FieldRule(
@@ -112,9 +144,13 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
             ),
         },
         models={
+            "viscosity_model": _choice(
+                "Sutherland", "Keyes", "Blottner/Wilke", required=False
+            ),
+            "with_heat_capacities": _FieldRule("bool", required=False),
             "gas_model": _choice(
                 "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
-            )
+            ),
         },
         sweep_variables=frozenset({"cone_half_angle", "mach"}),
         maximum_sweep_points=201,
@@ -141,11 +177,22 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
     ),
     "isentropic": _CalculatorSchema(
         inputs={
+            "characteristic_length": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
             "input_value": _NON_NEGATIVE,
             "total_pressure": _NULLABLE_POSITIVE,
             "total_temperature": _NULLABLE_POSITIVE,
         },
         models={
+            "viscosity_model": _choice(
+                "Sutherland", "Keyes", "Blottner/Wilke", required=False
+            ),
+            "with_heat_capacities": _FieldRule("bool", required=False),
             "input_basis": _choice(
                 "mach",
                 "temperature_ratio",
@@ -169,6 +216,20 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
     ),
     "normal_shock": _CalculatorSchema(
         inputs={
+            "characteristic_length": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_pressure": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
             "upstream_mach": _number(minimum=1.0),
             "upstream_temperature": _FieldRule(
                 "number",
@@ -179,6 +240,10 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
             ),
         },
         models={
+            "viscosity_model": _choice(
+                "Sutherland", "Keyes", "Blottner/Wilke", required=False
+            ),
+            "with_heat_capacities": _FieldRule("bool", required=False),
             "gas_model": _choice(
                 "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
             ),

@@ -11,6 +11,14 @@ uses Semantic Versioning, including during the pre-1.0 period.
   with solved Mach labels, physical flow directions, a convex-wall expansion
   fan and angle arcs in the selected display unit.
 
+- Add local gamma, full velocity ratios, sound speeds, dynamic-pressure ratios
+  and entropy rise to shock GUI results, with optional cp/cv detail columns.
+  Add optional static pressure, dry-air viscosity selection and local unit
+  Reynolds numbers to normal, oblique and conical shocks; the isentropic page
+  uses its existing total pressure. Optional length supplies Re_L. Preserve
+  valid flow states when a viscosity correlation is outside its fitted range,
+  and retain all output options through unit changes and settings replay.
+
 - Add thermal gas selection, upstream static temperatures, Mach sweeps, and
   settings replay to the normal-shock GUI. Extend the supersonic pitot ratio
   to frozen thermally perfect gases; retain valid shock results when only the
