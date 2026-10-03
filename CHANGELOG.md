@@ -7,6 +7,10 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add single-point normal-shock and Prandtl--Meyer expansion GUI schematics
+  with solved Mach labels, physical flow directions, a convex-wall expansion
+  fan and angle arcs in the selected display unit.
+
 - Add thermal gas selection, upstream static temperatures, Mach sweeps, and
   settings replay to the normal-shock GUI. Extend the supersonic pitot ratio
   to frozen thermally perfect gases; retain valid shock results when only the

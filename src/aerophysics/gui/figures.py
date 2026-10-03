@@ -790,6 +790,267 @@ def isentropic_figures(
     return figures
 
 
+def _flow_direction_arrow(
+    figure: go.Figure, x: float, y: float, direction: float, label: str
+) -> None:
+    """Add a schematic velocity direction and its Mach label."""
+    dx, dy = 0.48 * math.cos(direction), 0.48 * math.sin(direction)
+    figure.add_annotation(
+        x=x + dx,
+        y=y + dy,
+        ax=x,
+        ay=y,
+        xref="x",
+        yref="y",
+        axref="x",
+        ayref="y",
+        text="",
+        showarrow=True,
+        arrowhead=3,
+        arrowsize=1.2,
+        arrowwidth=2.5,
+        arrowcolor="#2463a5",
+    )
+    figure.add_annotation(
+        x=x + 0.5 * dx,
+        y=y + 0.5 * dy,
+        text=label,
+        showarrow=False,
+        yshift=24,
+        font={"color": "#2463a5", "size": 14},
+        bgcolor="rgba(255,255,255,0.9)",
+    )
+
+
+def normal_shock_geometry(row: Row) -> go.Figure:
+    """Show a normal shock and collinear upstream/downstream velocities."""
+    mach1, mach2 = row.get("upstream_mach"), row.get("downstream_mach")
+    if not isinstance(mach1, float) or not isinstance(mach2, float):
+        raise ValueError("geometry requires a successful normal-shock result")
+    figure = go.Figure()
+    figure.add_shape(
+        type="line",
+        x0=-1.5,
+        x1=1.5,
+        y0=0.0,
+        y1=0.0,
+        line={"color": "#94a3b8", "width": 1.5, "dash": "dash"},
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=[0.0, 0.0],
+            y=[-0.65, 0.65],
+            mode="lines",
+            line={"color": "#d62728", "width": 3},
+            name="垂直衝撃波",
+            hoverinfo="name",
+        )
+    )
+    figure.add_annotation(
+        x=0.0,
+        y=0.65,
+        text="垂直衝撃波",
+        showarrow=False,
+        yshift=22,
+        font={"color": "#d62728", "size": 14},
+    )
+    for x, mach, name in ((-1.15, mach1, "上流 M₁"), (0.65, mach2, "下流 M₂")):
+        _flow_direction_arrow(figure, x, 0.0, 0.0, f"{name} = {mach:.3g}")
+    figure.add_annotation(
+        x=0.5,
+        y=-0.17,
+        xref="paper",
+        yref="paper",
+        text=(
+            "M₁ = 1：衝撃波強度ゼロの極限　青矢印：流れ方向（長さは模式的）"
+            if mach1 == 1.0
+            else "流れの向きは変わらない　青矢印：流れ方向（長さは模式的）"
+        ),
+        showarrow=False,
+        font={"color": "#64748b", "size": 13},
+    )
+    figure.update_layout(
+        title="垂直衝撃波 — 上流・下流の流れ",
+        template="plotly_white",
+        showlegend=False,
+        height=420,
+        xaxis={"visible": False, "range": [-1.6, 1.6]},
+        yaxis={
+            "visible": False,
+            "scaleanchor": "x",
+            "scaleratio": 1,
+            "range": [-0.8, 0.95],
+        },
+        margin={"l": 25, "r": 25, "t": 60, "b": 70},
+    )
+    return figure
+
+
+def expansion_geometry(row: Row, preferences: UnitPreferences) -> go.Figure:
+    """Draw a convex wall and centered expansion above it, turning clockwise.
+
+    The incoming flow is horizontal. Fan boundaries have directions mu1 and
+    mu2-theta, with mu=asin(1/M); mu2 is measured from the turned flow (-theta).
+    """
+    mach1, mach2 = row.get("upstream_mach"), row.get("downstream_mach")
+    theta = row.get("turn_angle")
+    if (
+        not isinstance(mach1, float)
+        or not isinstance(mach2, float)
+        or not isinstance(theta, float)
+    ):
+        raise ValueError("geometry requires a successful expansion result")
+    mu1, mu2 = math.asin(1.0 / mach1), math.asin(1.0 / mach2)
+    head, tail = mu1, mu2 - theta
+    direction = np.array([math.cos(theta), -math.sin(theta)])
+    normal = np.array([math.sin(theta), math.cos(theta)])
+    wall_end = 2.0 * direction
+    body_end = wall_end - 0.35 * normal
+    figure = go.Figure()
+    figure.add_shape(
+        type="path",
+        path=(
+            f"M -1.4,0 L 0,0 L {wall_end[0]},{wall_end[1]} "
+            f"L {body_end[0]},{body_end[1]} L -1.4,-0.35 Z"
+        ),
+        fillcolor="#e2e8f0",
+        line={"width": 0},
+        layer="below",
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=[-1.4, 0.0, wall_end[0]],
+            y=[0.0, 0.0, wall_end[1]],
+            mode="lines",
+            line={"color": "#555", "width": 3},
+            name="凸角壁",
+            hoverinfo="name",
+        )
+    )
+    figure.add_shape(
+        type="line",
+        x0=0.0,
+        x1=1.5,
+        y0=0.0,
+        y1=0.0,
+        line={"color": "#94a3b8", "width": 1.5, "dash": "dash"},
+    )
+    fan_arc = np.linspace(tail, head, 61)
+    fan_x, fan_y = 1.6 * np.cos(fan_arc), 1.6 * np.sin(fan_arc)
+    if theta > 0.0:
+        figure.add_shape(
+            type="path",
+            path="M 0,0 "
+            + " ".join(f"L {x},{y}" for x, y in zip(fan_x, fan_y, strict=True))
+            + " Z",
+            fillcolor="rgba(22,131,108,0.08)",
+            line={"width": 0},
+            layer="below",
+        )
+    # Bounded rays also handle the sonic mu1=90-degree limit.
+    fan_angles = np.linspace(head, tail, 9) if theta > 0.0 else np.array([head])
+    for index, angle in enumerate(fan_angles):
+        figure.add_trace(
+            go.Scatter(
+                x=[0.0, 1.6 * math.cos(angle)],
+                y=[0.0, 1.6 * math.sin(angle)],
+                mode="lines",
+                line={
+                    "color": "#16836c",
+                    "width": 2 if index in (0, len(fan_angles) - 1) else 1,
+                },
+                name="膨張扇のマッハ線" if theta > 0.0 else "マッハ線（膨張なし）",
+                hoverinfo="name",
+            )
+        )
+    unit = preferences.angle
+    for start, end, radius, name, color in (
+        (0.0, -theta, 0.38, "θ", "#555"),
+        (0.0, mu1, 0.62, "μ₁", "#16836c"),
+        (-theta, tail, 0.9, "μ₂", "#16836c"),
+    ):
+        arc = np.linspace(start, end, 41)
+        value = float(from_si(abs(end - start), "angle", unit))
+        figure.add_trace(
+            go.Scatter(
+                x=radius * np.cos(arc),
+                y=radius * np.sin(arc),
+                mode="lines",
+                line={"color": color, "width": 1.5},
+                name=f"{name} = {value:.3g} {unit}",
+                hoverinfo="name",
+            )
+        )
+        middle = 0.5 * (start + end)
+        figure.add_annotation(
+            x=(radius + 0.12) * math.cos(middle),
+            y=(radius + 0.12) * math.sin(middle),
+            text=f"{name} = {value:.3g} {unit}",
+            showarrow=False,
+            yshift=22 if name == "μ₁" else -24,
+            font={"color": color, "size": 14},
+            bgcolor="rgba(255,255,255,0.9)",
+        )
+    _flow_direction_arrow(figure, -1.15, 0.4, 0.0, f"上流 M₁ = {mach1:.3g}")
+    flow_start = 1.4 * direction + 0.13 * normal
+    _flow_direction_arrow(
+        figure,
+        float(flow_start[0]),
+        float(flow_start[1]),
+        -theta,
+        f"下流 M₂ = {mach2:.3g}",
+    )
+    body_label = 1.05 * direction - 0.18 * normal
+    figure.add_annotation(
+        x=float(body_label[0]),
+        y=float(body_label[1]),
+        text="凸角壁",
+        showarrow=False,
+        font={"color": "#555", "size": 14},
+    )
+    middle = 0.5 * (head + tail)
+    figure.add_annotation(
+        x=1.3 * math.cos(middle),
+        y=1.3 * math.sin(middle),
+        text="膨張扇" if theta > 0.0 else "マッハ線（膨張なし）",
+        showarrow=False,
+        yshift=28,
+        font={"color": "#16836c", "size": 14},
+        bgcolor="rgba(255,255,255,0.9)",
+    )
+    figure.add_annotation(
+        x=0.5,
+        y=-0.17,
+        xref="paper",
+        yref="paper",
+        text="μ₁・μ₂：各流れ方向から測るマッハ角　青矢印：流れ方向（長さは模式的）",
+        showarrow=False,
+        font={"color": "#64748b", "size": 13},
+    )
+    theta_display = float(from_si(theta, "angle", unit))
+    figure.update_layout(
+        title=f"Prandtl–Meyer膨張 — θ={theta_display:.3g} {unit}",
+        template="plotly_white",
+        showlegend=False,
+        height=500,
+        xaxis={
+            "visible": False,
+            "range": [min(-1.4, body_end[0], np.min(fan_x)) - 0.45, 2.45],
+        },
+        yaxis={
+            "visible": False,
+            "scaleanchor": "x",
+            "scaleratio": 1,
+            "range": [
+                min(-0.35, body_end[1], np.min(fan_y)) - 0.4,
+                max(0.65, np.max(fan_y)) + 0.4,
+            ],
+        },
+        margin={"l": 25, "r": 25, "t": 60, "b": 80},
+    )
+    return figure
+
+
 def normal_shock_figures(rows: tuple[Row, ...]) -> dict[str, go.Figure]:
     """Create normal-shock Mach and pressure-ratio figures."""
     x = _numeric(rows, "upstream_mach")

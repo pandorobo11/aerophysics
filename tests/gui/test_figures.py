@@ -18,10 +18,12 @@ from aerophysics.gui.adapters import (
     detached_shock_condition,
     detached_shock_shape,
     detached_shock_sweep,
+    expansion_condition,
     expansion_sweep,
     flat_plate_sweep,
     flight_sweep,
     isentropic_sweep,
+    normal_shock_condition,
     normal_shock_sweep,
     oblique_shock_condition,
     oblique_shock_sweep,
@@ -40,9 +42,11 @@ from aerophysics.gui.figures import (
     detached_shock_geometry,
     detached_shock_trends,
     expansion_figures,
+    expansion_geometry,
     flight_figures,
     isentropic_figures,
     normal_shock_figures,
+    normal_shock_geometry,
     protrusion_figures,
     protrusion_shape_figure,
     shock_geometry,
@@ -53,6 +57,121 @@ from aerophysics.gui.figures import (
 from aerophysics.gui.units import UnitPreferences
 from aerophysics.isentropic import MachBranch
 from aerophysics.shocks import ShockBranch
+
+
+@pytest.mark.parametrize(
+    ("gas_model", "mach"),
+    [
+        ("AIR", 1.0),
+        ("AIR", 3.0),
+        ("NASA7", 3.0),
+        ("NASA9", 3.0),
+        ("HARMONIC_OSCILLATOR", 3.0),
+        ("HARMONIC_OSCILLATOR", 4.2),
+    ],
+)
+def test_normal_geometry_uses_solved_mach_and_collinear_flow(
+    gas_model: str, mach: float
+) -> None:
+    result = normal_shock_condition(
+        upstream_mach=mach,
+        gas_model=gas_model,
+        upstream_temperature=None if gas_model == "AIR" else 500.0,
+    )
+    row = result.rows[0]
+    figure = normal_shock_geometry(row)
+    assert figure.layout.yaxis.scaleanchor == "x"
+    assert figure.layout.yaxis.scaleratio == 1
+    shock = figure.data[0]
+    assert list(shock.x) == [0.0, 0.0]
+    assert shock.y[0] < 0.0 < shock.y[1]
+    assert shock.line.color == "#d62728"
+    arrows = [item for item in figure.layout.annotations if item.showarrow]
+    assert len(arrows) == 2
+    for arrow in arrows:
+        assert arrow.x > arrow.ax
+        assert arrow.y == arrow.ay == 0.0
+        assert arrow.xref == arrow.axref == "x"
+        assert arrow.yref == arrow.ayref == "y"
+    assert arrows[0].x < 0.0 < arrows[1].ax
+    text = " ".join(str(item.text) for item in figure.layout.annotations)
+    assert f"M₁ = {mach:.3g}" in text
+    assert f"M₂ = {row['downstream_mach']:.3g}" in text
+    if mach == 1.0:
+        assert "衝撃波強度ゼロ" in text
+    if gas_model == "HARMONIC_OSCILLATOR" and mach == 4.2:
+        assert row["pitot_pressure_ratio"] is None
+
+
+@pytest.mark.parametrize("unit", ["deg", "rad"])
+@pytest.mark.parametrize(
+    ("mach", "theta_degrees"),
+    [(1.0, 15.0), (2.0, 0.0), (2.0, 15.0), (2.0, 80.0), (1.05, 110.0)],
+)
+def test_expansion_geometry_fan_and_local_mach_angles(
+    mach: float, theta_degrees: float, unit: str
+) -> None:
+    theta = float(np.deg2rad(theta_degrees))
+    row = expansion_condition(upstream_mach=mach, turn_angle=theta).rows[0]
+    figure = expansion_geometry(row, UnitPreferences(angle=unit))
+    assert figure.layout.yaxis.scaleanchor == "x"
+    assert figure.layout.yaxis.scaleratio == 1
+    mu1 = float(np.arcsin(1.0 / mach))
+    mach2 = row["downstream_mach"]
+    assert isinstance(mach2, float)
+    mu2 = float(np.arcsin(1.0 / mach2))
+    wall = figure.data[0]
+    assert np.arctan2(wall.y[-1], wall.x[-1]) == pytest.approx(-theta)
+    fan = [trace for trace in figure.data if "マッハ線" in trace.name]
+    assert len(fan) == (9 if theta > 0.0 else 1)
+    assert np.arctan2(fan[0].y[-1], fan[0].x[-1]) == pytest.approx(mu1)
+    assert np.arctan2(fan[-1].y[-1], fan[-1].x[-1]) == pytest.approx(mu2 - theta)
+    for ray in fan:
+        assert ray.x[0] == ray.y[0] == 0.0
+        assert np.hypot(ray.x[-1], ray.y[-1]) == pytest.approx(1.6)
+        assert ray.line.color == "#16836c"
+    arcs = figure.data[-3:]
+    for arc, start, end in zip(
+        arcs, [0.0, 0.0, -theta], [-theta, mu1, mu2 - theta], strict=True
+    ):
+        assert np.arctan2(arc.y[0], arc.x[0]) == pytest.approx(start)
+        assert np.arctan2(arc.y[-1], arc.x[-1]) == pytest.approx(end)
+        value = abs(end - start) if unit == "rad" else np.rad2deg(abs(end - start))
+        assert f"{value:.3g} {unit}" in arc.name
+    arrows = [item for item in figure.layout.annotations if item.showarrow]
+    assert len(arrows) == 2
+    assert arrows[0].x > arrows[0].ax and arrows[0].y == arrows[0].ay
+    downstream = arrows[1]
+    assert np.arctan2(
+        downstream.y - downstream.ay, downstream.x - downstream.ax
+    ) == pytest.approx(-theta)
+    assert np.cos(theta) * downstream.ay + np.sin(theta) * downstream.ax > 0.0
+    for trace in figure.data:
+        assert np.all(np.isfinite(trace.x)) and np.all(np.isfinite(trace.y))
+    if theta == 0.0:
+        assert "膨張なし" in fan[0].name
+
+
+@pytest.mark.parametrize(
+    ("kind", "key"),
+    [
+        ("normal", "upstream_mach"),
+        ("normal", "downstream_mach"),
+        ("expansion", "upstream_mach"),
+        ("expansion", "downstream_mach"),
+        ("expansion", "turn_angle"),
+    ],
+)
+def test_new_flow_geometry_requires_successful_scalar_states(
+    kind: str, key: str
+) -> None:
+    row: Row = {"upstream_mach": 2.0, "downstream_mach": 2.6, "turn_angle": 0.2}
+    row[key] = None
+    with pytest.raises(ValueError, match="successful"):
+        if kind == "normal":
+            normal_shock_geometry(row)
+        else:
+            expansion_geometry(row, UnitPreferences())
 
 
 def test_flight_figures_have_expected_panels() -> None:

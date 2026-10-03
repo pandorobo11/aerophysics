@@ -322,7 +322,7 @@ render_boundary_layer(UnitPreferences())
 def test_additional_compressible_flow_pages() -> None:
     pages = (
         ("render_isentropic", "isentropic_form", "等エントロピー流れ", 2),
-        ("render_normal_shock", "normal_form", "垂直衝撃波", 2),
+        ("render_normal_shock", "normal_form", "垂直衝撃波", 3),
     )
     for function, form, title, plot_count in pages:
         script = f"""
@@ -350,6 +350,9 @@ from aerophysics.gui.units import UnitPreferences
         assert not app.exception
         assert not app.error
         assert len(app.dataframe[0].value) == 3
+
+        if prefix == "normal":
+            assert len(app.get("plotly_chart")) == 2
 
 
 @pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
@@ -561,12 +564,14 @@ render_expansion(UnitPreferences())
     app.button(key="FormSubmitter:expansion_form-計算").click().run()
     assert not app.exception
     assert not app.error
+    assert len(app.get("plotly_chart")) == 4
     assert "expansion_sweep_start" not in {widget.key for widget in app.number_input}
     app.radio(key="expansion_mode").set_value("1変数スイープ").run()
     assert "expansion_sweep_start" in {widget.key for widget in app.number_input}
     app.number_input(key="expansion_sweep_stop").set_value(130.0).run()
     app.button(key="FormSubmitter:expansion_form-計算").click().run()
     assert not app.exception
+    assert len(app.get("plotly_chart")) == 3
     assert any(
         status == "limit_exceeded"
         for status in app.dataframe[0].value["status"].tolist()
