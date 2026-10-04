@@ -28,3 +28,13 @@ Expansion waves
 
 .. automodule:: aerophysics.expansion
    :members:
+
+Sequential transformations
+--------------------------
+
+.. py:type:: aerophysics.flow_sequence.FlowStep
+
+   Union of the five supported stage configuration types.
+
+.. automodule:: aerophysics.flow_sequence
+   :members:

@@ -355,7 +355,7 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
 
 def calculator_names() -> frozenset[str]:
     """Return the calculator discriminators supported by schema version one."""
-    return frozenset(_SCHEMAS)
+    return frozenset(_SCHEMAS) | {"flow_sequence"}
 
 
 def _validate_number(value: object, rule: _FieldRule, path: str) -> float:
@@ -476,6 +476,16 @@ def validate_calculator_payload(
     has_sweep: bool,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object] | None]:
     """Validate and normalize one calculator-discriminated payload."""
+    if calculator == "flow_sequence":
+        from aerophysics.gui.sequence_adapter import validate_sequence_payload
+
+        if mode != "single" or has_sweep:
+            raise _SchemaError("flow_sequence supports only single mode")
+        try:
+            inputs, gas = validate_sequence_payload(inputs_si, models)
+        except (ValueError, TypeError) as error:
+            raise _SchemaError(str(error)) from error
+        return inputs, gas, None
     schema = _SCHEMAS[calculator]
     normalized_inputs = _validate_object(inputs_si, schema.inputs, "inputs_si")
     normalized_models = _validate_object(models, schema.models, "models")

@@ -5,6 +5,23 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve validated sequence temperatures at thermal range boundaries when
+  ratio restoration overshoots by exactly one ULP, while rejecting larger
+  excursions and out-of-range user inputs. Bracket stagnation temperature
+  locally so custom harmonic-oscillator gases without an applicability range
+  do not evaluate properties at the maximum floating-point temperature.
+
+### Added
+
+- Add scalar flow sequences with normal, oblique and conical shocks,
+  isentropic transformations and centered expansions, for perfect and frozen
+  thermally perfect gases. Support arbitrary static/total initial conditions
+  and standard-atmosphere initialization. Add a GUI stage editor, per-stage
+  properties and pressure recovery, plots, SI CSV export, configuration replay,
+  and explicit partial results when a stage fails.
+
 ## [0.7.0] - 2026-10-03
 
 ### Added
