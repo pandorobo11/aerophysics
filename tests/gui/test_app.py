@@ -950,6 +950,8 @@ render_flight(UnitPreferences(length={length_unit!r}))
     assert not app.exception
     assert not app.error
     result, configuration = app.session_state["flight_payload"]
+    assert f"幾何高度 h [{length_unit}]" in app.dataframe[0].value.columns
+    assert f"ジオポテンシャル高度 H [{length_unit}]" in app.dataframe[0].value.columns
     assert configuration["models"]["altitude_basis"] == "geopotential"
     assert configuration["inputs_si"]["geometric_altitude"] == pytest.approx(
         geopotential_to_geometric(11000.0)
