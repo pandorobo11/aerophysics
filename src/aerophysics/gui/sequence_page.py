@@ -225,6 +225,19 @@ def render_sequence(preferences: UnitPreferences) -> None:
             "p,T を取得し、他の量は選択した気体で算出します。"
         )
     initial: dict[str, Any] = {"basis": basis}
+    if basis.startswith("atmosphere"):
+        coordinates = ("geometric", "geopotential")
+        initial["altitude_basis"] = st.radio(
+            "高度の種類",
+            coordinates,
+            index=coordinates.index(initial_saved.get("altitude_basis", "geometric")),
+            format_func=lambda value: (
+                "幾何高度" if value == "geometric" else "ジオポテンシャル高度"
+            ),
+            horizontal=True,
+            key=f"sequence_altitude_basis_{epoch}",
+        )
+        st.caption("altitude の入力値を、選択した高度の種類で解釈します。")
     for field in INITIAL_FIELDS[basis]:
         initial[field] = _input(
             field,

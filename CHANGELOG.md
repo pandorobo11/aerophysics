@@ -15,6 +15,10 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Select geometric or geopotential altitude in the atmosphere/flight GUI,
+  including altitude sweeps, plot axes, and saved configuration replay.
+  Support the same choice for standard-atmosphere flow-sequence initialization.
+
 - Add scalar flow sequences with normal, oblique and conical shocks,
   isentropic transformations and centered expansions, for perfect and frozen
   thermally perfect gases. Support arbitrary static/total initial conditions

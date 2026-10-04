@@ -48,6 +48,7 @@ def flight_figures(
     *,
     sweep_field: str = "altitude",
     motion_basis: str = "mach",
+    altitude_basis: str = "geometric",
 ) -> dict[str, go.Figure]:
     """Create atmosphere, flight, and total-state figures."""
     if sweep_field == "motion" and motion_basis == "mach":
@@ -57,8 +58,13 @@ def flight_figures(
         x = _converted(rows, "velocity", "speed", preferences)
         x_title = f"速度 V [{preferences.speed}]"
     else:
-        x = _converted(rows, "geometric_altitude", "length", preferences)
-        x_title = f"h [{preferences.length}]"
+        x = _converted(rows, f"{altitude_basis}_altitude", "length", preferences)
+        label = (
+            "ジオポテンシャル高度 H"
+            if altitude_basis == "geopotential"
+            else "幾何高度 h"
+        )
+        x_title = f"{label} [{preferences.length}]"
 
     atmosphere = make_subplots(
         rows=2,

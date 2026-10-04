@@ -924,3 +924,69 @@ with patch.object(adapters, 'conical_shock', side_effect=numerical_failure):
     app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
     assert not app.exception and not app.error
     assert app.session_state["cone_shock_payload"][0].rows[0]["status"] == "ok"
+
+
+@pytest.mark.parametrize("mode", ["single", "sweep"])
+@pytest.mark.parametrize("length_unit", ["m", "ft"])
+def test_flight_geopotential_replay(mode: str, length_unit: str) -> None:
+    from aerophysics.atmosphere import geopotential_to_geometric
+    from aerophysics.gui.config import dump_configuration, load_configuration
+    from aerophysics.gui.units import from_si
+
+    script = f"""
+from aerophysics.gui.pages import render_flight
+from aerophysics.gui.units import UnitPreferences
+render_flight(UnitPreferences(length={length_unit!r}))
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.radio(key="flight_altitude_basis").set_value("geopotential").run()
+    app.number_input(key="flight_altitude").set_value(
+        float(from_si(11000.0, "length", length_unit))
+    ).run()
+    if mode == "sweep":
+        app.radio(key="flight_mode").set_value("sweep").run()
+        app.number_input(key="flight_sweep_points").set_value(3).run()
+    app.button(key="FormSubmitter:flight_form-計算").click().run()
+    assert not app.exception
+    assert not app.error
+    result, configuration = app.session_state["flight_payload"]
+    assert configuration["models"]["altitude_basis"] == "geopotential"
+    assert configuration["inputs_si"]["geometric_altitude"] == pytest.approx(
+        geopotential_to_geometric(11000.0)
+    )
+    if mode == "single":
+        assert result.rows[0]["temperature"] == pytest.approx(216.65)
+        assert result.rows[0]["geopotential_altitude"] == pytest.approx(11000.0)
+        app.button(key="flight_save_case").click().run()
+        assert app.session_state[
+            "current_flight_case"
+        ].geometric_altitude == pytest.approx(geopotential_to_geometric(11000.0))
+    else:
+        assert [row["geopotential_altitude"] for row in result.rows] == pytest.approx(
+            [0.0, 10000.0, 20000.0]
+        )
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_flight_configuration"] = load_configuration(
+        dump_configuration(configuration)
+    )
+    replay.run()
+    assert replay.radio(key="flight_altitude_basis").value == "geopotential"
+    replay.button(key="FormSubmitter:flight_form-計算").click().run()
+    assert not replay.exception
+    assert not replay.error
+    for actual, expected in zip(
+        replay.session_state["flight_payload"][0].rows, result.rows, strict=True
+    ):
+        assert actual == pytest.approx(expected)
+
+
+def test_flight_geopotential_outside_range() -> None:
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    assert app.radio(key="flight_altitude_basis").value == "geometric"
+    app.radio(key="flight_altitude_basis").set_value("geopotential").run()
+    app.number_input(key="flight_altitude").set_value(86000.0).run()
+    app.button(key="FormSubmitter:flight_form-計算").click().run()
+    assert not app.exception
+    assert app.error
+    assert "between -5000 and 86000" in app.error[0].value
+    assert "flight_payload" not in app.session_state
