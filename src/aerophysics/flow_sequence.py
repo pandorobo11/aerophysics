@@ -13,6 +13,7 @@ from typing import Literal
 
 from scipy.optimize import brentq
 
+from aerophysics._temperature import restore_static_temperature
 from aerophysics._thermal_shocks import properties
 from aerophysics.atmosphere import standard_atmosphere
 from aerophysics.exceptions import (
@@ -218,22 +219,33 @@ def flow_properties(state: FlowState, gas: ShockGasModel = AIR) -> FlowPropertie
         p0 = state.pressure * (t0 / state.temperature) ** (
             gas.cp / gas.specific_gas_constant
         )
-    elif h0 > _thermo(gas.temperature_range[1], gas)[0]:
-        t0, p0 = None, None
-        warning = (
-            "Stagnation temperature exceeds the gas model range; "
-            "total T and p unavailable"
-        )
     else:
-        t0 = float(
-            brentq(
-                lambda t: _thermo(t, gas)[0] - h0,
-                state.temperature,
-                gas.temperature_range[1],
-                xtol=1e-10,
+        # Bracket locally: an unspecified oscillator range ends at float64.max,
+        # which is a representational limit, not a useful thermodynamic probe.
+        upper = state.temperature
+        maximum = gas.temperature_range[1]
+        upper_enthalpy = h
+        while upper_enthalpy < h0 and upper < maximum:
+            upper = upper + min(upper, maximum - upper)
+            upper_enthalpy = _thermo(upper, gas)[0]
+        if upper_enthalpy < h0:
+            t0, p0 = None, None
+            warning = (
+                "Stagnation temperature exceeds the gas model range; "
+                "total T and p unavailable"
             )
-        )
-        p0 = state.pressure * exp((_thermo(t0, gas)[1] - s) / gas.specific_gas_constant)
+        else:
+            t0 = float(
+                brentq(
+                    lambda t: _thermo(t, gas)[0] - h0,
+                    state.temperature,
+                    upper,
+                    xtol=1e-10,
+                )
+            )
+            p0 = state.pressure * exp(
+                (_thermo(t0, gas)[1] - s) / gas.specific_gas_constant
+            )
     return FlowProperties(
         state,
         density,
@@ -316,7 +328,9 @@ def _advance(
         return (
             FlowState(
                 upstream.pressure * float(cone.surface_pressure_ratio),
-                upstream.temperature * float(cone.surface_temperature_ratio),
+                restore_static_temperature(
+                    upstream.temperature * float(cone.surface_temperature_ratio), gas
+                ),
                 float(cone.surface_mach),
             ),
             float(cone.total_pressure_ratio),
@@ -346,7 +360,10 @@ def _advance(
         return (
             FlowState(
                 upstream.pressure * float(expansion.static_pressure_ratio),
-                upstream.temperature * float(expansion.static_temperature_ratio),
+                restore_static_temperature(
+                    upstream.temperature * float(expansion.static_temperature_ratio),
+                    gas,
+                ),
                 float(expansion.downstream_mach),
             ),
             1.0,
@@ -356,7 +373,9 @@ def _advance(
     return (
         FlowState(
             upstream.pressure * float(shock.static_pressure_ratio),
-            upstream.temperature * float(shock.static_temperature_ratio),
+            restore_static_temperature(
+                upstream.temperature * float(shock.static_temperature_ratio), gas
+            ),
             float(shock.downstream_mach),
         ),
         float(shock.total_pressure_ratio),

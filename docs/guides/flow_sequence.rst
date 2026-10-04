@@ -69,6 +69,11 @@ The gas and composition remain fixed. The supported models are
 ``PerfectGas``, ``ThermallyPerfectGas`` (including NASA7/NASA9 air), and
 ``HarmonicOscillatorGas``. Thermal models use local heat capacity and
 enthalpy, with their existing temperature limits and no extrapolation.
+Temperature restoration from validated solver ratios repairs at most one ULP
+of boundary overshoot; input temperature checks remain strict. Stagnation
+temperature is bracketed upwards from the static temperature, including for
+custom oscillator gases without an applicability range.
+
 Chemical reactions, dissociation, heat addition, friction, flow separation,
 wave interactions, duct startability and geometric realizability are outside
 this calculation. In particular, chaining cone and planar stages is a local

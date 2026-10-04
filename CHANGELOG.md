@@ -5,6 +5,14 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve validated sequence temperatures at thermal range boundaries when
+  ratio restoration overshoots by exactly one ULP, while rejecting larger
+  excursions and out-of-range user inputs. Bracket stagnation temperature
+  locally so custom harmonic-oscillator gases without an applicability range
+  do not evaluate properties at the maximum floating-point temperature.
+
 ### Added
 
 - Add scalar flow sequences with normal, oblique and conical shocks,

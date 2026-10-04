@@ -244,3 +244,79 @@ def test_convergence_failure(
 def test_unsupported_step() -> None:
     with pytest.raises(TypeError):
         solve_flow_sequence(FlowState(1, 300, 2), [cast(FlowStep, object())])
+
+
+def test_valid_shock_temperature_round_trip_at_upper_bound() -> None:
+    initial = FlowState(25_000.0, 404.40881763527057, 4.850018713943831)
+    result = solve_flow_sequence(initial, [NormalShockStep()], AIR_HARMONIC_OSCILLATOR)
+    assert result.complete
+    assert exit_properties(result, 0).state.temperature <= 2000.0
+    assert exit_properties(result, 0).state.temperature == pytest.approx(2000, abs=2e-9)
+    beyond = FlowState(initial.pressure, initial.temperature, initial.mach + 1e-9)
+    invalid = solve_flow_sequence(
+        beyond, [NormalShockStep(), ExpansionStep(0.1)], AIR_HARMONIC_OSCILLATOR
+    )
+    assert [step.status for step in invalid.steps] == ["out_of_range", "not_computed"]
+
+
+@pytest.mark.parametrize("boundary,direction", [(400.0, -math.inf), (2000.0, math.inf)])
+def test_restore_only_one_ulp_of_solver_output(
+    boundary: float, direction: float
+) -> None:
+    from aerophysics._temperature import restore_static_temperature
+
+    one = math.nextafter(boundary, direction)
+    two = math.nextafter(one, direction)
+    gas = AIR_HARMONIC_OSCILLATOR
+    assert restore_static_temperature(one, gas) == boundary
+    assert restore_static_temperature(two, gas) == two
+    # Even one ULP outside is invalid for user inputs, not just two ULP.
+    for temperature in (one, two):
+        with pytest.raises(ModelRangeError):
+            flow_properties(FlowState(25000, temperature, 1), gas)
+
+
+@pytest.mark.parametrize("mach", [0.0, 2.0, 10.0])
+def test_unbounded_oscillator_total_state_and_empty_sequence(mach: float) -> None:
+    import warnings
+
+    from aerophysics.gas import PerfectGas
+    from aerophysics.real_gas import HarmonicOscillatorGas
+
+    gas = HarmonicOscillatorGas(287.05, 1.4)
+    initial = FlowState(100_000.0, 300.0, mach)
+    expected = flow_properties(initial, PerfectGas(287.05, 1.4))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        actual = flow_properties(initial, gas)
+        sequence = solve_flow_sequence(initial, [], gas)
+    assert actual.total_temperature == pytest.approx(300 * (1 + 0.2 * mach**2))
+    assert actual.total_pressure == pytest.approx(expected.total_pressure, rel=2e-12)
+    assert actual.total_enthalpy == pytest.approx(expected.total_enthalpy)
+    assert actual.warning == ""
+    assert sequence.complete
+    assert sequence.initial == actual
+
+
+def test_finite_thermal_ceiling_retains_static_properties() -> None:
+    from aerophysics.real_gas import HarmonicOscillatorGas
+
+    gas = HarmonicOscillatorGas(287.05, 1.4, applicable_temperature_range=(200, 500))
+    result = flow_properties(FlowState(100000, 300, 2), gas)
+    assert result.total_temperature is None
+    assert result.total_pressure is None
+    assert result.state.temperature == 300
+    assert result.warning
+
+
+def test_unbounded_vibrational_gas_conserves_stagnation_enthalpy() -> None:
+    from aerophysics.real_gas import HarmonicOscillatorGas, VibrationalMode
+
+    gas = HarmonicOscillatorGas(287.05, 1.4, modes=(VibrationalMode(1, 3055.56),))
+    state = FlowState(100000, 500, 3)
+    result = flow_properties(state, gas)
+    assert result.total_temperature is not None
+    assert 500 < result.total_temperature < 1400
+    assert float(gas.standard_enthalpy(result.total_temperature)) == pytest.approx(
+        float(gas.standard_enthalpy(500)) + result.velocity**2 / 2, rel=2e-12
+    )

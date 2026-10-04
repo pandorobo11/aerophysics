@@ -6,10 +6,12 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from aerophysics._temperature import (
+    restore_static_temperature as restore_static_temperature,
+)
 from aerophysics.gas import PerfectGas
-from aerophysics.real_gas import BeattieBridgemanGas, HarmonicOscillatorGas
+from aerophysics.real_gas import BeattieBridgemanGas
 from aerophysics.shocks import ShockGasModel
-from aerophysics.thermochemistry import ThermallyPerfectGas
 from aerophysics.transport import (
     AIR_BLOTTNER_VISCOSITY,
     AIR_KEYES_VISCOSITY,
@@ -71,24 +73,6 @@ def heat_capacities(
         cp = float(gas.cp(temperature, allow_extrapolation=allow_extrapolation))
         cv = float(gas.cv(temperature, allow_extrapolation=allow_extrapolation))
     return cp / cv, cp, cv
-
-
-def restore_static_temperature(
-    temperature: float,
-    gas: ShockGasModel | BeattieBridgemanGas,
-    *,
-    allow_extrapolation: bool = False,
-) -> float:
-    """Undo one-ULP range overshoot when restoring a solved T from a ratio."""
-    if not allow_extrapolation and isinstance(
-        gas, (ThermallyPerfectGas, HarmonicOscillatorGas)
-    ):
-        minimum, maximum = gas.temperature_range
-        if maximum < temperature <= np.nextafter(maximum, np.inf):
-            return maximum
-        if np.nextafter(minimum, -np.inf) <= temperature < minimum:
-            return minimum
-    return temperature
 
 
 def add_transport(
