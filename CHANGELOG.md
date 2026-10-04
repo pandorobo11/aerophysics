@@ -5,6 +5,15 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Added
+
+- Add scalar flow sequences with normal, oblique and conical shocks,
+  isentropic transformations and centered expansions, for perfect and frozen
+  thermally perfect gases. Support arbitrary static/total initial conditions
+  and standard-atmosphere initialization. Add a GUI stage editor, per-stage
+  properties and pressure recovery, plots, SI CSV export, configuration replay,
+  and explicit partial results when a stage fails.
+
 ## [0.7.0] - 2026-10-03
 
 ### Added
