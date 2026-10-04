@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import streamlit as st
 
+from aerophysics.atmosphere import geometric_to_geopotential, geopotential_to_geometric
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -110,7 +111,10 @@ def render_flight(preferences: UnitPreferences) -> None:
 
     default_mode = str(imported.get("mode", "single")) if imported else "single"
     default_basis = str(models.get("motion_basis", "mach"))
+    default_altitude_basis = str(models.get("altitude_basis", "geometric"))
     altitude_si = float(inputs.get("geometric_altitude", 10_000.0))
+    if default_altitude_basis == "geopotential":
+        altitude_si = float(geometric_to_geopotential(altitude_si))
     motion_si = float(inputs.get("motion", 0.8))
     length_value = inputs.get("characteristic_length", 1.0)
     length_si = float(length_value) if isinstance(length_value, (int, float)) else 1.0
@@ -135,8 +139,22 @@ def render_flight(preferences: UnitPreferences) -> None:
             on_change=clear_widget_state,
             args=(("flight_motion", "flight_sweep_start", "flight_sweep_stop"),),
         )
+        altitude_basis = st.radio(
+            "高度の種類",
+            ("geometric", "geopotential"),
+            index=0 if default_altitude_basis == "geometric" else 1,
+            format_func=lambda value: (
+                "幾何高度" if value == "geometric" else "ジオポテンシャル高度"
+            ),
+            horizontal=True,
+            key="flight_altitude_basis",
+        )
+        altitude_label = (
+            "幾何高度 h" if altitude_basis == "geometric" else "ジオポテンシャル高度 H"
+        )
+        st.caption("入力値と高度スイープの範囲を、選択した高度の種類で解釈します。")
         altitude = finite_number(
-            f"幾何高度 h [{preferences.length}]",
+            f"{altitude_label} [{preferences.length}]",
             _display(altitude_si, "length", preferences.length),
             key="flight_altitude",
         )
@@ -180,7 +198,7 @@ def render_flight(preferences: UnitPreferences) -> None:
                 ("altitude", "motion"),
                 index=0 if sweep.get("field", "altitude") == "altitude" else 1,
                 format_func=lambda value: (
-                    "幾何高度" if value == "altitude" else "運動条件"
+                    altitude_label if value == "altitude" else "運動条件"
                 ),
                 key="flight_sweep_field",
                 on_change=clear_widget_state,
@@ -238,6 +256,11 @@ def render_flight(preferences: UnitPreferences) -> None:
         st.session_state.pop("flight_payload", None)
         try:
             altitude_value_si = _si(altitude, "length", preferences.length)
+            geometric_altitude_si = (
+                float(geopotential_to_geometric(altitude_value_si))
+                if altitude_basis == "geopotential"
+                else altitude_value_si
+            )
             motion_value_si = (
                 motion if basis == "mach" else _si(motion, "speed", preferences.speed)
             )
@@ -249,7 +272,7 @@ def render_flight(preferences: UnitPreferences) -> None:
             sweep_config: dict[str, object] | None = None
             if mode == "single":
                 result = flight_condition(
-                    geometric_altitude=altitude_value_si,
+                    geometric_altitude=geometric_altitude_si,
                     motion=motion_value_si,
                     motion_basis=basis,
                     characteristic_length=length_result_si,
@@ -277,6 +300,7 @@ def render_flight(preferences: UnitPreferences) -> None:
                 )
                 result = flight_sweep(
                     fixed_altitude=altitude_value_si,
+                    altitude_basis=altitude_basis,
                     fixed_motion=motion_value_si,
                     motion_basis=basis,
                     sweep_field=sweep_field,
@@ -295,11 +319,11 @@ def render_flight(preferences: UnitPreferences) -> None:
                 calculator="flight",
                 mode=mode,
                 inputs_si={
-                    "geometric_altitude": altitude_value_si,
+                    "geometric_altitude": geometric_altitude_si,
                     "motion": motion_value_si,
                     "characteristic_length": length_result_si,
                 },
-                models={"motion_basis": basis},
+                models={"motion_basis": basis, "altitude_basis": altitude_basis},
                 units=preferences,
                 sweep_si=sweep_config,
             )
@@ -359,6 +383,11 @@ def render_flight(preferences: UnitPreferences) -> None:
             preferences,
             sweep_field=figure_sweep_field,
             motion_basis=figure_motion_basis,
+            altitude_basis=(
+                str(configuration_models.get("altitude_basis", "geometric"))
+                if isinstance(configuration_models, dict)
+                else "geometric"
+            ),
         ),
         filename_prefix="aerophysics-flight",
         metrics=metrics,

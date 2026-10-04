@@ -792,3 +792,36 @@ def test_conical_sweep_keeps_numerical_failure_and_next_valid_row(
             gas_model="HARMONIC_OSCILLATOR",
             upstream_temperature=500.0,
         )
+
+
+@pytest.mark.parametrize("motion_basis", ["mach", "velocity"])
+def test_geopotential_motion_sweep(motion_basis: str) -> None:
+    result = flight_sweep(
+        fixed_altitude=11000.0,
+        altitude_basis="geopotential",
+        fixed_motion=0.8,
+        motion_basis=motion_basis,
+        sweep_field="motion",
+        start=0.5,
+        stop=1.5,
+        points=3,
+        characteristic_length=1.0,
+    )
+    for row in result.rows:
+        assert row["temperature"] == pytest.approx(216.65)
+        assert row["geopotential_altitude"] == pytest.approx(11000.0)
+
+
+def test_flight_sweep_rejects_unknown_altitude_basis() -> None:
+    with pytest.raises(ValueError, match="altitude_basis"):
+        flight_sweep(
+            fixed_altitude=0.0,
+            altitude_basis="unknown",
+            fixed_motion=0.8,
+            motion_basis="mach",
+            sweep_field="altitude",
+            start=0.0,
+            stop=1000.0,
+            points=3,
+            characteristic_length=None,
+        )

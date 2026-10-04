@@ -14,6 +14,7 @@ from aerophysics import (
     AIR_NASA9,
     FlightCondition,
 )
+from aerophysics.atmosphere import geopotential_to_geometric
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -190,6 +191,7 @@ def flight_condition(
 def flight_sweep(
     *,
     fixed_altitude: float,
+    altitude_basis: str = "geometric",
     fixed_motion: float,
     motion_basis: str,
     sweep_field: str,
@@ -208,6 +210,10 @@ def flight_sweep(
         motion = values
     else:
         raise ValueError("sweep_field must be altitude or motion")
+    if altitude_basis == "geopotential":
+        altitude = geopotential_to_geometric(altitude)
+    elif altitude_basis != "geometric":
+        raise ValueError("altitude_basis must be geometric or geopotential")
     return flight_condition(
         geometric_altitude=altitude,
         motion=motion,

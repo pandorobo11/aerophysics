@@ -661,3 +661,22 @@ def test_viscosity_figures_show_gaps_relative_difference_and_axis_scale() -> Non
     )
     assert linear["粘性係数"].layout.xaxis.type == "linear"
     assert "°F" in str(linear["粘性係数"].layout.xaxis.title.text)
+
+
+def test_flight_geopotential_plot_axes() -> None:
+    result = flight_sweep(
+        fixed_altitude=0.0,
+        altitude_basis="geopotential",
+        fixed_motion=0.8,
+        motion_basis="mach",
+        sweep_field="altitude",
+        start=0.0,
+        stop=20000.0,
+        points=3,
+        characteristic_length=None,
+    )
+    for figure in flight_figures(
+        result.rows, UnitPreferences(), altitude_basis="geopotential"
+    ).values():
+        assert list(figure.data[0].x) == pytest.approx([0.0, 10000.0, 20000.0])
+        assert figure.layout.xaxis.title.text == "ジオポテンシャル高度 H [m]"

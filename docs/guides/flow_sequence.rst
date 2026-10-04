@@ -39,8 +39,11 @@ speed magnitude [m/s] and gas; ``from_total`` accepts stagnation pressure,
 stagnation temperature, Mach, and gas. Pass the same gas to initialization
 and ``solve_flow_sequence``. ``from_atmosphere`` uses geometric altitude [m]
 from -5000 to 86000 m and returns US Standard Atmosphere 1976 static p,T.
-The GUI additionally accepts altitude and speed. Standard-atmosphere p,T are
-initialization data; density and sound speed use the selected gas model.
+The GUI additionally accepts altitude and speed. For standard-atmosphere
+initialization, altitude can be entered as geometric or geopotential altitude;
+the selected coordinate is stored with the settings, while the Python API
+continues to use geometric altitude. Standard-atmosphere p,T are initialization
+data; density and sound speed use the selected gas model.
 
 The API uses radians. GUI input and output honor the sidebar display units;
 CSV and plots use SI. Flow speed is a magnitude, not a global direction.

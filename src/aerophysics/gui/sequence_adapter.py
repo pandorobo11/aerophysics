@@ -4,6 +4,7 @@ from dataclasses import asdict
 from math import isfinite
 from typing import Any
 
+from aerophysics.atmosphere import geopotential_to_geometric
 from aerophysics.flow_sequence import (
     ConicalShockStep,
     ExpansionStep,
@@ -96,12 +97,24 @@ def validate_sequence_payload(
     if not isinstance(initial, dict) or initial.get("basis") not in BASES:
         raise ValueError("unknown initial state basis")
     fields = INITIAL_FIELDS[initial["basis"]]
-    if set(initial) != {"basis", *fields}:
+    coordinate_fields = (
+        {"altitude_basis"}
+        if initial["basis"].startswith("atmosphere") and "altitude_basis" in initial
+        else set()
+    )
+    if coordinate_fields and initial["altitude_basis"] not in (
+        "geometric",
+        "geopotential",
+    ):
+        raise ValueError("unknown altitude basis")
+    if set(initial) != {"basis", *fields, *coordinate_fields}:
         raise ValueError("initial state contains missing or unsupported fields")
     normalized = {
         "basis": initial["basis"],
         **{key: _number(initial[key]) for key in fields},
     }
+    if coordinate_fields:
+        normalized["altitude_basis"] = initial["altitude_basis"]
     if not isinstance(steps, list) or not all(isinstance(step, dict) for step in steps):
         raise ValueError("steps must be a list of stage objects")
     for step in steps:
@@ -118,7 +131,10 @@ def calculate_sequence(
     gas = _SHOCK_GASES[models["gas_model"]]
     basis = data["basis"]
     if basis.startswith("atmosphere"):
-        initial = FlowState.from_atmosphere(data["altitude"], data.get("mach", 0.0))
+        altitude = data["altitude"]
+        if data.get("altitude_basis", "geometric") == "geopotential":
+            altitude = geopotential_to_geometric(altitude)
+        initial = FlowState.from_atmosphere(altitude, data.get("mach", 0.0))
         if basis == "atmosphere_velocity":
             initial = FlowState.from_velocity(
                 initial.pressure, initial.temperature, data["velocity"], gas

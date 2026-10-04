@@ -42,6 +42,7 @@ class Column:
 
 FLIGHT_COLUMNS = (
     Column("geometric_altitude", "幾何高度 h", "length"),
+    Column("geopotential_altitude", "ジオポテンシャル高度 H", "length"),
     Column("temperature", "静温 T", "temperature"),
     Column("pressure", "静圧 p", "pressure"),
     Column("density", "密度 ρ", "density"),

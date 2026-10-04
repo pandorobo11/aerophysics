@@ -76,7 +76,10 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
             "motion": _NON_NEGATIVE,
             "characteristic_length": _NULLABLE_POSITIVE,
         },
-        models={"motion_basis": _choice("mach", "velocity")},
+        models={
+            "motion_basis": _choice("mach", "velocity"),
+            "altitude_basis": _choice("geometric", "geopotential", required=False),
+        },
         sweep_variables=frozenset({"altitude", "motion"}),
     ),
     "oblique_shock": _CalculatorSchema(

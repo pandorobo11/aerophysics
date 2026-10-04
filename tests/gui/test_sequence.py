@@ -262,3 +262,33 @@ def test_pending_import_and_repeated_unit_changes() -> None:
     assert app.session_state["sequence_result"][
         1
     ].initial.state.temperature == pytest.approx(573.15)
+
+
+@pytest.mark.parametrize("basis", ["atmosphere_mach", "atmosphere_velocity"])
+def test_sequence_geopotential_replay(basis: str) -> None:
+    config = configuration(basis)
+    config["inputs_si"]["initial"].update(
+        altitude=11000.0, altitude_basis="geopotential"
+    )
+    replay = load_configuration(dump_configuration(config))
+    result = calculate_sequence(
+        cast(dict[str, Any], replay["inputs_si"]),
+        cast(dict[str, Any], replay["models"]),
+    )
+    rows = sequence_rows(result)
+    assert rows[0]["temperature"] == pytest.approx(216.65)
+    app = AppTest.from_string(SCRIPT, default_timeout=30)
+    app.session_state["pending_flow_sequence_configuration"] = replay
+    app.run()
+    assert not app.exception
+    assert app.radio(key="sequence_altitude_basis_1").value == "geopotential"
+    app.button[-1].click().run()
+    assert not app.exception
+    assert not app.error
+
+
+def test_sequence_unknown_altitude_coordinate() -> None:
+    config = configuration("atmosphere_mach")
+    config["inputs_si"]["initial"]["altitude_basis"] = "unknown"
+    with pytest.raises(ValueError, match="altitude basis"):
+        validate_sequence_payload(config["inputs_si"], config["models"])
