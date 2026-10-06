@@ -57,6 +57,67 @@ boundary-value ODE whereas the report integrated outward from the cone with a
 documented finite step.  Algebraic conservation checks use ``rtol=1e-12``;
 inverse numerical relations use ``rtol=1e-10``.
 
+Thermally perfect shock verification
+----------------------------------------
+
+``tests/test_thermal_shocks.py`` verifies the frozen ideal-gas shock solver
+described by :ref:`Tatum (1996) <ref-tatum-1996>`. Constant-heat-capacity NASA
+and harmonic models recover the calorically perfect equations. Harmonic
+limits cover :math:`\gamma=1.2,1.4,5/3`, Mach 1.2--10, and both angle roots;
+normal-state comparisons use ``rtol=2e-10`` and oblique comparisons
+``rtol=2e-9``. NASA7, NASA9, and harmonic states on both branches satisfy
+mass, normal momentum, total enthalpy, and tangential velocity conservation
+with ``rtol=2e-11``. Entropy independently determines the pressure loss.
+
+A manufactured gas with :math:`c_p/R=3.5+0.001T` at Mach 4, 500 K, and a
+20-degree turn is independently solved as three simultaneous equations in
+shock angle, temperature ratio, and density ratio. Its analytical enthalpy
+and entropy integrals avoid the production Hugoniot solver and NASA property
+evaluator. Both branches agree within ``2e-11``; coupled-equation residuals
+are below ``2e-12``. These are model verification cases, not a comparison
+against the printed NASA CR-4749 tables or experimental data.
+
+Additional cases cover broadcasting, sonic and zero-turn limits, detachment,
+polynomial-region crossings, near-sonic normal shocks, small deflections,
+invalid inputs, and a Mach-20 weak shock that remains within the NASA fit
+while its normal shock and attached limit are outside it. GUI tests cover
+model selection, static-temperature units, sweeps, and settings replay.
+
+Thermally perfect conical verification
+--------------------------------------
+
+``tests/test_thermal_conical.py`` checks the weak conical solution and its
+physical attached limit. Constant-cp harmonic models recover the existing
+Taylor--Maccoll solver for gamma 1.2, 1.4, and 5/3 at Mach 1.2, 3, and 10;
+state comparisons use ``rtol=3e-9`` and ``atol=2e-10``. The existing
+calorically perfect SP-3004 comparisons remain unchanged.
+
+An independent reference uses :math:`c_p/R=3.5+0.001T`, Mach 4, 500 K, and
+a 15-degree cone. It solves the shock's mass, momentum, and energy equations
+simultaneously, then integrates radial velocity, polar velocity, and
+temperature with RK45 and analytical caloric properties. This avoids the
+production temperature Hugoniot, enthalpy inversion, property evaluator,
+and DOP853 integrator. State ratios and Mach number agree within ``rtol=3e-9``;
+shock angle agrees within ``2e-10`` rad. A nonzero enthalpy reference offset
+also checks that vacuum-velocity normalization is not assumed.
+
+NASA7, NASA9, and harmonic presets satisfy total-enthalpy conservation and
+entropy-based total-pressure loss within ``rtol=3e-10``, and the ideal-gas
+state-ratio identity within ``rtol=2e-12``. Temperature-range regressions
+include valid weak cones with inaccessible normal shocks or attached limits,
+and a case whose shock temperature fits the range but surface temperature
+does not. Broadcasting, zero-cone limits, physical detachment, and GUI settings
+replay are also checked. These are mathematical model verification cases,
+not experimental validation of frozen high-temperature air.
+
+Additional review regressions place the temperature boundary only 0.001 K
+above or below the surface temperature at the physical maximum, checking
+attached-limit availability and range/detachment classification. Slender-cone
+inputs exercise successful solutions or typed numerical failure, depending on
+the numerical backend. Injected convergence failures test the same 0.1-degree
+error/10-degree success sweep and single-calculation GUI contract on every
+platform without requiring a particular floating-point failure to occur.
+
 Results
 -------
 

@@ -8,12 +8,15 @@ from typing import Any
 import numpy as np
 import streamlit as st
 
+from aerophysics.atmosphere import geometric_to_geopotential, geopotential_to_geometric
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
     TurbulentCorrelation,
 )
+from aerophysics.exceptions import ShockConvergenceError
 from aerophysics.gui.adapters import (
+    _SHOCK_GASES,
     CalculationResult,
     FlightCase,
     conical_shock_condition,
@@ -32,6 +35,7 @@ from aerophysics.gui.components import (
     finite_number,
     pop_pending_configuration,
     render_configuration_import,
+    render_flow_output_controls,
     render_reset_button,
     render_result_bundle,
 )
@@ -47,7 +51,6 @@ from aerophysics.gui.figures import (
 from aerophysics.gui.units import UnitPreferences, from_si, to_si
 from aerophysics.shocks import (
     ShockBranch,
-    maximum_attached_cone_angle,
     maximum_attached_deflection,
 )
 
@@ -108,7 +111,10 @@ def render_flight(preferences: UnitPreferences) -> None:
 
     default_mode = str(imported.get("mode", "single")) if imported else "single"
     default_basis = str(models.get("motion_basis", "mach"))
+    default_altitude_basis = str(models.get("altitude_basis", "geometric"))
     altitude_si = float(inputs.get("geometric_altitude", 10_000.0))
+    if default_altitude_basis == "geopotential":
+        altitude_si = float(geometric_to_geopotential(altitude_si))
     motion_si = float(inputs.get("motion", 0.8))
     length_value = inputs.get("characteristic_length", 1.0)
     length_si = float(length_value) if isinstance(length_value, (int, float)) else 1.0
@@ -133,8 +139,22 @@ def render_flight(preferences: UnitPreferences) -> None:
             on_change=clear_widget_state,
             args=(("flight_motion", "flight_sweep_start", "flight_sweep_stop"),),
         )
+        altitude_basis = st.radio(
+            "高度の種類",
+            ("geometric", "geopotential"),
+            index=0 if default_altitude_basis == "geometric" else 1,
+            format_func=lambda value: (
+                "幾何高度" if value == "geometric" else "ジオポテンシャル高度"
+            ),
+            horizontal=True,
+            key="flight_altitude_basis",
+        )
+        altitude_label = (
+            "幾何高度 h" if altitude_basis == "geometric" else "ジオポテンシャル高度 H"
+        )
+        st.caption("入力値と高度スイープの範囲を、選択した高度の種類で解釈します。")
         altitude = finite_number(
-            f"幾何高度 h [{preferences.length}]",
+            f"{altitude_label} [{preferences.length}]",
             _display(altitude_si, "length", preferences.length),
             key="flight_altitude",
         )
@@ -178,7 +198,7 @@ def render_flight(preferences: UnitPreferences) -> None:
                 ("altitude", "motion"),
                 index=0 if sweep.get("field", "altitude") == "altitude" else 1,
                 format_func=lambda value: (
-                    "幾何高度" if value == "altitude" else "運動条件"
+                    altitude_label if value == "altitude" else "運動条件"
                 ),
                 key="flight_sweep_field",
                 on_change=clear_widget_state,
@@ -236,6 +256,11 @@ def render_flight(preferences: UnitPreferences) -> None:
         st.session_state.pop("flight_payload", None)
         try:
             altitude_value_si = _si(altitude, "length", preferences.length)
+            geometric_altitude_si = (
+                float(geopotential_to_geometric(altitude_value_si))
+                if altitude_basis == "geopotential"
+                else altitude_value_si
+            )
             motion_value_si = (
                 motion if basis == "mach" else _si(motion, "speed", preferences.speed)
             )
@@ -247,7 +272,7 @@ def render_flight(preferences: UnitPreferences) -> None:
             sweep_config: dict[str, object] | None = None
             if mode == "single":
                 result = flight_condition(
-                    geometric_altitude=altitude_value_si,
+                    geometric_altitude=geometric_altitude_si,
                     motion=motion_value_si,
                     motion_basis=basis,
                     characteristic_length=length_result_si,
@@ -275,6 +300,7 @@ def render_flight(preferences: UnitPreferences) -> None:
                 )
                 result = flight_sweep(
                     fixed_altitude=altitude_value_si,
+                    altitude_basis=altitude_basis,
                     fixed_motion=motion_value_si,
                     motion_basis=basis,
                     sweep_field=sweep_field,
@@ -293,11 +319,11 @@ def render_flight(preferences: UnitPreferences) -> None:
                 calculator="flight",
                 mode=mode,
                 inputs_si={
-                    "geometric_altitude": altitude_value_si,
+                    "geometric_altitude": geometric_altitude_si,
                     "motion": motion_value_si,
                     "characteristic_length": length_result_si,
                 },
-                models={"motion_basis": basis},
+                models={"motion_basis": basis, "altitude_basis": altitude_basis},
                 units=preferences,
                 sweep_si=sweep_config,
             )
@@ -357,6 +383,11 @@ def render_flight(preferences: UnitPreferences) -> None:
             preferences,
             sweep_field=figure_sweep_field,
             motion_basis=figure_motion_basis,
+            altitude_basis=(
+                str(configuration_models.get("altitude_basis", "geometric"))
+                if isinstance(configuration_models, dict)
+                else "geometric"
+            ),
         ),
         filename_prefix="aerophysics-flight",
         metrics=metrics,
@@ -372,7 +403,7 @@ def render_flight(preferences: UnitPreferences) -> None:
 def render_shock(preferences: UnitPreferences) -> None:
     """Render attached oblique-shock calculations."""
     st.title("斜め衝撃波")
-    st.caption("theta–beta–Mach関係の弱解・強解を明示的に選択します。")
+    st.caption("一定比熱比または温度依存比熱で、斜め衝撃波の弱解・強解を計算します。")
     imported = pop_pending_configuration("oblique_shock")
     inputs, models, sweep = _configuration_defaults(imported)
     render_configuration_import("oblique_shock", "shock")
@@ -413,6 +444,49 @@ def render_shock(preferences: UnitPreferences) -> None:
             key="shock_branch",
         )
         assert branch is not None
+        gas_names = tuple(_SHOCK_GASES)
+        gas_model = st.selectbox(
+            "気体モデル",
+            gas_names,
+            index=gas_names.index(str(models.get("gas_model", "AIR"))),
+            key="shock_gas_model",
+        )
+        assert gas_model is not None
+        (
+            upstream_pressure,
+            viscosity_model,
+            characteristic_length,
+            with_heat_capacities,
+        ) = render_flow_output_controls(
+            "shock",
+            inputs,
+            models,
+            preferences,
+            pressure_label="上流静圧 p₁",
+        )
+        with_temperature = gas_model != "AIR" or upstream_pressure is not None
+        if gas_model == "AIR":
+            selected_temperature = st.checkbox(
+                "上流静温を指定して速度・音速を表示",
+                value=inputs.get("upstream_temperature") is not None,
+                disabled=upstream_pressure is not None,
+                key="shock_with_temperature",
+            )
+            with_temperature = with_temperature or selected_temperature
+        upstream_temperature = None
+        if with_temperature:
+            temperature_display = finite_number(
+                f"上流静温 T₁ [{preferences.temperature}]",
+                _display(
+                    float(inputs.get("upstream_temperature") or 300.0),
+                    "temperature",
+                    preferences.temperature,
+                ),
+                key="shock_upstream_temperature",
+            )
+            upstream_temperature = _si(
+                temperature_display, "temperature", preferences.temperature
+            )
         sweep_field = "deflection"
         sweep_start = sweep_stop = 0.0
         points = 101
@@ -429,9 +503,16 @@ def render_shock(preferences: UnitPreferences) -> None:
                 args=(("shock_sweep_start", "shock_sweep_stop"),),
             )
             if sweep_field == "deflection":
-                default_limit = float(
-                    maximum_attached_deflection(mach).deflection_angle
-                )
+                try:
+                    default_limit = float(
+                        maximum_attached_deflection(
+                            mach,
+                            _SHOCK_GASES[gas_model],
+                            upstream_temperature=upstream_temperature,
+                        ).deflection_angle
+                    )
+                except ValueError:
+                    default_limit = float(np.deg2rad(30.0))
                 start_si = float(sweep.get("start", 0.0))
                 stop_si = float(sweep.get("stop", default_limit * 1.05))
                 start_default = _display(start_si, "angle", preferences.angle)
@@ -473,6 +554,12 @@ def render_shock(preferences: UnitPreferences) -> None:
                     upstream_mach=mach,
                     deflection_angle=theta_value_si,
                     branch=branch,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                    upstream_pressure=upstream_pressure,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                    with_heat_capacities=with_heat_capacities,
                 )
             else:
                 start_si = (
@@ -493,6 +580,12 @@ def render_shock(preferences: UnitPreferences) -> None:
                     start=start_si,
                     stop=stop_si,
                     points=points,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                    upstream_pressure=upstream_pressure,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                    with_heat_capacities=with_heat_capacities,
                 )
                 sweep_config = {
                     "field": sweep_field,
@@ -506,8 +599,16 @@ def render_shock(preferences: UnitPreferences) -> None:
                 inputs_si={
                     "upstream_mach": mach,
                     "deflection_angle": theta_value_si,
+                    "upstream_temperature": upstream_temperature,
+                    "upstream_pressure": upstream_pressure,
+                    "characteristic_length": characteristic_length,
                 },
-                models={"branch": branch.value},
+                models={
+                    "branch": branch.value,
+                    "gas_model": gas_model,
+                    "viscosity_model": viscosity_model,
+                    "with_heat_capacities": with_heat_capacities,
+                },
                 units=preferences,
                 sweep_si=sweep_config,
             )
@@ -519,7 +620,11 @@ def render_shock(preferences: UnitPreferences) -> None:
     payload = _result_payload("shock_payload")
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
-            st.write("定常・熱量的完全気体・付着衝撃波を仮定します。")
+            st.write(
+                "定常・非粘性・断熱の付着衝撃波を仮定します。NASA7/NASA9と"
+                "調和振動子は組成固定の熱的完全気体です。入力は上流の静温です。"
+                "解離・化学反応・振動非平衡は含みません。熱物性の温度範囲外はエラーになります。"
+            )
         return
     result, configuration = payload
 
@@ -559,7 +664,7 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     st.title("円錐衝撃波")
     st.caption("Taylor–Maccoll理論による軸対称・付着弱解を計算します。")
     imported = pop_pending_configuration("conical_shock")
-    inputs, _, sweep = _configuration_defaults(imported)
+    inputs, models, sweep = _configuration_defaults(imported)
     render_configuration_import("conical_shock", "cone_shock")
     render_reset_button("cone_shock", "cone_shock_payload")
     default_mode = str(imported.get("mode", "single")) if imported else "single"
@@ -588,6 +693,49 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
             key="cone_shock_angle",
             min_value=0.0,
         )
+        gas_names = tuple(_SHOCK_GASES)
+        gas_model = st.selectbox(
+            "気体モデル",
+            gas_names,
+            index=gas_names.index(str(models.get("gas_model", "AIR"))),
+            key="cone_shock_gas_model",
+        )
+        assert gas_model is not None
+        (
+            upstream_pressure,
+            viscosity_model,
+            characteristic_length,
+            with_heat_capacities,
+        ) = render_flow_output_controls(
+            "cone_shock",
+            inputs,
+            models,
+            preferences,
+            pressure_label="上流静圧 p∞",
+        )
+        with_temperature = gas_model != "AIR" or upstream_pressure is not None
+        if gas_model == "AIR":
+            selected_temperature = st.checkbox(
+                "上流静温を指定して速度・音速を表示",
+                value=inputs.get("upstream_temperature") is not None,
+                disabled=upstream_pressure is not None,
+                key="cone_shock_with_temperature",
+            )
+            with_temperature = with_temperature or selected_temperature
+        upstream_temperature = None
+        if with_temperature:
+            temperature_display = finite_number(
+                f"上流静温 T∞ [{preferences.temperature}]",
+                _display(
+                    float(inputs.get("upstream_temperature") or 500.0),
+                    "temperature",
+                    preferences.temperature,
+                ),
+                key="cone_shock_upstream_temperature",
+            )
+            upstream_temperature = _si(
+                temperature_display, "temperature", preferences.temperature
+            )
         sweep_field = "cone_half_angle"
         sweep_start = sweep_stop = 0.0
         points = 31
@@ -608,9 +756,10 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                 args=(("cone_shock_sweep_start", "cone_shock_sweep_stop"),),
             )
             if sweep_field == "cone_half_angle":
-                default_limit = float(maximum_attached_cone_angle(mach).cone_half_angle)
+                # Render the controls without running Taylor-Maccoll solves.
+                # Physical limits are evaluated only after explicit submission.
                 start_si = float(sweep.get("start", 0.0))
-                stop_si = float(sweep.get("stop", default_limit * 1.05))
+                stop_si = float(sweep.get("stop", float(np.deg2rad(30.0))))
                 start_default = _display(start_si, "angle", preferences.angle)
                 stop_default = _display(stop_si, "angle", preferences.angle)
                 unit = preferences.angle
@@ -647,7 +796,14 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
             sweep_config: dict[str, object] | None = None
             if mode == "single":
                 result = conical_shock_condition(
-                    upstream_mach=mach, cone_half_angle=angle_si
+                    upstream_mach=mach,
+                    cone_half_angle=angle_si,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                    upstream_pressure=upstream_pressure,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                    with_heat_capacities=with_heat_capacities,
                 )
             else:
                 start_si = (
@@ -667,6 +823,12 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                     start=start_si,
                     stop=stop_si,
                     points=points,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                    upstream_pressure=upstream_pressure,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                    with_heat_capacities=with_heat_capacities,
                 )
                 sweep_config = {
                     "field": sweep_field,
@@ -680,12 +842,19 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
                 inputs_si={
                     "upstream_mach": mach,
                     "cone_half_angle": angle_si,
+                    "upstream_temperature": upstream_temperature,
+                    "upstream_pressure": upstream_pressure,
+                    "characteristic_length": characteristic_length,
                 },
-                models={},
+                models={
+                    "gas_model": gas_model,
+                    "viscosity_model": viscosity_model,
+                    "with_heat_capacities": with_heat_capacities,
+                },
                 units=preferences,
                 sweep_si=sweep_config,
             )
-        except ValueError as error:
+        except (ValueError, ShockConvergenceError) as error:
             st.error(str(error), icon="🚫")
         else:
             st.session_state["cone_shock_payload"] = (result, configuration)
@@ -694,7 +863,8 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     if payload is None:
         with st.expander("モデルの前提・適用範囲"):
             st.write(
-                "迎角0°の鋭い円錐、完全気体、軸対称・非粘性の付着弱解を仮定します。"
+                "迎角0°の鋭い円錐、組成固定の理想気体、軸対称・非粘性の付着弱解を仮定します。"
+                "温度依存比熱モデルでは衝撃波から円錐表面まで静温が適用範囲内である必要があります。"
             )
         return
     result, configuration = payload
@@ -724,7 +894,10 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     )
     invalid = sum(row["status"] != "ok" for row in result.rows)
     if invalid:
-        st.warning(f"{invalid}点は付着弱解がないため欠損値としました。")
+        st.warning(
+            f"{invalid}点は付着弱解がない、温度範囲外、または数値的に解を"
+            "確定できないため欠損値としました。"
+        )
     with st.expander("モデルの前提・適用範囲"):
         st.write(
             "角度はGUI境界でradianへ変換し、Taylor–Maccoll方程式を数値積分します。"

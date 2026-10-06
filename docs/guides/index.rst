@@ -9,6 +9,7 @@ relevant workflow, inputs, outputs, warnings, and next model page.
 
    atmosphere_flight
    compressible_flow
+   flow_sequence
    boundary_layers
    vectorization_errors
    gui

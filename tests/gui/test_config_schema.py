@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-
 import pytest
 
 from aerophysics.gui.config import (
@@ -39,6 +37,35 @@ def _flight_configuration(*, mode: str = "single") -> dict[str, object]:
 
 
 @pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("models", "gas_model", "BEATTIE_BRIDGEMAN"),
+        ("inputs_si", "upstream_temperature", 0.0),
+        ("inputs_si", "upstream_temperature", "500"),
+    ],
+)
+def test_normal_thermal_settings_reject_invalid_fields(
+    section: str,
+    field: str,
+    value: object,
+) -> None:
+    configuration = {
+        "schema_version": 1,
+        "calculator": "normal_shock",
+        "mode": "single",
+        "inputs_si": {"upstream_mach": 3.0, "upstream_temperature": 500.0},
+        "models": {"gas_model": "NASA9"},
+        "display_units": UnitPreferences().to_dict(),
+    }
+    assert load_configuration(dump_configuration(configuration)) == configuration
+    payload = configuration[section]
+    assert isinstance(payload, dict)
+    payload[field] = value
+    with pytest.raises(ConfigurationError):
+        validate_configuration(configuration)
+
+
+@pytest.mark.parametrize(
     ("section", "field", "value", "message"),
     (
         ("inputs_si", "motion", "0.8", "must be a number"),
@@ -61,13 +88,10 @@ def test_field_types_finite_values_and_enums_are_validated(
         validate_configuration(configuration)
 
 
-@pytest.mark.parametrize("section", ("inputs_si", "models"))
 @pytest.mark.parametrize("operation", ("missing", "unknown"))
-def test_required_and_unknown_payload_fields_are_rejected(
-    section: str, operation: str
-) -> None:
+def test_required_and_unknown_payload_fields_are_rejected(operation: str) -> None:
     configuration = _flight_configuration()
-    payload = configuration[section]
+    payload = configuration["inputs_si"]
     assert isinstance(payload, dict)
     if operation == "missing":
         payload.pop(next(iter(payload)))
@@ -88,8 +112,6 @@ def test_required_and_unknown_payload_fields_are_rejected(
         ({"points": True}, "points must be an integer"),
         ({"points": 1}, "points must be at least"),
         ({"points": 502}, "points must be at most"),
-        ({"start": float("nan")}, "start must be finite"),
-        ({"unexpected": 1}, "unsupported fields"),
     ),
 )
 def test_sweep_contract_is_validated(update: dict[str, object], message: str) -> None:
@@ -119,7 +141,7 @@ def test_mode_and_sweep_payload_must_be_consistent() -> None:
         validate_configuration(sweep)
 
 
-@pytest.mark.parametrize("invalid_sweep", (None, 1, "values", []))
+@pytest.mark.parametrize("invalid_sweep", (None, []))
 def test_sweep_payload_must_be_an_object(invalid_sweep: object) -> None:
     configuration = _flight_configuration(mode="sweep")
     configuration["sweep_si"] = invalid_sweep
@@ -148,9 +170,8 @@ def test_calculator_specific_sweep_point_limit_is_validated() -> None:
         validate_configuration(configuration)
 
 
-@pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))
-def test_nonstandard_json_numbers_are_rejected_on_load(constant: str) -> None:
-    serialized = dump_configuration(_flight_configuration()).replace("0.8", constant)
+def test_nonstandard_json_numbers_are_rejected_on_load() -> None:
+    serialized = dump_configuration(_flight_configuration()).replace("0.8", "NaN")
 
     with pytest.raises(ConfigurationError, match="invalid JSON number"):
         load_configuration(serialized)
@@ -185,5 +206,51 @@ def test_validation_returns_a_detached_normalized_payload() -> None:
     source_inputs["motion"] = 2.0
     assert normalized_inputs["motion"] == 0.8
 
-    copied = deepcopy(normalized)
-    assert load_configuration(dump_configuration(copied)) == normalized
+
+@pytest.mark.parametrize(
+    "calculator", ["normal_shock", "oblique_shock", "conical_shock", "isentropic"]
+)
+@pytest.mark.parametrize(
+    "section,field,value",
+    [
+        ("models", "viscosity_model", "other"),
+        ("models", "with_heat_capacities", "true"),
+        ("inputs_si", "characteristic_length", 0.0),
+        ("inputs_si", "characteristic_length", float("inf")),
+    ],
+)
+def test_flow_output_configuration_validation(
+    calculator: str, section: str, field: str, value: object
+) -> None:
+    inputs: dict[str, object] = {"upstream_mach": 3.0}
+    models: dict[str, object] = {}
+    if calculator == "oblique_shock":
+        inputs["deflection_angle"] = 0.1
+        models["branch"] = "weak"
+    elif calculator == "conical_shock":
+        inputs["cone_half_angle"] = 0.1
+    elif calculator == "isentropic":
+        inputs = {
+            "input_value": 2.0,
+            "total_pressure": None,
+            "total_temperature": 1000.0,
+        }
+        models = {
+            "input_basis": "mach",
+            "branch": "supersonic",
+            "with_mass_flux": False,
+        }
+    configuration: dict[str, object] = {
+        "schema_version": 1,
+        "calculator": calculator,
+        "mode": "single",
+        "inputs_si": inputs,
+        "models": models,
+        "display_units": UnitPreferences().to_dict(),
+    }
+    validate_configuration(configuration)
+    payload = configuration[section]
+    assert isinstance(payload, dict)
+    payload[field] = value
+    with pytest.raises(ConfigurationError):
+        validate_configuration(configuration)

@@ -6,7 +6,8 @@ and angles are in radians. Convert explicitly with
 :func:`aerophysics.units.degrees_to_radians` and
 :func:`aerophysics.units.radians_to_degrees`.
 
-The normal, oblique, and conical solvers use a calorically perfect gas.
+The normal, oblique, and conical solvers accept calorically or thermally perfect
+gases. The Rayleigh--Pitot formula uses a calorically perfect gas.
 Detached-shock engineering correlations provide standoff distance and shape;
 they do not solve shock-layer thermodynamics. For task-oriented model
 selection and examples, see :doc:`../guides/compressible_flow`.
@@ -123,6 +124,116 @@ The theta--beta--Mach relation and branch convention follow
 >>> round(radians_to_degrees(shock.shock_angle), 3)
 39.314
 
+Thermally perfect normal and oblique shocks
+-----------------------------------------------
+
+Pass a :class:`~aerophysics.thermochemistry.ThermallyPerfectGas` (including
+``AIR_NASA7`` or ``AIR_NASA9``) or a
+:class:`~aerophysics.real_gas.HarmonicOscillatorGas`, and provide
+``upstream_temperature`` as the upstream **static** temperature in kelvin.
+Mach number, angle, and temperature broadcast together. The default remains
+the constant-:math:`\gamma` ``AIR`` model, with the original result fields and
+downstream/upstream ratio convention.
+
+The solver assumes steady, inviscid, adiabatic, two-dimensional ideal-gas
+flow with fixed composition, thermal equilibrium, and :math:`p=\rho RT`.
+The normal velocity components :math:`u_n` satisfy
+
+.. math::
+
+   \rho_1 u_{n1}=\rho_2 u_{n2},\qquad
+   p_1+\rho_1u_{n1}^2=p_2+\rho_2u_{n2}^2,\qquad
+   h(T_2)-h(T_1)=\frac{u_{n1}^2-u_{n2}^2}{2}.
+
+Tangential velocity is unchanged. For a trial shock angle,
+:math:`u_{n1}=M_1a(T_1)\sin\beta` and the conservation equations determine
+:math:`T_2` and :math:`\rho_2/\rho_1`. The flow turn follows
+
+.. math::
+
+   \theta=\beta-\tan^{-1}\left[
+      \frac{\rho_1}{\rho_2}\tan\beta\right],\qquad
+   a(T)^2=\gamma(T)RT,\qquad \gamma(T)=\frac{c_p(T)}{c_p(T)-R}.
+
+The temperature Hugoniot eliminates the zero-strength root using
+:math:`x=u_{n2}/u_{n1}`, :math:`\tau=T_2/T_1`, and
+:math:`q=[h(T_2)-h(T_1)]/(RT_1)`:
+
+.. math::
+
+   x^2+(2q+1-\tau)x-\tau=0,\qquad
+   u_{n1}^2=RT_1\frac{\tau/x-1}{1-x}.
+
+The sonic endpoint is evaluated analytically; the positive-temperature
+compressive root is bracketed numerically. The solver then maximizes the
+shock polar and brackets the angle root separately on the weak and strong
+branches. ``theta_from_shock_angle``, ``shock_angle``,
+``maximum_attached_deflection``, ``normal_shock``, and ``oblique_shock`` all
+accept the same thermal gas and static-temperature arguments.
+
+Since total enthalpy, composition, and total temperature are unchanged,
+the total-pressure loss follows directly from entropy production:
+
+.. math::
+
+   \Delta s=s^\circ(T_2)-s^\circ(T_1)-R\ln(p_2/p_1),\qquad
+   p_{02}/p_{01}=\exp(-\Delta s/R).
+
+This does not require stagnation temperature to lie within the polynomial fit.
+In contrast, the absolute pitot ratio
+:func:`~aerophysics.shocks.supersonic_pitot_pressure_ratio` also needs the
+stagnation state. For a thermal gas, supply ``upstream_temperature`` in kelvin;
+Mach and temperature inputs broadcast together. The solver finds :math:`T_0`
+from :math:`h(T_0)=h(T_1)+u_1^2/2`, then evaluates
+
+.. math::
+
+   \frac{p_{02}}{p_1}=\frac{p_{02}}{p_{01}}
+   \exp\!\left(\frac{s^\circ(T_0)-s^\circ(T_1)}{R}\right).
+
+The shock remains frozen, steady, and adiabatic. This calculation raises
+:class:`~aerophysics.exceptions.ModelRangeError` when any required static or
+stagnation temperature is outside the model range; it never extrapolates.
+This stricter requirement does not change ``normal_shock`` or its
+``total_pressure_ratio`` contract.
+
+The governing thermal shock relations follow
+:ref:`Tatum (1996), NASA CR-4749 <ref-tatum-1996>`.
+Verification includes constant-heat-capacity limits, conservation residuals,
+and an independent variable-heat-capacity solution; see
+:doc:`../verification/compressible_flow`.
+
+Temperature ranges are inclusive: both dry-air NASA presets currently share
+200--6000 K, and ``AIR_HARMONIC_OSCILLATOR`` documents 400--2000 K. A custom
+mixture uses the intersection of its species' fitted ranges. Required static
+states outside these ranges raise :class:`~aerophysics.exceptions.ModelRangeError`;
+the shock solver never extrapolates. A valid weak shock can still be returned
+when the normal shock or polar maximum exceeds the range. An unavailable
+strong root or attached limit raises ``ModelRangeError``, not a claim of
+physical detachment. For custom caloric models, the branch construction
+assumes the usual single-maximum, convex-gas shock polar.
+
+These polynomial ranges describe thermodynamic data, not a certified physical
+validity interval for chemically frozen air. Dissociation, ionization,
+finite-rate chemistry, vibrational nonequilibrium, and dense-gas effects are
+excluded; their importance depends on the actual pressure, composition, and
+flow residence time. A frozen calculation at high temperature must be
+interpreted with those assumptions.
+
+>>> from aerophysics import AIR_NASA9
+>>> thermal = oblique_shock(
+...     3.0, degrees_to_radians(20.0), gas=AIR_NASA9,
+...     upstream_temperature=300.0,
+... )
+>>> round(radians_to_degrees(thermal.shock_angle), 3)
+37.68
+>>> round(300.0 * thermal.static_temperature_ratio, 3)
+466.118
+>>> round(thermal.downstream_mach, 6)
+2.006457
+>>> round(thermal.total_pressure_ratio, 6)
+0.796621
+
 Conical shocks
 --------------
 
@@ -158,10 +269,10 @@ attached-shock limit.  A larger cone half-angle raises
 :class:`~aerophysics.exceptions.NoAttachedShockError` rather than substituting
 a detached-shock approximation.
 
-The model assumes a calorically perfect gas, a sharp circular cone, zero angle
+The model assumes a sharp circular cone, zero angle
 of attack, steady inviscid adiabatic flow, and an attached axisymmetric shock.
-It does not model bluntness, viscosity, real-gas effects, or asymmetric cone
-flow.
+It does not model bluntness, viscosity, dense-gas effects, or asymmetric cone
+flow. The default remains the calorically perfect ``AIR`` model.
 Reference solutions for the Taylor--Maccoll model are tabulated by
 :ref:`Sims (1964) <ref-sims-1964>`.
 
@@ -173,6 +284,71 @@ Reference solutions for the Taylor--Maccoll model are tabulated by
 1.834
 >>> round(cone.surface_pressure_ratio, 3)
 1.293
+
+For a frozen thermally perfect gas, pass ``upstream_temperature`` in kelvin
+to ``conical_shock`` or ``maximum_attached_cone_angle``. Mach number, cone
+half-angle, and temperature broadcast together. The velocity equations have
+the same form, but the thermal path scales velocities by the free-stream
+speed :math:`U_\infty`, rather than a vacuum limiting velocity. It closes
+the equations using
+
+.. math::
+
+   h(T)=h(T_2)+\frac{U_\infty^2}{2}
+      \left(V_{r2}^2+V_{\theta2}^2-V_r^2-V_\theta^2\right),
+   \qquad a^2=\frac{\gamma(T)RT}{U_\infty^2},
+   \qquad \gamma(T)=\frac{c_p(T)}{c_p(T)-R}.
+
+Here the subscript 2 denotes the state immediately behind the shock;
+:math:`\theta` increases away from the cone axis, so :math:`V_\theta<0`
+between the shock and the surface. The thermal normal-shock conservation
+solver supplies the initial state, with tangential velocity unchanged.
+Enthalpy inversion uses the gas model's actual reference, including NASA
+polynomial enthalpy offsets. A local gamma substitution in the calorically
+perfect energy relation is not used.
+
+The shock fixes entropy. The smooth conical flow is isentropic, giving
+
+.. math::
+
+   \frac{p_s}{p_2}
+   =\exp\left[\frac{s^\circ(T_s)-s^\circ(T_2)}{R}\right],
+   \qquad \frac{\rho_s}{\rho_\infty}
+   =\frac{p_s/p_\infty}{T_s/T_\infty}.
+
+The total-pressure ratio is the shock loss, unchanged from shock to surface.
+All **static** states along that trajectory must remain in the inclusive
+gas temperature range. A temperature-boundary event and a direct surface
+enthalpy check enforce this limit, including steps that straddle the surface.
+Internal Runge--Kutta trial stages evaluate only in-range properties;
+no thermodynamic property is extrapolated. A valid weak cone can be returned
+even if its normal shock or physical cone-angle maximum exceeds the range.
+An inaccessible requested solution or physical limit raises
+:class:`~aerophysics.exceptions.ModelRangeError`; a cone beyond a resolved
+physical maximum raises ``NoAttachedShockError``. Only the weak branch is
+exposed, as in the original conical API. The search assumes the usual
+single-maximum cone-angle curve for a convex caloric gas. Composition changes,
+chemical reactions, and vibrational nonequilibrium are excluded.
+
+The temperature-boundary classification uses the shock-angle separation
+between the optimized maximum and the boundary, accounting for the numerical
+maximizer's stopping precision. An angle-height difference alone is
+insufficient near the flat top of the cone-angle curve. Numerical integration
+or root-resolution failure raises
+:class:`~aerophysics.exceptions.ShockConvergenceError`, distinct from physical
+detachment or temperature-range failure. Very slender cones can reach this
+limit because the shock angle approaches the Mach wave within floating-point
+resolution; the solver does not inflate its angular tolerance to return a state.
+
+>>> from aerophysics import AIR_HARMONIC_OSCILLATOR
+>>> thermal_cone = conical_shock(
+...     3.0, degrees_to_radians(10.0), gas=AIR_HARMONIC_OSCILLATOR,
+...     upstream_temperature=1000.0,
+... )
+>>> round(radians_to_degrees(thermal_cone.shock_angle), 3)
+21.626
+>>> round(1000.0 * thermal_cone.surface_temperature_ratio, 3)
+1110.946
 
 .. _detached-shocks:
 
@@ -280,8 +456,7 @@ gives ``0.097734`` for that printed density ratio, within the committed
 These engineering correlations assume continuum, steady, low-temperature
 flow. Their common use is for calorically perfect air; Billig's fitted curves
 are primarily associated with :math:`\gamma=1.4`. They do not solve the
-shock-layer thermodynamics. Real-gas Seiff models, NASA7/NASA9 or harmonic-
-oscillator general normal-shock solvers, Beattie--Bridgeman shock states,
+shock-layer thermodynamics. Real-gas Seiff models, Beattie--Bridgeman shock states,
 rarefied-flow corrections, and shock fitting are outside this implementation.
 
 >>> from aerophysics import DetachedShockGeometry, billig_shock_shape

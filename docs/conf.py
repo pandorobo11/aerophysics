@@ -34,6 +34,7 @@ nitpicky = True
 nitpick_ignore_regex = [
     ("py:class", r"aerophysics\._array\.Float(Array|Result)"),
     ("py:class", r"aerophysics\.isentropic\.IsentropicGasModel"),
+    ("py:class", r"aerophysics\.shocks\.ShockGasModel"),
     ("py:class", r"numpy\._typing\..*\.ArrayLike"),
 ]
 

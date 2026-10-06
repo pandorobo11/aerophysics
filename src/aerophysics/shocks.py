@@ -1,4 +1,4 @@
-"""Normal, oblique, and conical shocks for a calorically perfect gas.
+"""Normal, oblique and conical calorically or thermally perfect gas shocks.
 
 Angles are expressed in radians. Normal- and oblique-shock state ratios use
 downstream over upstream static quantities. Conical-shock static ratios use
@@ -24,8 +24,22 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import brentq, minimize_scalar
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
-from aerophysics.exceptions import NoAttachedShockError
+from aerophysics._thermal_conical import cone_limit, conical_state
+from aerophysics._thermal_shocks import (
+    ThermalShockGas,
+    beta_from_theta,
+    normal_state,
+    pitot_pressure_ratio,
+    polar_limit,
+    properties,
+    theta_from_beta,
+)
+from aerophysics.exceptions import ModelRangeError, NoAttachedShockError
 from aerophysics.gas import AIR, PerfectGas
+from aerophysics.real_gas import HarmonicOscillatorGas
+from aerophysics.thermochemistry import ThermallyPerfectGas
+
+type ShockGasModel = PerfectGas | ThermalShockGas
 
 _ROOT_XTOL: Final = 1e-12
 _ROOT_RTOL: Final = 4.0 * np.finfo(np.float64).eps
@@ -158,12 +172,76 @@ def _normal_shock_arrays(
     )
 
 
-def normal_shock(upstream_mach: ArrayLike, gas: PerfectGas = AIR) -> NormalShockResult:
-    """Return perfect-gas normal-shock state ratios."""
-    mach, scalar = _validate_supersonic_mach(upstream_mach)
-    downstream, pressure, density, temperature, total_pressure = _normal_shock_arrays(
-        mach, gas
+def _thermal_inputs(
+    mach: FloatArray,
+    angle: FloatArray,
+    scalar: bool,
+    upstream_temperature: ArrayLike | None,
+    gas: ShockGasModel,
+) -> tuple[FloatArray, FloatArray, FloatArray, bool]:
+    if not isinstance(gas, (ThermallyPerfectGas, HarmonicOscillatorGas)):
+        raise TypeError(
+            "gas must be a PerfectGas, ThermallyPerfectGas, or HarmonicOscillatorGas"
+        )
+    if upstream_temperature is None:
+        raise ValueError("upstream_temperature is required for a thermally perfect gas")
+    temperature, temperature_scalar = as_float_array(
+        upstream_temperature, name="upstream_temperature"
     )
+    if np.any(temperature <= 0.0):
+        raise ValueError("upstream_temperature must be greater than zero")
+    try:
+        mach, angle, temperature = np.broadcast_arrays(mach, angle, temperature)
+    except ValueError as error:
+        raise ValueError(
+            "Mach, angle, and upstream_temperature must be broadcastable"
+        ) from error
+    for value in np.unique(temperature):
+        properties(float(value), gas)
+    return mach, angle, temperature, scalar and temperature_scalar
+
+
+def _thermal_normal_arrays(
+    mach: FloatArray, temperature: FloatArray, gas: ThermalShockGas
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
+    arrays = tuple(np.empty_like(mach) for _ in range(5))
+    for index, value in np.ndenumerate(mach):
+        state = normal_state(float(value), float(temperature[index]), gas)
+        for array, field in zip(
+            arrays,
+            (
+                state.downstream_mach,
+                state.pressure_ratio,
+                state.density_ratio,
+                state.temperature_ratio,
+                state.total_pressure_ratio,
+            ),
+            strict=True,
+        ):
+            array[index] = field
+    return arrays[0], arrays[1], arrays[2], arrays[3], arrays[4]
+
+
+def normal_shock(
+    upstream_mach: ArrayLike,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
+) -> NormalShockResult:
+    """Return normal-shock ratios; thermal gases require upstream static T [K].
+
+    Inputs broadcast together. Thermal states must remain inside the gas's
+    temperature range; extrapolation is never performed.
+    """
+    mach, scalar = _validate_supersonic_mach(upstream_mach)
+    if isinstance(gas, PerfectGas):
+        values = _normal_shock_arrays(mach, gas)
+    else:
+        mach, _, temperatures, scalar = _thermal_inputs(
+            mach, np.zeros_like(mach), scalar, upstream_temperature, gas
+        )
+        values = _thermal_normal_arrays(mach, temperatures, gas)
+    downstream, pressure, density, temperature, total_pressure = values
 
     def output(values: FloatArray) -> FloatResult:
         return return_float(values, scalar=scalar)
@@ -205,15 +283,32 @@ def _theta_from_beta_scalar(mach: float, beta: float, gas: PerfectGas) -> float:
 def theta_from_shock_angle(
     upstream_mach: ArrayLike,
     shock_angle: ArrayLike,
-    gas: PerfectGas = AIR,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> FloatResult:
     """Return flow-deflection angle from shock angle and upstream Mach."""
     mach, beta, scalar = _broadcast_mach_angle(
         upstream_mach, shock_angle, angle_name="shock_angle"
     )
+    if not isinstance(gas, PerfectGas):
+        mach, beta, temperatures, scalar = _thermal_inputs(
+            mach, beta, scalar, upstream_temperature, gas
+        )
     mach_angle = np.arcsin(1.0 / mach)
     if np.any((beta < mach_angle) | (beta > 0.5 * np.pi)):
         raise ValueError("shock_angle must lie between the Mach angle and pi/2")
+    if not isinstance(gas, PerfectGas):
+        theta = np.empty_like(mach)
+        for index, value in np.ndenumerate(mach):
+            # Even the zero-deflection normal endpoint must validate its T2.
+            normal_state(
+                float(value * np.sin(beta[index])), float(temperatures[index]), gas
+            )
+            theta[index] = theta_from_beta(
+                float(value), float(beta[index]), float(temperatures[index]), gas
+            )
+        return return_float(theta, scalar=scalar)
     gamma = gas.heat_capacity_ratio
     numerator = 2.0 * (mach**2 * np.sin(beta) ** 2 - 1.0)
     denominator = np.tan(beta) * (mach**2 * (gamma + np.cos(2.0 * beta)) + 2.0)
@@ -236,14 +331,31 @@ def _attached_limit_scalar(mach: float, gas: PerfectGas) -> tuple[float, float]:
 
 
 def maximum_attached_deflection(
-    upstream_mach: ArrayLike, gas: PerfectGas = AIR
+    upstream_mach: ArrayLike,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> AttachedShockLimit:
     """Return the maximum deflection permitting an attached oblique shock."""
     mach, scalar = _validate_supersonic_mach(upstream_mach)
+    if not isinstance(gas, PerfectGas):
+        mach, _, temperatures, scalar = _thermal_inputs(
+            mach, np.zeros_like(mach), scalar, upstream_temperature, gas
+        )
     theta = np.empty_like(mach)
     beta = np.empty_like(mach)
     for index, value in np.ndenumerate(mach):
-        theta[index], beta[index] = _attached_limit_scalar(float(value), gas)
+        if isinstance(gas, PerfectGas):
+            theta[index], beta[index] = _attached_limit_scalar(float(value), gas)
+        else:
+            peak, angle, _, full_peak = polar_limit(
+                float(value), float(temperatures[index]), gas
+            )
+            if not full_peak:
+                raise ModelRangeError(
+                    "attached-shock limit lies beyond the available temperature range"
+                )
+            theta[index], beta[index] = peak, angle
 
     def output(values: FloatArray) -> FloatResult:
         return return_float(values, scalar=scalar)
@@ -297,7 +409,9 @@ def shock_angle(
     upstream_mach: ArrayLike,
     deflection_angle: ArrayLike,
     branch: ShockBranch,
-    gas: PerfectGas = AIR,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> FloatResult:
     """Solve the theta-beta-Mach relation on a selected branch."""
     if not isinstance(branch, ShockBranch):
@@ -305,13 +419,26 @@ def shock_angle(
     mach, theta, scalar = _broadcast_mach_angle(
         upstream_mach, deflection_angle, angle_name="deflection_angle"
     )
+    if not isinstance(gas, PerfectGas):
+        mach, theta, temperatures, scalar = _thermal_inputs(
+            mach, theta, scalar, upstream_temperature, gas
+        )
     if np.any(theta < 0.0):
         raise ValueError("deflection_angle must be non-negative")
     beta = np.empty_like(mach)
     for index, value in np.ndenumerate(mach):
-        beta[index] = _shock_angle_scalar(
-            float(value), float(theta[index]), branch, gas
-        )
+        if isinstance(gas, PerfectGas):
+            beta[index] = _shock_angle_scalar(
+                float(value), float(theta[index]), branch, gas
+            )
+        else:
+            beta[index] = beta_from_theta(
+                float(value),
+                float(theta[index]),
+                branch is ShockBranch.STRONG,
+                float(temperatures[index]),
+                gas,
+            )
     return return_float(beta, scalar=scalar)
 
 
@@ -319,13 +446,30 @@ def oblique_shock(
     upstream_mach: ArrayLike,
     deflection_angle: ArrayLike,
     branch: ShockBranch = ShockBranch.WEAK,
-    gas: PerfectGas = AIR,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> ObliqueShockResult:
-    """Return the state across an attached oblique shock."""
+    """Return an attached oblique-shock state on the weak or strong branch.
+
+    Thermally perfect gases require upstream static temperature in kelvin.
+    Mach, deflection [rad], and temperature broadcast together. The frozen
+    ideal-gas conservation equations use h(T), s(T), and local sound speed;
+    no constant-gamma approximation or temperature extrapolation is used.
+    """
     mach, theta, scalar = _broadcast_mach_angle(
         upstream_mach, deflection_angle, angle_name="deflection_angle"
     )
-    beta = np.asarray(shock_angle(mach, theta, branch, gas), dtype=np.float64)
+    if not isinstance(gas, PerfectGas):
+        mach, theta, temperatures, scalar = _thermal_inputs(
+            mach, theta, scalar, upstream_temperature, gas
+        )
+    beta = np.asarray(
+        shock_angle(
+            mach, theta, branch, gas, upstream_temperature=upstream_temperature
+        ),
+        dtype=np.float64,
+    )
     upstream_normal = mach * np.sin(beta)
     (
         downstream_normal,
@@ -333,7 +477,11 @@ def oblique_shock(
         density,
         temperature,
         total_pressure,
-    ) = _normal_shock_arrays(upstream_normal, gas)
+    ) = (
+        _normal_shock_arrays(upstream_normal, gas)
+        if isinstance(gas, PerfectGas)
+        else _thermal_normal_arrays(upstream_normal, temperatures, gas)
+    )
     downstream = downstream_normal / np.sin(beta - theta)
 
     def output(values: FloatArray) -> FloatResult:
@@ -475,16 +623,38 @@ def _validate_conical_mach(upstream_mach: ArrayLike) -> tuple[FloatArray, bool]:
 
 
 def maximum_attached_cone_angle(
-    upstream_mach: ArrayLike, gas: PerfectGas = AIR
+    upstream_mach: ArrayLike,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> AttachedConicalShockLimit:
-    """Return the largest half-angle permitting an attached conical shock."""
+    """Return the largest half-angle permitting an attached conical shock.
+
+    Thermal gases require upstream static temperature in kelvin. Raise
+    ModelRangeError if the physical limit cannot be reached within the gas
+    temperature range, including the flow between the shock and cone surface.
+    """
     mach, scalar = _validate_conical_mach(upstream_mach)
+    temperature = np.zeros_like(mach)
+    if not isinstance(gas, PerfectGas):
+        mach, _, temperature, scalar = _thermal_inputs(
+            mach, np.zeros_like(mach), scalar, upstream_temperature, gas
+        )
     cone_angle = np.empty_like(mach)
     beta = np.empty_like(mach)
     for index, value in np.ndenumerate(mach):
-        cone_angle[index], beta[index] = _attached_conical_limit_scalar(
-            float(value), gas
-        )
+        if isinstance(gas, PerfectGas):
+            cone_angle[index], beta[index] = _attached_conical_limit_scalar(
+                float(value), gas
+            )
+        else:
+            cone_angle[index], beta[index], full_peak = cone_limit(
+                float(value), float(temperature[index]), gas
+            )
+            if not full_peak:
+                raise ModelRangeError(
+                    "attached conical limit exceeds the gas temperature range"
+                )
 
     def output(values: FloatArray) -> FloatResult:
         return return_float(values, scalar=scalar)
@@ -542,9 +712,17 @@ def _conical_shock_scalar(
 def conical_shock(
     upstream_mach: ArrayLike,
     cone_half_angle: ArrayLike,
-    gas: PerfectGas = AIR,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> ConicalShockResult:
-    """Return the cone-surface state behind an attached Taylor-Maccoll shock."""
+    """Return the cone-surface state on the weak Taylor-Maccoll branch.
+
+    Thermal gases require upstream static temperature in kelvin. All static
+    states from the free stream through the cone surface must lie in the gas
+    temperature range; thermodynamic extrapolation is never used. Angles are
+    radians and the result ratios retain the cone-surface/free-stream convention.
+    """
     mach, mach_scalar = _validate_conical_mach(upstream_mach)
     angle, angle_scalar = as_float_array(cone_half_angle, name="cone_half_angle")
     try:
@@ -556,6 +734,11 @@ def conical_shock(
     if np.any((angle < 0.0) | (angle >= 0.5 * np.pi)):
         raise ValueError("cone_half_angle must be between zero and pi/2")
     scalar = mach_scalar and angle_scalar
+    temperature = np.zeros_like(mach)
+    if not isinstance(gas, PerfectGas):
+        mach, angle, temperature, scalar = _thermal_inputs(
+            mach, angle, scalar, upstream_temperature, gas
+        )
 
     beta = np.empty_like(mach)
     post_shock_mach = np.empty_like(mach)
@@ -564,9 +747,20 @@ def conical_shock(
     surface_density = np.empty_like(mach)
     surface_temperature = np.empty_like(mach)
     total_pressure = np.empty_like(mach)
-    gamma = gas.heat_capacity_ratio
-
     for index, value in np.ndenumerate(mach):
+        if not isinstance(gas, PerfectGas):
+            beta_value, thermal = conical_state(
+                float(value), float(angle[index]), float(temperature[index]), gas
+            )
+            beta[index] = beta_value
+            post_shock_mach[index] = thermal.post_shock_mach
+            surface_mach[index] = thermal.surface_mach
+            surface_pressure[index] = thermal.pressure_ratio
+            surface_density[index] = thermal.density_ratio
+            surface_temperature[index] = thermal.temperature_ratio
+            total_pressure[index] = thermal.total_pressure_ratio
+            continue
+        gamma = gas.heat_capacity_ratio
         beta_value, state = _conical_shock_scalar(
             float(value), float(angle[index]), gas
         )
@@ -601,10 +795,28 @@ def conical_shock(
 
 
 def supersonic_pitot_pressure_ratio(
-    upstream_mach: ArrayLike, gas: PerfectGas = AIR
+    upstream_mach: ArrayLike,
+    gas: ShockGasModel = AIR,
+    *,
+    upstream_temperature: ArrayLike | None = None,
 ) -> FloatResult:
-    """Return post-shock total pressure over upstream static pressure."""
+    """Return post-shock total pressure over upstream static pressure.
+
+    Thermal gases require upstream static temperature in kelvin. Inputs
+    broadcast together; both static and stagnation states must be within the
+    gas temperature range. No thermodynamic extrapolation is performed.
+    """
     mach, scalar = _validate_supersonic_mach(upstream_mach)
+    if not isinstance(gas, PerfectGas):
+        mach, _, temperatures, scalar = _thermal_inputs(
+            mach, np.zeros_like(mach), scalar, upstream_temperature, gas
+        )
+        ratio = np.empty_like(mach)
+        for index, value in np.ndenumerate(mach):
+            ratio[index] = pitot_pressure_ratio(
+                float(value), float(temperatures[index]), gas
+            )
+        return return_float(ratio, scalar=scalar)
     gamma = gas.heat_capacity_ratio
     mach_squared = mach**2
     ratio = ((gamma + 1.0) * mach_squared / 2.0) ** (gamma / (gamma - 1.0)) * (
@@ -620,6 +832,7 @@ __all__ = [
     "NormalShockResult",
     "ObliqueShockResult",
     "ShockBranch",
+    "ShockGasModel",
     "conical_shock",
     "maximum_attached_cone_angle",
     "maximum_attached_deflection",
