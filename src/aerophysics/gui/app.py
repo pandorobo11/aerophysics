@@ -24,6 +24,7 @@ from aerophysics.gui.pages import (
     render_flight,
     render_shock,
 )
+from aerophysics.gui.sequence_page import render_sequence
 
 st.set_page_config(
     page_title="aerophysics GUI",
@@ -52,6 +53,10 @@ def conical_shock_page() -> None:
 
 def isentropic_page() -> None:
     render_isentropic(preferences)
+
+
+def sequence_page() -> None:
+    render_sequence(preferences)
 
 
 def normal_shock_page() -> None:
@@ -96,6 +101,7 @@ pages = {
         ),
     ],
     "圧縮性流れ": [
+        st.Page(sequence_page, title="連続流れ計算", icon="🔗"),
         st.Page(
             isentropic_page,
             title="等エントロピー流れ",

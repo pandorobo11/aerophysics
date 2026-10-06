@@ -24,6 +24,7 @@ class Column:
     label: str
     kind: QuantityKind | None = None
     fixed_unit: str | None = None
+    optional: bool = False
 
     def heading(self, preferences: UnitPreferences) -> str:
         unit = (
@@ -41,6 +42,7 @@ class Column:
 
 FLIGHT_COLUMNS = (
     Column("geometric_altitude", "幾何高度 h", "length"),
+    Column("geopotential_altitude", "ジオポテンシャル高度 H", "length"),
     Column("temperature", "静温 T", "temperature"),
     Column("pressure", "静圧 p", "pressure"),
     Column("density", "密度 ρ", "density"),
@@ -57,6 +59,9 @@ FLIGHT_COLUMNS = (
 )
 
 SHOCK_COLUMNS = (
+    Column("gas_model", "気体モデル"),
+    Column("upstream_temperature", "上流静温 T₁", "temperature"),
+    Column("downstream_temperature", "下流静温 T₂", "temperature"),
     Column("upstream_mach", "上流 Mach M₁"),
     Column("deflection_angle", "偏向角 θ", "angle"),
     Column("maximum_deflection_angle", "最大付着偏向角 θmax", "angle"),
@@ -66,11 +71,54 @@ SHOCK_COLUMNS = (
     Column("static_density_ratio", "ρ₂/ρ₁"),
     Column("static_temperature_ratio", "T₂/T₁"),
     Column("total_pressure_ratio", "p₀₂/p₀₁"),
+    Column("upstream_heat_capacity_ratio", "比熱比 γ₁"),
+    Column("downstream_heat_capacity_ratio", "比熱比 γ₂"),
+    Column("velocity_ratio", "V₂/V₁"),
+    Column("dynamic_pressure_ratio", "q₂/q₁"),
+    Column("entropy_change_over_r", "Δs/R"),
+    Column("upstream_velocity", "速度 V₁", "speed", optional=True),
+    Column("upstream_speed_of_sound", "音速 a₁", "speed", optional=True),
+    Column("upstream_pressure", "静圧 p₁", "pressure", optional=True),
+    Column("upstream_density", "密度 ρ₁", "density", optional=True),
+    Column("upstream_dynamic_pressure", "動圧 q₁", "pressure", optional=True),
+    Column(
+        "upstream_reynolds_number_per_length",
+        "単位Re₁",
+        "inverse_length",
+        optional=True,
+    ),
+    Column("upstream_cp", "定圧比熱 cₚ₁", fixed_unit="J/(kg·K)", optional=True),
+    Column("upstream_cv", "定容比熱 cᵥ₁", fixed_unit="J/(kg·K)", optional=True),
+    Column(
+        "upstream_dynamic_viscosity", "粘性係数 μ₁", fixed_unit="Pa·s", optional=True
+    ),
+    Column("upstream_reynolds_number", "Re_L₁", optional=True),
+    Column("downstream_velocity", "速度 V₂", "speed", optional=True),
+    Column("downstream_speed_of_sound", "音速 a₂", "speed", optional=True),
+    Column("downstream_pressure", "静圧 p₂", "pressure", optional=True),
+    Column("downstream_density", "密度 ρ₂", "density", optional=True),
+    Column("downstream_dynamic_pressure", "動圧 q₂", "pressure", optional=True),
+    Column(
+        "downstream_reynolds_number_per_length",
+        "単位Re₂",
+        "inverse_length",
+        optional=True,
+    ),
+    Column("downstream_cp", "定圧比熱 cₚ₂", fixed_unit="J/(kg·K)", optional=True),
+    Column("downstream_cv", "定容比熱 cᵥ₂", fixed_unit="J/(kg·K)", optional=True),
+    Column(
+        "downstream_dynamic_viscosity", "粘性係数 μ₂", fixed_unit="Pa·s", optional=True
+    ),
+    Column("downstream_reynolds_number", "Re_L₂", optional=True),
+    Column("viscosity_model", "粘性モデル", optional=True),
     Column("status", "status"),
     Column("message", "message"),
 )
 
 CONICAL_SHOCK_COLUMNS = (
+    Column("gas_model", "気体モデル"),
+    Column("upstream_temperature", "上流静温 T∞", "temperature"),
+    Column("surface_temperature", "表面静温 Tₛ", "temperature"),
     Column("upstream_mach", "上流 Mach M∞"),
     Column("cone_half_angle", "円錐半頂角 θc", "angle"),
     Column("maximum_cone_half_angle", "最大付着半頂角 θc,max", "angle"),
@@ -81,6 +129,43 @@ CONICAL_SHOCK_COLUMNS = (
     Column("surface_density_ratio", "ρₛ/ρ∞"),
     Column("surface_temperature_ratio", "Tₛ/T∞"),
     Column("total_pressure_ratio", "p₀₂/p₀∞"),
+    Column("upstream_heat_capacity_ratio", "比熱比 γ∞"),
+    Column("surface_heat_capacity_ratio", "比熱比 γₛ"),
+    Column("velocity_ratio", "Vₛ/V∞"),
+    Column("dynamic_pressure_ratio", "qₛ/q∞"),
+    Column("entropy_change_over_r", "Δs/R"),
+    Column("upstream_velocity", "速度 V∞", "speed", optional=True),
+    Column("upstream_speed_of_sound", "音速 a∞", "speed", optional=True),
+    Column("upstream_pressure", "静圧 p∞", "pressure", optional=True),
+    Column("upstream_density", "密度 ρ∞", "density", optional=True),
+    Column("upstream_dynamic_pressure", "動圧 q∞", "pressure", optional=True),
+    Column(
+        "upstream_reynolds_number_per_length",
+        "単位Re∞",
+        "inverse_length",
+        optional=True,
+    ),
+    Column("upstream_cp", "定圧比熱 cₚ∞", fixed_unit="J/(kg·K)", optional=True),
+    Column("upstream_cv", "定容比熱 cᵥ∞", fixed_unit="J/(kg·K)", optional=True),
+    Column(
+        "upstream_dynamic_viscosity", "粘性係数 μ∞", fixed_unit="Pa·s", optional=True
+    ),
+    Column("upstream_reynolds_number", "Re_L∞", optional=True),
+    Column("surface_velocity", "速度 Vₛ", "speed", optional=True),
+    Column("surface_speed_of_sound", "音速 aₛ", "speed", optional=True),
+    Column("surface_pressure", "静圧 pₛ", "pressure", optional=True),
+    Column("surface_density", "密度 ρₛ", "density", optional=True),
+    Column("surface_dynamic_pressure", "動圧 qₛ", "pressure", optional=True),
+    Column(
+        "surface_reynolds_number_per_length", "単位Reₛ", "inverse_length", optional=True
+    ),
+    Column("surface_cp", "定圧比熱 cₚₛ", fixed_unit="J/(kg·K)", optional=True),
+    Column("surface_cv", "定容比熱 cᵥₛ", fixed_unit="J/(kg·K)", optional=True),
+    Column(
+        "surface_dynamic_viscosity", "粘性係数 μₛ", fixed_unit="Pa·s", optional=True
+    ),
+    Column("surface_reynolds_number", "Re_Lₛ", optional=True),
+    Column("viscosity_model", "粘性モデル", optional=True),
     Column("status", "status"),
     Column("message", "message"),
 )
@@ -107,11 +192,21 @@ ISENTROPIC_COLUMNS = (
     Column("critical_temperature_ratio", "T₀/T*"),
     Column("critical_pressure_ratio", "p₀/p*"),
     Column("critical_density_ratio", "ρ₀/ρ*"),
+    Column("heat_capacity_ratio", "比熱比 γ"),
+    Column("cp", "定圧比熱 cₚ", fixed_unit="J/(kg·K)", optional=True),
+    Column("cv", "定容比熱 cᵥ", fixed_unit="J/(kg·K)", optional=True),
+    Column("viscosity_model", "粘性モデル", optional=True),
+    Column("dynamic_viscosity", "粘性係数 μ", fixed_unit="Pa·s", optional=True),
+    Column("reynolds_number_per_length", "単位Re", "inverse_length", optional=True),
+    Column("reynolds_number", "Re_L", optional=True),
     Column("status", "status"),
     Column("message", "message"),
 )
 
 NORMAL_SHOCK_COLUMNS = (
+    Column("gas_model", "気体モデル"),
+    Column("upstream_temperature", "上流静温 T₁", "temperature"),
+    Column("downstream_temperature", "下流静温 T₂", "temperature"),
     Column("upstream_mach", "上流 Mach M₁"),
     Column("downstream_mach", "下流 Mach M₂"),
     Column("static_pressure_ratio", "p₂/p₁"),
@@ -119,6 +214,46 @@ NORMAL_SHOCK_COLUMNS = (
     Column("static_temperature_ratio", "T₂/T₁"),
     Column("total_pressure_ratio", "p₀₂/p₀₁"),
     Column("pitot_pressure_ratio", "p₀₂/p₁"),
+    Column("upstream_heat_capacity_ratio", "比熱比 γ₁"),
+    Column("downstream_heat_capacity_ratio", "比熱比 γ₂"),
+    Column("velocity_ratio", "V₂/V₁"),
+    Column("dynamic_pressure_ratio", "q₂/q₁"),
+    Column("entropy_change_over_r", "Δs/R"),
+    Column("upstream_velocity", "速度 V₁", "speed", optional=True),
+    Column("upstream_speed_of_sound", "音速 a₁", "speed", optional=True),
+    Column("upstream_pressure", "静圧 p₁", "pressure", optional=True),
+    Column("upstream_density", "密度 ρ₁", "density", optional=True),
+    Column("upstream_dynamic_pressure", "動圧 q₁", "pressure", optional=True),
+    Column(
+        "upstream_reynolds_number_per_length",
+        "単位Re₁",
+        "inverse_length",
+        optional=True,
+    ),
+    Column("upstream_cp", "定圧比熱 cₚ₁", fixed_unit="J/(kg·K)", optional=True),
+    Column("upstream_cv", "定容比熱 cᵥ₁", fixed_unit="J/(kg·K)", optional=True),
+    Column(
+        "upstream_dynamic_viscosity", "粘性係数 μ₁", fixed_unit="Pa·s", optional=True
+    ),
+    Column("upstream_reynolds_number", "Re_L₁", optional=True),
+    Column("downstream_velocity", "速度 V₂", "speed", optional=True),
+    Column("downstream_speed_of_sound", "音速 a₂", "speed", optional=True),
+    Column("downstream_pressure", "静圧 p₂", "pressure", optional=True),
+    Column("downstream_density", "密度 ρ₂", "density", optional=True),
+    Column("downstream_dynamic_pressure", "動圧 q₂", "pressure", optional=True),
+    Column(
+        "downstream_reynolds_number_per_length",
+        "単位Re₂",
+        "inverse_length",
+        optional=True,
+    ),
+    Column("downstream_cp", "定圧比熱 cₚ₂", fixed_unit="J/(kg·K)", optional=True),
+    Column("downstream_cv", "定容比熱 cᵥ₂", fixed_unit="J/(kg·K)", optional=True),
+    Column(
+        "downstream_dynamic_viscosity", "粘性係数 μ₂", fixed_unit="Pa·s", optional=True
+    ),
+    Column("downstream_reynolds_number", "Re_L₂", optional=True),
+    Column("viscosity_model", "粘性モデル", optional=True),
     Column("status", "status"),
     Column("message", "message"),
 )
@@ -144,9 +279,13 @@ DETACHED_SHOCK_COLUMNS = (
 )
 
 EXPANSION_COLUMNS = (
+    Column("gas_model", "気体モデル"),
+    Column("upstream_temperature", "上流静温 T₁", "temperature"),
+    Column("downstream_temperature", "下流静温 T₂", "temperature"),
     Column("upstream_mach", "上流 Mach M₁"),
     Column("turn_angle", "膨張角 θ", "angle"),
     Column("maximum_turn_angle", "最大膨張角", "angle"),
+    Column("temperature_limited_turn_angle", "温度範囲内の最大膨張角", "angle"),
     Column("downstream_mach", "下流 Mach M₂"),
     Column("upstream_prandtl_meyer_angle", "ν₁", "angle"),
     Column("downstream_prandtl_meyer_angle", "ν₂", "angle"),
@@ -277,7 +416,11 @@ def display_rows(
     calculator: str, rows: tuple[Row, ...], preferences: UnitPreferences
 ) -> list[dict[str, CellValue]]:
     """Convert SI rows into localized, unit-labelled display rows."""
-    columns = columns_for(calculator)
+    columns = tuple(
+        column
+        for column in columns_for(calculator)
+        if not column.optional or any(column.key in row for row in rows)
+    )
     return [
         {
             column.heading(preferences): column.convert(

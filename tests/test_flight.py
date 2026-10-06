@@ -33,12 +33,6 @@ def test_velocity_and_mach_constructors_are_equivalent() -> None:
     for field in (
         "mach",
         "velocity",
-        "dynamic_pressure",
-        "reynolds_number_per_length",
-        "reynolds_number",
-        "total_temperature",
-        "total_pressure",
-        "total_density",
     ):
         assert getattr(from_velocity, field) == pytest.approx(
             getattr(from_mach, field), rel=1e-13

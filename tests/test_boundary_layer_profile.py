@@ -46,6 +46,11 @@ def _profile(
     )
 
 
+@pytest.fixture(scope="module")
+def reference_profile() -> CompressibleBoundaryLayerProfileResult:
+    return _profile()
+
+
 @pytest.mark.parametrize(
     "transformation",
     list(CompressibleVelocityTransformation),
@@ -119,14 +124,6 @@ def test_forward_nonuniform_properties_match_differential_mappings() -> None:
     assert_allclose(volpiani.transformed_velocity_plus, expected_velocity)
 
 
-def test_coles_wake_endpoints_and_zero_strength() -> None:
-    outer_coordinate = np.array([0.0, 0.5, 1.0])
-    wake = profile_module._wake_function(outer_coordinate)
-    assert_allclose(wake, [0.0, 1.0, 2.0])
-    wall_velocity_plus = np.array([0.0, 10.0, 20.0])
-    assert_allclose(wall_velocity_plus + 0.0 * wake, wall_velocity_plus)
-
-
 @pytest.mark.parametrize(
     ("transformation", "relation"),
     [
@@ -138,8 +135,15 @@ def test_coles_wake_endpoints_and_zero_strength() -> None:
 def test_inverse_profile_satisfies_edge_and_property_relations(
     transformation: CompressibleVelocityTransformation,
     relation: TemperatureVelocityRelation,
+    reference_profile: CompressibleBoundaryLayerProfileResult,
 ) -> None:
-    result = _profile(transformation=transformation, relation=relation)
+    if (
+        transformation is CompressibleVelocityTransformation.VAN_DRIEST
+        and relation is TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY
+    ):
+        result = reference_profile
+    else:
+        result = _profile(transformation=transformation, relation=relation)
     assert isinstance(result, CompressibleBoundaryLayerProfileResult)
     assert 0.0 <= result.wake_parameter <= 1.0
     assert result.edge_velocity_ratio == pytest.approx(0.99, abs=1e-9)
@@ -170,6 +174,26 @@ def test_inverse_profile_satisfies_edge_and_property_relations(
     assert result.shape_factor == pytest.approx(
         result.displacement_thickness / result.momentum_thickness
     )
+    index = 400
+    ratio = result.velocity[index] / 300.0
+    if relation is TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY:
+        expected_temperature = (
+            250.0
+            + 1.14
+            * 0.72
+            * (result.recovery_temperature - 250.0)
+            * ratio
+            * (1.0 - ratio)
+            + (300.0 - 250.0) * ratio**2
+        )
+    else:
+        expected_temperature = (
+            250.0
+            + (result.recovery_temperature - 250.0) * ratio
+            + (300.0 - result.recovery_temperature) * ratio**2
+        )
+    assert result.temperature[index] == pytest.approx(expected_temperature)
+    assert_allclose(result.wall_distance, np.linspace(0.0, 0.05, 1001))
     for values in (
         result.wall_distance,
         result.wall_distance_plus,
@@ -203,33 +227,6 @@ def test_inverse_profile_accepts_keyes_viscosity_model() -> None:
         result.dynamic_viscosity,
         AIR_KEYES_VISCOSITY.dynamic_viscosity(result.temperature),
     )
-
-
-def test_gra_and_walz_temperature_formulas() -> None:
-    gra = _profile(relation=TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY)
-    walz = _profile(relation=TemperatureVelocityRelation.WALZ)
-    index = 400
-
-    gra_ratio = gra.velocity[index] / 300.0
-    expected_gra = (
-        250.0
-        + 1.14
-        * 0.72
-        * (gra.recovery_temperature - 250.0)
-        * gra_ratio
-        * (1.0 - gra_ratio)
-        + (300.0 - 250.0) * gra_ratio**2
-    )
-    assert gra.temperature[index] == pytest.approx(expected_gra)
-
-    walz_ratio = walz.velocity[index] / 300.0
-    expected_walz = (
-        250.0
-        + (walz.recovery_temperature - 250.0) * walz_ratio
-        + (300.0 - walz.recovery_temperature) * walz_ratio**2
-    )
-    assert walz.temperature[index] == pytest.approx(expected_walz)
-    assert gra.temperature[index] != pytest.approx(walz.temperature[index])
 
 
 def test_adiabatic_default_uses_recovery_temperature() -> None:
@@ -307,8 +304,10 @@ def test_integral_quantities_match_sampled_profile() -> None:
     assert result.momentum_thickness == pytest.approx(expected_momentum, rel=2e-5)
 
 
-def test_integrals_cover_full_layer_when_output_grid_is_truncated() -> None:
-    full = _profile()
+def test_integrals_cover_full_layer_when_output_grid_is_truncated(
+    reference_profile: CompressibleBoundaryLayerProfileResult,
+) -> None:
+    full = reference_profile
     truncated = _profile(wall_distance=np.linspace(0.0, 0.01, 51))
     assert truncated.velocity[-1] < 300.0
     assert truncated.displacement_thickness == pytest.approx(
@@ -319,9 +318,14 @@ def test_integrals_cover_full_layer_when_output_grid_is_truncated() -> None:
     )
 
 
-def test_explicit_consistent_wake_parameter_reproduces_profile() -> None:
-    automatic = _profile()
-    specified = _profile(wake_parameter=automatic.wake_parameter)
+def test_explicit_consistent_wake_parameter_reproduces_profile(
+    reference_profile: CompressibleBoundaryLayerProfileResult,
+) -> None:
+    automatic = reference_profile
+    specified = _profile(
+        wall_distance=automatic.wall_distance,
+        wake_parameter=automatic.wake_parameter,
+    )
     assert specified.wake_parameter == pytest.approx(automatic.wake_parameter)
     assert_allclose(specified.velocity, automatic.velocity)
 

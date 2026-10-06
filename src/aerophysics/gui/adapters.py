@@ -14,6 +14,7 @@ from aerophysics import (
     AIR_NASA9,
     FlightCondition,
 )
+from aerophysics.atmosphere import geopotential_to_geometric
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -26,12 +27,26 @@ from aerophysics.detached_shock import (
     billig_shock_shape,
     seiff_standoff_distance_from_mach,
 )
+from aerophysics.exceptions import (
+    ApplicabilityWarning,
+    ExpansionConvergenceError,
+    ModelRangeError,
+    NoAttachedShockError,
+    ShockConvergenceError,
+)
 from aerophysics.expansion import (
     maximum_prandtl_meyer_angle,
     prandtl_meyer_angle,
     prandtl_meyer_expansion,
 )
 from aerophysics.gas import AIR, PerfectGas
+from aerophysics.gui._flow_outputs import (
+    add_shock_outputs,
+    add_transport,
+    heat_capacities,
+    restore_static_temperature,
+    validate_output_inputs,
+)
 from aerophysics.isentropic import (
     MachBranch,
     isentropic_analysis,
@@ -43,6 +58,7 @@ from aerophysics.isentropic import (
 from aerophysics.real_gas import BeattieBridgemanGas, HarmonicOscillatorGas
 from aerophysics.shocks import (
     ShockBranch,
+    ShockGasModel,
     conical_shock,
     maximum_attached_cone_angle,
     maximum_attached_deflection,
@@ -175,6 +191,7 @@ def flight_condition(
 def flight_sweep(
     *,
     fixed_altitude: float,
+    altitude_basis: str = "geometric",
     fixed_motion: float,
     motion_basis: str,
     sweep_field: str,
@@ -193,6 +210,10 @@ def flight_sweep(
         motion = values
     else:
         raise ValueError("sweep_field must be altitude or motion")
+    if altitude_basis == "geopotential":
+        altitude = geopotential_to_geometric(altitude)
+    elif altitude_basis != "geometric":
+        raise ValueError("altitude_basis must be geometric or geopotential")
     return flight_condition(
         geometric_altitude=altitude,
         motion=motion,
@@ -269,8 +290,12 @@ def isentropic_condition(
     total_pressure: float | None = None,
     total_temperature: float | None = None,
     allow_extrapolation: bool = True,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Calculate isentropic state, inverse, area, and mass-flow relations."""
+    validate_output_inputs(total_pressure, viscosity_model, characteristic_length)
     try:
         gas = _ISENTROPIC_GASES[gas_model]
     except KeyError as error:
@@ -295,6 +320,7 @@ def isentropic_condition(
         )
 
     rows: list[Row] = []
+    transport_messages: list[str] = []
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
         input_values = [float(raw_value) for raw_value in _array(input_value)]
@@ -420,7 +446,49 @@ def isentropic_condition(
                     "message": "",
                 }
             )
-    messages = tuple(dict.fromkeys(str(item.message) for item in captured))
+            row = rows[-1]
+            temperature = row["static_temperature"]
+            pressure = row["static_pressure"]
+            assert temperature is None or isinstance(temperature, float)
+            assert pressure is None or isinstance(pressure, float)
+            if temperature is not None:
+                temperature = restore_static_temperature(
+                    temperature, gas, allow_extrapolation=allow_extrapolation
+                )
+                row["static_temperature"] = temperature
+            # The fused isentropic solve already reports state applicability.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", ApplicabilityWarning)
+                gamma, cp, cv = heat_capacities(
+                    gas, temperature, pressure, allow_extrapolation=allow_extrapolation
+                )
+            row["heat_capacity_ratio"] = gamma
+            if with_heat_capacities:
+                row.update({"cp": cp, "cv": cv})
+            if temperature is not None and not isinstance(gas, BeattieBridgemanGas):
+                sound_speed = float(
+                    np.sqrt(gamma * gas.specific_gas_constant * temperature)
+                )
+                row["speed_of_sound"] = sound_speed
+                row["velocity"] = mach * sound_speed
+            if absolute_state is not None:
+                assert temperature is not None
+                density = float(_array(absolute_state.static_density)[index])
+                velocity = float(_array(absolute_state.velocity)[index])
+                message = add_transport(
+                    row,
+                    temperature=temperature,
+                    density=density,
+                    velocity=velocity,
+                    viscosity_model=viscosity_model,
+                    characteristic_length=characteristic_length,
+                )
+                if message:
+                    row["message"] = message
+                    transport_messages.append(message)
+    messages = tuple(
+        dict.fromkeys([str(item.message) for item in captured] + transport_messages)
+    )
     return CalculationResult(tuple(rows), messages)
 
 
@@ -435,8 +503,12 @@ def isentropic_sweep(
     total_pressure: float | None = None,
     total_temperature: float | None = None,
     allow_extrapolation: bool = True,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Sweep the selected isentropic input quantity."""
+    validate_output_inputs(total_pressure, viscosity_model, characteristic_length)
     return isentropic_condition(
         input_value=sweep_values(start, stop, points),
         input_basis=input_basis,
@@ -445,16 +517,44 @@ def isentropic_sweep(
         total_pressure=total_pressure,
         total_temperature=total_temperature,
         allow_extrapolation=allow_extrapolation,
+        viscosity_model=viscosity_model,
+        characteristic_length=characteristic_length,
+        with_heat_capacities=with_heat_capacities,
     )
 
 
-def normal_shock_condition(*, upstream_mach: float | np.ndarray) -> CalculationResult:
+def normal_shock_condition(
+    *,
+    upstream_mach: float | np.ndarray,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
+) -> CalculationResult:
     """Calculate normal-shock ratios and the Rayleigh pitot relation."""
-    result = normal_shock(upstream_mach)
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
+    try:
+        gas = _SHOCK_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("unknown shock gas_model") from error
+    result = normal_shock(upstream_mach, gas, upstream_temperature=upstream_temperature)
     mach_values = _array(result.upstream_mach)
-    pitot_values = _array(supersonic_pitot_pressure_ratio(mach_values))
     rows: list[Row] = []
+    messages: list[str] = []
     for index, mach in enumerate(mach_values):
+        pitot: float | None = None
+        message = ""
+        try:
+            pitot = float(
+                supersonic_pitot_pressure_ratio(
+                    float(mach), gas, upstream_temperature=upstream_temperature
+                )
+            )
+        except ModelRangeError as error:
+            message = f"ピトー圧力比は計算できません: {error}"
+            messages.append(message)
         rows.append(
             {
                 "upstream_mach": float(mach),
@@ -471,17 +571,91 @@ def normal_shock_condition(*, upstream_mach: float | np.ndarray) -> CalculationR
                 "total_pressure_ratio": float(
                     _array(result.total_pressure_ratio)[index]
                 ),
-                "pitot_pressure_ratio": float(pitot_values[index]),
+                "pitot_pressure_ratio": pitot,
                 "status": "ok",
-                "message": "",
+                "message": message,
             }
         )
-    return CalculationResult(tuple(rows))
+        if gas_model != "AIR":
+            assert upstream_temperature is not None
+            rows[-1].update(
+                {
+                    "gas_model": gas_model,
+                    "upstream_temperature": upstream_temperature,
+                    "downstream_temperature": upstream_temperature
+                    * float(_array(result.static_temperature_ratio)[index]),
+                }
+            )
+        messages.extend(
+            add_shock_outputs(
+                rows[-1],
+                gas,
+                upstream_temperature,
+                upstream_pressure,
+                viscosity_model,
+                characteristic_length,
+                with_heat_capacities,
+            )
+        )
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
-def normal_shock_sweep(*, start: float, stop: float, points: int) -> CalculationResult:
+def normal_shock_sweep(
+    *,
+    start: float,
+    stop: float,
+    points: int,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
+) -> CalculationResult:
     """Sweep upstream Mach number through a normal shock."""
-    return normal_shock_condition(upstream_mach=sweep_values(start, stop, points))
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
+    values = sweep_values(start, stop, points)
+    if gas_model == "AIR":
+        return normal_shock_condition(
+            upstream_mach=values,
+            upstream_temperature=upstream_temperature,
+            upstream_pressure=upstream_pressure,
+            viscosity_model=viscosity_model,
+            characteristic_length=characteristic_length,
+            with_heat_capacities=with_heat_capacities,
+        )
+    rows: list[Row] = []
+    messages: list[str] = []
+    for mach in values:
+        try:
+            result = normal_shock_condition(
+                upstream_mach=float(mach),
+                gas_model=gas_model,
+                upstream_temperature=upstream_temperature,
+                viscosity_model=viscosity_model,
+                characteristic_length=characteristic_length,
+                with_heat_capacities=with_heat_capacities,
+                upstream_pressure=upstream_pressure,
+            )
+        except ValueError as error:
+            rows.append(
+                {
+                    "upstream_mach": float(mach),
+                    "gas_model": gas_model,
+                    "upstream_temperature": upstream_temperature,
+                    "downstream_temperature": None,
+                    "status": (
+                        "out_of_range"
+                        if isinstance(error, ModelRangeError)
+                        else "error"
+                    ),
+                    "message": str(error),
+                }
+            )
+        else:
+            rows.extend(result.rows)
+            messages.extend(result.warnings)
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
 def detached_shock_condition(
@@ -629,34 +803,56 @@ def detached_shock_shape(
 
 
 def expansion_condition(
-    *, upstream_mach: float, turn_angle: float
+    *,
+    upstream_mach: float,
+    turn_angle: float,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
 ) -> CalculationResult:
     """Calculate one centered Prandtl-Meyer expansion."""
-    result = prandtl_meyer_expansion(upstream_mach, turn_angle)
-    maximum_turn = maximum_prandtl_meyer_angle() - float(
-        prandtl_meyer_angle(upstream_mach)
+    try:
+        gas = _SHOCK_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("unknown expansion gas_model") from error
+    result = prandtl_meyer_expansion(
+        upstream_mach,
+        turn_angle,
+        gas,
+        upstream_temperature=upstream_temperature,
     )
-    return CalculationResult(
-        (
+    row: Row = {
+        "upstream_mach": float(result.upstream_mach),
+        "downstream_mach": float(result.downstream_mach),
+        "turn_angle": float(result.turn_angle),
+        "maximum_turn_angle": float(result.available_turn_angle)
+        if gas_model == "AIR" and result.available_turn_angle is not None
+        else None,
+        "upstream_prandtl_meyer_angle": _optional_at(
+            result.upstream_prandtl_meyer_angle, 0
+        ),
+        "downstream_prandtl_meyer_angle": _optional_at(
+            result.downstream_prandtl_meyer_angle, 0
+        ),
+        "static_temperature_ratio": float(result.static_temperature_ratio),
+        "static_pressure_ratio": float(result.static_pressure_ratio),
+        "static_density_ratio": float(result.static_density_ratio),
+        "status": "ok",
+        "message": "",
+    }
+    if gas_model != "AIR":
+        assert upstream_temperature is not None
+        row.update(
             {
-                "upstream_mach": float(result.upstream_mach),
-                "downstream_mach": float(result.downstream_mach),
-                "turn_angle": float(result.turn_angle),
-                "maximum_turn_angle": maximum_turn,
-                "upstream_prandtl_meyer_angle": float(
-                    result.upstream_prandtl_meyer_angle
-                ),
-                "downstream_prandtl_meyer_angle": float(
-                    result.downstream_prandtl_meyer_angle
-                ),
-                "static_temperature_ratio": float(result.static_temperature_ratio),
-                "static_pressure_ratio": float(result.static_pressure_ratio),
-                "static_density_ratio": float(result.static_density_ratio),
-                "status": "ok",
-                "message": "",
-            },
+                "gas_model": gas_model,
+                "upstream_temperature": upstream_temperature,
+                "downstream_temperature": upstream_temperature
+                * float(result.static_temperature_ratio),
+                "temperature_limited_turn_angle": float(result.available_turn_angle)
+                if result.available_turn_angle is not None
+                else None,
+            }
         )
-    )
+    return CalculationResult((row,))
 
 
 def expansion_sweep(
@@ -667,6 +863,8 @@ def expansion_sweep(
     start: float,
     stop: float,
     points: int,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
 ) -> CalculationResult:
     """Sweep expansion Mach or turn angle while retaining limit failures."""
     if sweep_field not in {"mach", "turn_angle"}:
@@ -677,12 +875,17 @@ def expansion_sweep(
         turn = float(value) if sweep_field == "turn_angle" else fixed_turn_angle
         try:
             rows.append(
-                expansion_condition(upstream_mach=mach, turn_angle=turn).rows[0]
+                expansion_condition(
+                    upstream_mach=mach,
+                    turn_angle=turn,
+                    gas_model=gas_model,
+                    upstream_temperature=upstream_temperature,
+                ).rows[0]
             )
-        except ValueError as error:
+        except (ValueError, ExpansionConvergenceError) as error:
             maximum_turn = (
                 maximum_prandtl_meyer_angle() - float(prandtl_meyer_angle(mach))
-                if mach >= 1.0
+                if mach >= 1.0 and gas_model == "AIR"
                 else None
             )
             rows.append(
@@ -696,11 +899,32 @@ def expansion_sweep(
                     "static_temperature_ratio": None,
                     "static_pressure_ratio": None,
                     "static_density_ratio": None,
-                    "status": "limit_exceeded",
+                    "status": "out_of_range"
+                    if isinstance(error, ModelRangeError)
+                    else "error"
+                    if isinstance(error, ExpansionConvergenceError)
+                    else "limit_exceeded",
                     "message": str(error),
                 }
             )
+            if gas_model != "AIR":
+                rows[-1].update(
+                    {
+                        "gas_model": gas_model,
+                        "upstream_temperature": upstream_temperature,
+                        "downstream_temperature": None,
+                        "temperature_limited_turn_angle": None,
+                    }
+                )
     return CalculationResult(tuple(rows))
+
+
+_SHOCK_GASES: dict[str, ShockGasModel] = {
+    "AIR": AIR,
+    "NASA7": AIR_NASA7,
+    "NASA9": AIR_NASA9,
+    "HARMONIC_OSCILLATOR": AIR_HARMONIC_OSCILLATOR,
+}
 
 
 def oblique_shock_condition(
@@ -708,16 +932,40 @@ def oblique_shock_condition(
     upstream_mach: float,
     deflection_angle: float,
     branch: ShockBranch,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Calculate one oblique-shock state."""
-    result = oblique_shock(upstream_mach, deflection_angle, branch)
-    limit = maximum_attached_deflection(upstream_mach)
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
+    try:
+        gas = _SHOCK_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("unknown shock gas_model") from error
+    result = oblique_shock(
+        upstream_mach,
+        deflection_angle,
+        branch,
+        gas,
+        upstream_temperature=upstream_temperature,
+    )
+    maximum: float | None = None
+    try:
+        limit = maximum_attached_deflection(
+            upstream_mach, gas, upstream_temperature=upstream_temperature
+        )
+        maximum = float(limit.deflection_angle)
+    except ModelRangeError:
+        pass  # A valid weak shock need not have a representable polar peak.
     row: Row = {
         "upstream_mach": float(result.upstream_mach),
         "downstream_mach": float(result.downstream_mach),
         "deflection_angle": float(result.deflection_angle),
         "shock_angle": float(result.shock_angle),
-        "maximum_deflection_angle": float(limit.deflection_angle),
+        "maximum_deflection_angle": maximum,
         "upstream_normal_mach": float(result.upstream_normal_mach),
         "downstream_normal_mach": float(result.downstream_normal_mach),
         "static_pressure_ratio": float(result.static_pressure_ratio),
@@ -727,7 +975,26 @@ def oblique_shock_condition(
         "status": "ok",
         "message": "",
     }
-    return CalculationResult((row,))
+    if gas_model != "AIR":
+        assert upstream_temperature is not None
+        row.update(
+            {
+                "gas_model": gas_model,
+                "upstream_temperature": upstream_temperature,
+                "downstream_temperature": upstream_temperature
+                * float(result.static_temperature_ratio),
+            }
+        )
+    messages = add_shock_outputs(
+        row,
+        gas,
+        upstream_temperature,
+        upstream_pressure,
+        viscosity_model,
+        characteristic_length,
+        with_heat_capacities,
+    )
+    return CalculationResult((row,), messages)
 
 
 def oblique_shock_sweep(
@@ -739,10 +1006,18 @@ def oblique_shock_sweep(
     start: float,
     stop: float,
     points: int,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Sweep Mach or deflection while retaining non-attached rows."""
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
     values = sweep_values(start, stop, points)
     rows: list[Row] = []
+    messages: list[str] = []
     for value in values:
         mach = float(value) if sweep_field == "mach" else fixed_mach
         theta = float(value) if sweep_field == "deflection" else fixed_deflection
@@ -751,11 +1026,26 @@ def oblique_shock_sweep(
                 upstream_mach=mach,
                 deflection_angle=theta,
                 branch=branch,
+                gas_model=gas_model,
+                upstream_temperature=upstream_temperature,
+                viscosity_model=viscosity_model,
+                characteristic_length=characteristic_length,
+                with_heat_capacities=with_heat_capacities,
+                upstream_pressure=upstream_pressure,
             )
         except ValueError as error:
             maximum: float | None = None
-            if mach > 1.0:
-                maximum = float(maximum_attached_deflection(mach).deflection_angle)
+            if mach > 1.0 and gas_model in _SHOCK_GASES:
+                try:
+                    maximum = float(
+                        maximum_attached_deflection(
+                            mach,
+                            _SHOCK_GASES[gas_model],
+                            upstream_temperature=upstream_temperature,
+                        ).deflection_angle
+                    )
+                except ValueError:
+                    pass
             rows.append(
                 {
                     "upstream_mach": mach,
@@ -769,27 +1059,65 @@ def oblique_shock_sweep(
                     "static_density_ratio": None,
                     "static_temperature_ratio": None,
                     "total_pressure_ratio": None,
-                    "status": "no_attached_shock",
+                    "status": (
+                        "no_attached_shock"
+                        if isinstance(error, NoAttachedShockError)
+                        else "out_of_range"
+                        if isinstance(error, ModelRangeError)
+                        else "error"
+                    ),
                     "message": str(error),
                 }
             )
+            if gas_model != "AIR":
+                rows[-1].update(
+                    {
+                        "gas_model": gas_model,
+                        "upstream_temperature": upstream_temperature,
+                        "downstream_temperature": None,
+                    }
+                )
         else:
             rows.append(result.rows[0])
+            messages.extend(result.warnings)
     if sweep_field not in {"mach", "deflection"}:
         raise ValueError("sweep_field must be mach or deflection")
-    return CalculationResult(tuple(rows))
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
 def conical_shock_condition(
-    *, upstream_mach: float, cone_half_angle: float
+    *,
+    upstream_mach: float,
+    cone_half_angle: float,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Calculate one axisymmetric Taylor-Maccoll conical-shock state."""
-    result = conical_shock(upstream_mach, cone_half_angle)
-    limit = maximum_attached_cone_angle(upstream_mach)
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
+    try:
+        gas = _SHOCK_GASES[gas_model]
+    except KeyError as error:
+        raise ValueError("unknown shock gas_model") from error
+    result = conical_shock(
+        upstream_mach, cone_half_angle, gas, upstream_temperature=upstream_temperature
+    )
+    maximum: float | None = None
+    try:
+        maximum = float(
+            maximum_attached_cone_angle(
+                upstream_mach, gas, upstream_temperature=upstream_temperature
+            ).cone_half_angle
+        )
+    except (ModelRangeError, ShockConvergenceError):
+        pass  # A valid weak cone need not have a representable attached limit.
     row: Row = {
         "upstream_mach": float(result.upstream_mach),
         "cone_half_angle": float(result.cone_half_angle),
-        "maximum_cone_half_angle": float(limit.cone_half_angle),
+        "maximum_cone_half_angle": maximum,
         "shock_angle": float(result.shock_angle),
         "post_shock_mach": float(result.post_shock_mach),
         "surface_mach": float(result.surface_mach),
@@ -800,7 +1128,27 @@ def conical_shock_condition(
         "status": "ok",
         "message": "",
     }
-    return CalculationResult((row,))
+    if gas_model != "AIR":
+        assert upstream_temperature is not None
+        row.update(
+            {
+                "gas_model": gas_model,
+                "upstream_temperature": upstream_temperature,
+                "surface_temperature": upstream_temperature
+                * float(result.surface_temperature_ratio),
+            }
+        )
+    messages = add_shock_outputs(
+        row,
+        gas,
+        upstream_temperature,
+        upstream_pressure,
+        viscosity_model,
+        characteristic_length,
+        with_heat_capacities,
+        surface=True,
+    )
+    return CalculationResult((row,), messages)
 
 
 def conical_shock_sweep(
@@ -811,23 +1159,49 @@ def conical_shock_sweep(
     start: float,
     stop: float,
     points: int,
+    gas_model: str = "AIR",
+    upstream_temperature: float | None = None,
+    upstream_pressure: float | None = None,
+    viscosity_model: str = "Sutherland",
+    characteristic_length: float | None = None,
+    with_heat_capacities: bool = False,
 ) -> CalculationResult:
     """Sweep Mach or cone half-angle while retaining non-attached rows."""
+    validate_output_inputs(upstream_pressure, viscosity_model, characteristic_length)
     if sweep_field not in {"mach", "cone_half_angle"}:
         raise ValueError("sweep_field must be mach or cone_half_angle")
     values = sweep_values(start, stop, points)
     rows: list[Row] = []
+    messages: list[str] = []
     for value in values:
         mach = float(value) if sweep_field == "mach" else fixed_mach
         angle = (
             float(value) if sweep_field == "cone_half_angle" else fixed_cone_half_angle
         )
         try:
-            result = conical_shock_condition(upstream_mach=mach, cone_half_angle=angle)
-        except ValueError as error:
+            result = conical_shock_condition(
+                upstream_mach=mach,
+                cone_half_angle=angle,
+                gas_model=gas_model,
+                upstream_temperature=upstream_temperature,
+                viscosity_model=viscosity_model,
+                characteristic_length=characteristic_length,
+                with_heat_capacities=with_heat_capacities,
+                upstream_pressure=upstream_pressure,
+            )
+        except (ValueError, ShockConvergenceError) as error:
             maximum: float | None = None
-            if mach > 1.0:
-                maximum = float(maximum_attached_cone_angle(mach).cone_half_angle)
+            if mach > 1.0 and gas_model in _SHOCK_GASES:
+                try:
+                    maximum = float(
+                        maximum_attached_cone_angle(
+                            mach,
+                            _SHOCK_GASES[gas_model],
+                            upstream_temperature=upstream_temperature,
+                        ).cone_half_angle
+                    )
+                except (ValueError, ShockConvergenceError):
+                    pass
             rows.append(
                 {
                     "upstream_mach": mach,
@@ -840,13 +1214,28 @@ def conical_shock_sweep(
                     "surface_density_ratio": None,
                     "surface_temperature_ratio": None,
                     "total_pressure_ratio": None,
-                    "status": "no_attached_shock",
+                    "status": (
+                        "no_attached_shock"
+                        if isinstance(error, NoAttachedShockError)
+                        else "out_of_range"
+                        if isinstance(error, ModelRangeError)
+                        else "error"
+                    ),
                     "message": str(error),
                 }
             )
+            if gas_model != "AIR":
+                rows[-1].update(
+                    {
+                        "gas_model": gas_model,
+                        "upstream_temperature": upstream_temperature,
+                        "surface_temperature": None,
+                    }
+                )
         else:
             rows.append(result.rows[0])
-    return CalculationResult(tuple(rows))
+            messages.extend(result.warnings)
+    return CalculationResult(tuple(rows), tuple(dict.fromkeys(messages)))
 
 
 def flat_plate(

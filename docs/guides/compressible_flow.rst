@@ -23,17 +23,18 @@ Choose a workflow
      - Steady, adiabatic flow without entropy production
    * - Cross a normal, oblique, or attached conical shock
      - :doc:`../models/shock_waves`
-     - Upstream Mach number; deflection or cone angle where applicable
-     - Calorically perfect gas
+     - Upstream Mach number; deflection or cone angle where applicable;
+       upstream static temperature for a thermally perfect gas
+     - Frozen ideal gas; attached, axisymmetric flow at zero incidence for cones
    * - Estimate blunt-body shock standoff or shape
      - :ref:`detached-shocks` in :doc:`../models/shock_waves`
      - Mach number, nose radius, and explicit geometry
      - Engineering correlation, not a shock-layer solution
    * - Turn a supersonic stream through a centered expansion
      - :doc:`../models/expansion_waves`
-     - Upstream Mach number and nonnegative turn angle
-     - Calorically perfect gas; downstream angle below the limiting
-       Prandtl--Meyer angle
+     - Upstream Mach number and nonnegative turn angle; upstream static
+       temperature for a thermally perfect gas
+     - Frozen ideal gas; all fan states in the model's temperature range
 
 Isentropic state ratios
 -----------------------
@@ -77,7 +78,9 @@ Angles are supplied in radians and shock branch selection is explicit:
 An oblique or conical request above its attached-shock limit raises
 :class:`~aerophysics.exceptions.NoAttachedShockError`; it is not silently
 replaced by a normal-shock approximation. A Prandtl--Meyer turn must be an
-expansion and must remain below the finite limiting angle.
+expansion. For a thermal gas, supply upstream static temperature and keep the
+entire fan in the gas's temperature range. A valid fan does not require an
+in-range sonic reference; unavailable absolute angles are left blank.
 
 Next steps
 ----------

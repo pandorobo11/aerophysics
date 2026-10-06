@@ -5,7 +5,65 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve validated sequence temperatures at thermal range boundaries when
+  ratio restoration overshoots by exactly one ULP, while rejecting larger
+  excursions and out-of-range user inputs. Bracket stagnation temperature
+  locally so custom harmonic-oscillator gases without an applicability range
+  do not evaluate properties at the maximum floating-point temperature.
+
 ### Added
+
+- Select geometric or geopotential altitude in the atmosphere/flight GUI,
+  including altitude sweeps, plot axes, and saved configuration replay.
+  Support the same choice for standard-atmosphere flow-sequence initialization.
+
+- Add scalar flow sequences with normal, oblique and conical shocks,
+  isentropic transformations and centered expansions, for perfect and frozen
+  thermally perfect gases. Support arbitrary static/total initial conditions
+  and standard-atmosphere initialization. Add a GUI stage editor, per-stage
+  properties and pressure recovery, plots, SI CSV export, configuration replay,
+  and explicit partial results when a stage fails.
+
+## [0.7.0] - 2026-10-03
+
+### Added
+
+- Extend centered Prandtl--Meyer expansions to frozen thermally perfect gases
+  with upstream static temperature, variable heat capacity, and strict static
+  temperature bounds. Add thermal gas selection, temperature results,
+  Mach/turn sweeps, and settings replay to the expansion GUI. Keep valid states
+  when only the sonic reference for the absolute Prandtl--Meyer angle is outside
+  the model range.
+
+- Add single-point normal-shock and Prandtl--Meyer expansion GUI schematics
+  with solved Mach labels, physical flow directions, a convex-wall expansion
+  fan and angle arcs in the selected display unit.
+
+- Add local gamma, full velocity ratios, sound speeds, dynamic-pressure ratios
+  and entropy rise to shock GUI results, with optional cp/cv detail columns.
+  Add optional static pressure, dry-air viscosity selection and local unit
+  Reynolds numbers to normal, oblique and conical shocks; the isentropic page
+  uses its existing total pressure. Optional length supplies Re_L. Preserve
+  valid flow states when a viscosity correlation is outside its fitted range,
+  and retain all output options through unit changes and settings replay.
+
+- Add thermal gas selection, upstream static temperatures, Mach sweeps, and
+  settings replay to the normal-shock GUI. Extend the supersonic pitot ratio
+  to frozen thermally perfect gases; retain valid shock results when only the
+  pitot stagnation state is outside the model range.
+
+- Extend weak conical shocks and physical attached-cone limits to frozen
+  thermally perfect gases using temperature-dependent Taylor--Maccoll flow.
+  Enforce static temperature ranges through the cone surface and add thermal
+  gas selection, temperatures, sweeps, and settings replay to the conical GUI.
+
+- Extend normal and oblique shock relations to frozen thermally perfect gases
+  using NASA7/NASA9 or harmonic-oscillator heat capacities and upstream static
+  temperature, including weak/strong angle inversion and attached limits.
+  Add gas selection, static temperatures, and settings replay to the oblique
+  shock GUI while preserving the constant-gamma default.
 
 - Add a fused ``isentropic_analysis`` API that reuses solved flow and critical
   states when ratios, area, mass-flow, and absolute-state results are needed
@@ -13,6 +71,16 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Build and validate release artifacts before publishing them from a separate
+  job with repository write access. Verify wheel and source-distribution
+  installations in clean environments.
+- Clarify oblique, conical and detached shock GUI schematics with shaded bodies,
+  horizontal angle references, labelled angle arcs and physical flow-direction
+  arrows. Use bounded shock rays to keep near-normal shocks readable, and show
+  detached-shock nose radius, standoff distance and upstream coordinate direction.
+  Display flow from left to right consistently across all three schematics.
+  Label oblique upstream/downstream and conical upstream/surface arrows with
+  solved Mach numbers, matching the normal-shock and expansion schematics.
 - Validate imported GUI settings against calculator-specific input, model, and
   sweep schemas before applying them, including finite and JSON-safe values.
 - Use the fused isentropic analysis path in GUI sweeps so thermally perfect and
@@ -27,6 +95,23 @@ uses Semantic Versioning, including during the pre-1.0 period.
   regenerate that record before documentation builds.
 
 ### Fixed
+
+- Update locked urllib3 to 2.8.0 to address streaming-response and HTTPS-proxy
+  TLS vulnerabilities reported by the release dependency audit.
+- Use the supplied boundary-layer edge viscosity consistently in Eckert and
+  Van Driest II compressibility corrections.
+- Bind the GUI launcher to the loopback interface by default.
+
+- Keep the downstream Mach arrow between the convex wall and the final Mach
+  line in expansion schematics, including narrow sectors at large turns.
+
+- Render conical-shock sweep inputs and the calculation button without solving
+  the attached limit first; use an editable 0--30 degree initial angle range.
+
+- Preserve an in-range thermal conical attached limit when its temperature
+  boundary is close to the physical maximum. Distinguish shock convergence
+  failures from range and detachment errors, and retain failed GUI sweep points
+  without discarding later valid results.
 
 - Keep Beattie--Bridgeman density inversion on the lowest-density stable gas
   branch when custom coefficients permit multiple roots.
@@ -167,7 +252,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Typed public APIs, cross-platform CI, Sphinx documentation, and validated
   examples.
 
-[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/pandorobo11/aerophysics/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pandorobo11/aerophysics/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.5.0
 [0.4.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.4.0

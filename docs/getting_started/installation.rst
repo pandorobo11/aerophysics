@@ -6,7 +6,7 @@ available, install the current wheel from the `latest GitHub Release`_:
 
 .. code-block:: console
 
-   python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
+   python -m pip install "https://github.com/pandorobo11/aerophysics/releases/download/v0.7.0/aerophysics-0.7.0-py3-none-any.whl"
 
 Check the release page for a newer version before copying a versioned URL.
 
@@ -23,7 +23,7 @@ Install the GUI extra and launch the local Streamlit application:
 
 .. code-block:: console
 
-   python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.6.0/aerophysics-0.6.0-py3-none-any.whl"
+   python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.7.0/aerophysics-0.7.0-py3-none-any.whl"
    aerophysics-gui
 
 The wheel includes an offline copy of this manual. See :doc:`../guides/gui`

@@ -13,4 +13,18 @@ class NoAttachedShockError(ValueError):
     """Raised when no attached oblique- or conical-shock solution exists."""
 
 
-__all__ = ["ApplicabilityWarning", "ModelRangeError", "NoAttachedShockError"]
+class ShockConvergenceError(RuntimeError):
+    """Raised when a shock solver cannot resolve the requested numerical solution."""
+
+
+class ExpansionConvergenceError(RuntimeError):
+    """Raised when a centered expansion cannot be resolved numerically."""
+
+
+__all__ = [
+    "ApplicabilityWarning",
+    "ExpansionConvergenceError",
+    "ModelRangeError",
+    "NoAttachedShockError",
+    "ShockConvergenceError",
+]

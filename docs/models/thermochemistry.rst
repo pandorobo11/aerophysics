@@ -107,7 +107,8 @@ fitted range of 200--6000 K:
 
 The two models are useful for comparing polynomial parameterizations. The
 isentropic API accepts them together with total temperature and integrates
-their enthalpy and entropy variation. Shock and Prandtl--Meyer APIs remain
+their enthalpy and entropy variation. Normal, oblique, and conical shocks also
+accept these models with upstream static temperature; Prandtl--Meyer remains
 calorically perfect. Substituting a local :math:`\gamma(T)` into a
 constant-:math:`\gamma` relation does not make that relation thermally
 perfect.
