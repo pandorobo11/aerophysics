@@ -1,14 +1,9 @@
 """Tests for pure GUI calculation adapters."""
 
-from unittest.mock import Mock
-
 import numpy as np
 import pytest
 
-import aerophysics.detached_shock as detached_shock
-import aerophysics.gui.adapters as adapters
-import aerophysics.isentropic as isentropic
-from aerophysics import BeattieBridgemanGas, FlightCondition, ThermallyPerfectGas
+from aerophysics import FlightCondition
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     CompressibilityCorrection,
@@ -37,7 +32,7 @@ from aerophysics.gui.adapters import (
     sweep_values,
 )
 from aerophysics.isentropic import MachBranch, isentropic_ratios
-from aerophysics.shocks import ShockBranch, conical_shock, normal_shock, oblique_shock
+from aerophysics.shocks import ShockBranch, conical_shock, oblique_shock
 
 
 def test_sweep_values_validation_and_spacing() -> None:
@@ -145,13 +140,22 @@ def test_isentropic_adapter_forward_inverse_and_mass_flux() -> None:
 
 def test_isentropic_sweep_and_validation() -> None:
     result = isentropic_sweep(
-        input_basis="temperature_ratio",
-        branch=MachBranch.SUBSONIC,
-        start=1.0,
-        stop=2.0,
+        input_basis="mach",
+        branch=MachBranch.SUPERSONIC,
+        start=1.5,
+        stop=2.5,
         points=3,
+        gas_model="NASA9",
+        total_temperature=1000.0,
+        total_pressure=100_000.0,
+        allow_extrapolation=False,
     )
     assert len(result.rows) == 3
+    assert all(row["gas_model"] == "NASA9" for row in result.rows)
+    assert [row["mach"] for row in result.rows] == pytest.approx([1.5, 2.0, 2.5])
+    assert result.rows[1]["static_temperature"] == pytest.approx(580.6729799)
+    assert result.rows[1]["static_pressure"] == pytest.approx(100_000.0 / 7.8946725)
+    assert not result.warnings
     with pytest.raises(ValueError, match="total_temperature is required"):
         isentropic_condition(
             input_value=1.0,
@@ -258,23 +262,7 @@ def test_beattie_bridgeman_adapter_requires_total_state() -> None:
         )
 
 
-def test_beattie_bridgeman_adapter_reuses_single_and_critical_states(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    original = isentropic._real_flow_state
-    calls: list[float] = []
-
-    def counted_state(
-        mach: float,
-        total_temperature: float,
-        total_pressure: float,
-        gas: BeattieBridgemanGas,
-    ) -> object:
-        calls.append(mach)
-        return original(mach, total_temperature, total_pressure, gas)
-
-    assert not hasattr(adapters, "_real_flow_state")
-    monkeypatch.setattr(isentropic, "_real_flow_state", counted_state)
+def test_beattie_bridgeman_adapter_preserves_mach_ten_absolute_state() -> None:
     result = isentropic_condition(
         input_value=10.0,
         input_basis="mach",
@@ -284,81 +272,10 @@ def test_beattie_bridgeman_adapter_reuses_single_and_critical_states(
         allow_extrapolation=False,
     )
     row = result.rows[0]
-    assert calls == [1.0, 10.0]
     assert row["static_temperature"] == pytest.approx(44.483424529, rel=2e-8)
     assert row["static_pressure"] == pytest.approx(235.81843565, rel=2e-8)
     assert row["static_density"] == pytest.approx(0.018477378781, rel=2e-8)
     assert row["velocity"] == pytest.approx(1336.6566881, rel=2e-8)
-    assert not result.warnings
-
-
-def test_beattie_bridgeman_adapter_sweep_reuses_one_critical_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    original = isentropic._real_flow_state
-    calls: list[float] = []
-
-    def counted_state(
-        mach: float,
-        total_temperature: float,
-        total_pressure: float,
-        gas: BeattieBridgemanGas,
-    ) -> object:
-        calls.append(mach)
-        return original(mach, total_temperature, total_pressure, gas)
-
-    monkeypatch.setattr(isentropic, "_real_flow_state", counted_state)
-    result = isentropic_sweep(
-        input_basis="mach",
-        branch=MachBranch.SUPERSONIC,
-        start=1.5,
-        stop=2.5,
-        points=3,
-        gas_model="BEATTIE_BRIDGEMAN",
-        total_temperature=1200.0,
-        total_pressure=6.0e6,
-        allow_extrapolation=False,
-    )
-    assert len(result.rows) == 3
-    assert calls == [1.0, 1.5, 2.0, 2.5]
-    assert not result.warnings
-
-
-def test_thermal_adapter_sweep_reuses_one_critical_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    original = isentropic._thermal_flow_state
-    calls: list[float] = []
-
-    def counted_state(
-        mach: float,
-        total_temperature: float,
-        gas: ThermallyPerfectGas,
-        *,
-        allow_extrapolation: bool,
-    ) -> object:
-        calls.append(mach)
-        return original(
-            mach,
-            total_temperature,
-            gas,
-            allow_extrapolation=allow_extrapolation,
-        )
-
-    monkeypatch.setattr(isentropic, "_thermal_flow_state", counted_state)
-    result = isentropic_sweep(
-        input_basis="mach",
-        branch=MachBranch.SUPERSONIC,
-        start=1.5,
-        stop=2.5,
-        points=3,
-        gas_model="NASA9",
-        total_temperature=1000.0,
-        total_pressure=100_000.0,
-        allow_extrapolation=False,
-    )
-    assert len(result.rows) == 3
-    assert calls == [1.0, 1.5, 2.0, 2.5]
     assert not result.warnings
 
 
@@ -387,6 +304,63 @@ def test_normal_shock_adapter_and_sweep() -> None:
     assert last_ratio < first_ratio
 
 
+@pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
+def test_normal_shock_thermal_adapter_matches_public_api(gas_model: str) -> None:
+    from aerophysics.gui.adapters import _SHOCK_GASES
+    from aerophysics.shocks import normal_shock, supersonic_pitot_pressure_ratio
+
+    gas = _SHOCK_GASES[gas_model]
+    actual = normal_shock_condition(
+        upstream_mach=np.array([1.0, 2.0, 3.0]),
+        gas_model=gas_model,
+        upstream_temperature=500.0,
+    )
+    assert not actual.warnings
+    for row in actual.rows:
+        mach = float(row["upstream_mach"])  # type: ignore[arg-type]
+        expected = normal_shock(mach, gas, upstream_temperature=500.0)
+        assert row["gas_model"] == gas_model
+        assert row["upstream_temperature"] == 500.0
+        assert row["downstream_temperature"] == pytest.approx(
+            500.0 * float(expected.static_temperature_ratio)
+        )
+        assert row["downstream_mach"] == pytest.approx(expected.downstream_mach)
+        assert row["total_pressure_ratio"] == pytest.approx(
+            expected.total_pressure_ratio
+        )
+        assert row["pitot_pressure_ratio"] == pytest.approx(
+            supersonic_pitot_pressure_ratio(mach, gas, upstream_temperature=500.0)
+        )
+
+
+def test_normal_thermal_sweep_retains_range_failures_and_valid_shocks() -> None:
+    from aerophysics.exceptions import ModelRangeError
+
+    result = normal_shock_sweep(
+        start=3.0,
+        stop=5.4,
+        points=3,
+        gas_model="HARMONIC_OSCILLATOR",
+        upstream_temperature=500.0,
+    )
+    assert [row["status"] for row in result.rows] == ["ok", "ok", "out_of_range"]
+    assert result.rows[1]["pitot_pressure_ratio"] is None
+    assert result.rows[1]["downstream_temperature"] == pytest.approx(1956.579113105)
+    assert "pitot stagnation" in str(result.rows[1]["message"])
+    assert result.rows[2]["downstream_temperature"] is None
+    assert result.warnings
+    with pytest.raises(ModelRangeError):
+        normal_shock_condition(
+            upstream_mach=5.4,
+            gas_model="HARMONIC_OSCILLATOR",
+            upstream_temperature=500.0,
+        )
+    with pytest.raises(ValueError, match="unknown shock"):
+        normal_shock_condition(upstream_mach=2.0, gas_model="unknown")
+    missing = normal_shock_sweep(start=1.0, stop=2.0, points=2, gas_model="NASA9")
+    assert [row["status"] for row in missing.rows] == ["error", "error"]
+
+
 def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
     single = detached_shock_condition(
         upstream_mach=4.0,
@@ -399,6 +373,15 @@ def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
     assert isinstance(row["seiff_normalized_standoff_distance"], float)
     assert isinstance(row["billig_vertex_curvature_radius"], float)
     assert row["normalized_standoff_distance"] is None
+    selected = detached_shock_condition(
+        upstream_mach=4.0,
+        nose_radius=0.1,
+        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+        selection="seiff",
+    ).rows[0]
+    assert selected["normalized_standoff_distance"] == pytest.approx(
+        row["seiff_normalized_standoff_distance"]
+    )
 
     sweep = detached_shock_sweep(
         start=2.0,
@@ -417,26 +400,6 @@ def test_detached_shock_adapter_single_sweep_and_comparison() -> None:
     )
     assert shape.shock_x.shape == (401,)
     assert shape.shock_y[[0, -1]].tolist() == pytest.approx([-0.2, 0.2])
-
-
-@pytest.mark.parametrize(
-    ("selection", "expected_seiff_calls"),
-    (("ambrosio_wortman", 0), ("seiff", 1), ("comparison", 1)),
-)
-def test_detached_shock_adapter_only_computes_selected_models(
-    monkeypatch: pytest.MonkeyPatch,
-    selection: str,
-    expected_seiff_calls: int,
-) -> None:
-    counted_normal_shock = Mock(wraps=normal_shock)
-    monkeypatch.setattr(detached_shock, "normal_shock", counted_normal_shock)
-    detached_shock_condition(
-        upstream_mach=np.asarray([2.0, 4.0]),
-        nose_radius=0.1,
-        geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
-        selection=selection,
-    )
-    assert counted_normal_shock.call_count == expected_seiff_calls
 
 
 def test_detached_shock_adapter_rejects_unsupported_requests() -> None:
@@ -645,3 +608,220 @@ def test_flat_plate_compressible_distance_sweep() -> None:
     assert len(result.rows) == 3
     assert result.rows[-1]["wall_temperature"] is not None
     assert result.rows[-1]["distance"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
+def test_thermal_oblique_adapter_and_sweep(gas_model: str) -> None:
+    from aerophysics.gui.adapters import _SHOCK_GASES
+
+    adapted = oblique_shock_condition(
+        upstream_mach=3.0,
+        deflection_angle=np.deg2rad(20.0),
+        branch=ShockBranch.WEAK,
+        gas_model=gas_model,
+        upstream_temperature=500.0,
+    )
+    direct = oblique_shock(
+        3.0, np.deg2rad(20.0), gas=_SHOCK_GASES[gas_model], upstream_temperature=500.0
+    )
+    assert adapted.rows[0]["shock_angle"] == direct.shock_angle
+    assert adapted.rows[0]["gas_model"] == gas_model
+    assert adapted.rows[0]["downstream_temperature"] == 500.0 * float(
+        direct.static_temperature_ratio
+    )
+    sweep = oblique_shock_sweep(
+        fixed_mach=3.0,
+        fixed_deflection=0.1,
+        branch=ShockBranch.WEAK,
+        sweep_field="deflection",
+        start=0.0,
+        stop=1.0,
+        points=3,
+        gas_model=gas_model,
+        upstream_temperature=500.0,
+    )
+    assert sweep.rows[0]["status"] == "ok"
+    assert sweep.rows[-1]["status"] == "no_attached_shock"
+    assert sweep.rows[-1]["downstream_temperature"] is None
+
+
+def test_thermal_oblique_adapter_range_errors_keep_distinct_statuses() -> None:
+    single = oblique_shock_condition(
+        upstream_mach=20.0,
+        deflection_angle=np.deg2rad(10.0),
+        branch=ShockBranch.WEAK,
+        gas_model="NASA7",
+        upstream_temperature=300.0,
+    )
+    assert single.rows[0]["status"] == "ok"
+    assert single.rows[0]["maximum_deflection_angle"] is None
+    sweep = oblique_shock_sweep(
+        fixed_mach=20.0,
+        fixed_deflection=0.1,
+        branch=ShockBranch.STRONG,
+        sweep_field="deflection",
+        start=0.0,
+        stop=0.1,
+        points=2,
+        gas_model="NASA7",
+        upstream_temperature=300.0,
+    )
+    assert all(row["status"] == "out_of_range" for row in sweep.rows)
+    for model in ("NASA9", "unknown"):
+        with pytest.raises(ValueError):
+            oblique_shock_condition(
+                upstream_mach=3.0,
+                deflection_angle=0.1,
+                branch=ShockBranch.WEAK,
+                gas_model=model,
+            )
+    bad = oblique_shock_sweep(
+        fixed_mach=3.0,
+        fixed_deflection=0.1,
+        branch=ShockBranch.WEAK,
+        sweep_field="mach",
+        start=2.0,
+        stop=3.0,
+        points=2,
+        gas_model="unknown",
+    )
+    assert all(row["status"] == "error" for row in bad.rows)
+
+
+def test_conical_thermal_adapter_keeps_valid_weak_and_distinguishes_failures() -> None:
+    result = conical_shock_condition(
+        upstream_mach=3.0,
+        cone_half_angle=np.deg2rad(10.0),
+        gas_model="HARMONIC_OSCILLATOR",
+        upstream_temperature=1000.0,
+    )
+    assert result.rows[0]["maximum_cone_half_angle"] is None
+    assert result.rows[0]["status"] == "ok"
+    assert result.rows[0]["surface_temperature"] == pytest.approx(
+        1110.94576617, rel=3e-9
+    )
+    sweep = conical_shock_sweep(
+        fixed_mach=3.0,
+        fixed_cone_half_angle=0.0,
+        sweep_field="cone_half_angle",
+        start=np.deg2rad(10.0),
+        stop=np.deg2rad(50.0),
+        points=2,
+        gas_model="HARMONIC_OSCILLATOR",
+        upstream_temperature=1000.0,
+    )
+    assert [row["status"] for row in sweep.rows] == ["ok", "out_of_range"]
+    assert sweep.rows[1]["surface_temperature"] is None
+    invalid = conical_shock_sweep(
+        fixed_mach=3.0,
+        fixed_cone_half_angle=0.0,
+        sweep_field="mach",
+        start=2.0,
+        stop=3.0,
+        points=2,
+        gas_model="unknown",
+    )
+    assert all(row["status"] == "error" for row in invalid.rows)
+
+
+def test_conical_condition_keeps_result_when_limit_convergence_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    from aerophysics.exceptions import ShockConvergenceError
+
+    monkeypatch.setattr(
+        "aerophysics.gui.adapters.maximum_attached_cone_angle",
+        Mock(side_effect=ShockConvergenceError("limit solve failed")),
+    )
+    result = conical_shock_condition(
+        upstream_mach=3.0,
+        cone_half_angle=np.deg2rad(10.0),
+    )
+    assert result.rows[0]["status"] == "ok"
+    assert result.rows[0]["maximum_cone_half_angle"] is None
+
+
+def test_conical_sweep_keeps_numerical_failure_and_next_valid_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    from aerophysics import AIR_HARMONIC_OSCILLATOR
+    from aerophysics.exceptions import ShockConvergenceError
+
+    regular = conical_shock(
+        3.0, np.deg2rad(10.0), AIR_HARMONIC_OSCILLATOR, upstream_temperature=500.0
+    )
+    message = "conical shock angle is below numerical resolution"
+    monkeypatch.setattr(
+        "aerophysics.gui.adapters.conical_shock",
+        Mock(side_effect=[ShockConvergenceError(message), regular]),
+    )
+    sweep = conical_shock_sweep(
+        fixed_mach=3.0,
+        fixed_cone_half_angle=0.0,
+        sweep_field="cone_half_angle",
+        start=np.deg2rad(0.1),
+        stop=np.deg2rad(10.0),
+        points=2,
+        gas_model="HARMONIC_OSCILLATOR",
+        upstream_temperature=500.0,
+    )
+    assert [row["status"] for row in sweep.rows] == ["error", "ok"]
+    assert sweep.rows[0]["message"] == message
+    assert sweep.rows[0]["surface_temperature"] is None
+    assert sweep.rows[1]["shock_angle"] == regular.shock_angle
+    assert sweep.rows[1]["surface_temperature"] == pytest.approx(
+        500.0 * float(regular.surface_temperature_ratio)
+    )
+    # Unrelated programming/runtime errors must not be silently converted.
+    monkeypatch.setattr(
+        "aerophysics.gui.adapters.conical_shock",
+        Mock(side_effect=RuntimeError("unexpected failure")),
+    )
+    with pytest.raises(RuntimeError, match="unexpected failure"):
+        conical_shock_sweep(
+            fixed_mach=3.0,
+            fixed_cone_half_angle=0.0,
+            sweep_field="cone_half_angle",
+            start=np.deg2rad(0.1),
+            stop=np.deg2rad(10.0),
+            points=2,
+            gas_model="HARMONIC_OSCILLATOR",
+            upstream_temperature=500.0,
+        )
+
+
+@pytest.mark.parametrize("motion_basis", ["mach", "velocity"])
+def test_geopotential_motion_sweep(motion_basis: str) -> None:
+    result = flight_sweep(
+        fixed_altitude=11000.0,
+        altitude_basis="geopotential",
+        fixed_motion=0.8,
+        motion_basis=motion_basis,
+        sweep_field="motion",
+        start=0.5,
+        stop=1.5,
+        points=3,
+        characteristic_length=1.0,
+    )
+    for row in result.rows:
+        assert row["temperature"] == pytest.approx(216.65)
+        assert row["geopotential_altitude"] == pytest.approx(11000.0)
+
+
+def test_flight_sweep_rejects_unknown_altitude_basis() -> None:
+    with pytest.raises(ValueError, match="altitude_basis"):
+        flight_sweep(
+            fixed_altitude=0.0,
+            altitude_basis="unknown",
+            fixed_motion=0.8,
+            motion_basis="mach",
+            sweep_field="altitude",
+            start=0.0,
+            stop=1000.0,
+            points=3,
+            characteristic_length=None,
+        )

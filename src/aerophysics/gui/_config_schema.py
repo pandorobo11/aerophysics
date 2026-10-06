@@ -76,17 +76,85 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
             "motion": _NON_NEGATIVE,
             "characteristic_length": _NULLABLE_POSITIVE,
         },
-        models={"motion_basis": _choice("mach", "velocity")},
+        models={
+            "motion_basis": _choice("mach", "velocity"),
+            "altitude_basis": _choice("geometric", "geopotential", required=False),
+        },
         sweep_variables=frozenset({"altitude", "motion"}),
     ),
     "oblique_shock": _CalculatorSchema(
-        inputs={"upstream_mach": _SUPERSONIC, "deflection_angle": _NON_NEGATIVE},
-        models={"branch": _choice("weak", "strong")},
+        inputs={
+            "characteristic_length": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_pressure": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_mach": _SUPERSONIC,
+            "deflection_angle": _NON_NEGATIVE,
+            "upstream_temperature": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+        },
+        models={
+            "viscosity_model": _choice(
+                "Sutherland", "Keyes", "Blottner/Wilke", required=False
+            ),
+            "with_heat_capacities": _FieldRule("bool", required=False),
+            "branch": _choice("weak", "strong"),
+            "gas_model": _choice(
+                "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
+            ),
+        },
         sweep_variables=frozenset({"deflection", "mach"}),
     ),
     "conical_shock": _CalculatorSchema(
-        inputs={"upstream_mach": _SUPERSONIC, "cone_half_angle": _NON_NEGATIVE},
-        models={},
+        inputs={
+            "characteristic_length": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_pressure": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_mach": _SUPERSONIC,
+            "cone_half_angle": _NON_NEGATIVE,
+            "upstream_temperature": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+        },
+        models={
+            "viscosity_model": _choice(
+                "Sutherland", "Keyes", "Blottner/Wilke", required=False
+            ),
+            "with_heat_capacities": _FieldRule("bool", required=False),
+            "gas_model": _choice(
+                "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
+            ),
+        },
         sweep_variables=frozenset({"cone_half_angle", "mach"}),
         maximum_sweep_points=201,
     ),
@@ -112,11 +180,22 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
     ),
     "isentropic": _CalculatorSchema(
         inputs={
+            "characteristic_length": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
             "input_value": _NON_NEGATIVE,
             "total_pressure": _NULLABLE_POSITIVE,
             "total_temperature": _NULLABLE_POSITIVE,
         },
         models={
+            "viscosity_model": _choice(
+                "Sutherland", "Keyes", "Blottner/Wilke", required=False
+            ),
+            "with_heat_capacities": _FieldRule("bool", required=False),
             "input_basis": _choice(
                 "mach",
                 "temperature_ratio",
@@ -139,13 +218,58 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
         sweep_variables=frozenset({"input_value"}),
     ),
     "normal_shock": _CalculatorSchema(
-        inputs={"upstream_mach": _number(minimum=1.0)},
-        models={},
+        inputs={
+            "characteristic_length": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_pressure": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+            "upstream_mach": _number(minimum=1.0),
+            "upstream_temperature": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+        },
+        models={
+            "viscosity_model": _choice(
+                "Sutherland", "Keyes", "Blottner/Wilke", required=False
+            ),
+            "with_heat_capacities": _FieldRule("bool", required=False),
+            "gas_model": _choice(
+                "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
+            ),
+        },
         sweep_variables=frozenset({"upstream_mach"}),
     ),
     "expansion": _CalculatorSchema(
-        inputs={"upstream_mach": _number(minimum=1.0), "turn_angle": _NON_NEGATIVE},
-        models={},
+        inputs={
+            "upstream_mach": _number(minimum=1.0),
+            "turn_angle": _NON_NEGATIVE,
+            "upstream_temperature": _FieldRule(
+                "number",
+                required=False,
+                nullable=True,
+                minimum=0.0,
+                exclusive_minimum=True,
+            ),
+        },
+        models={
+            "gas_model": _choice(
+                "AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR", required=False
+            )
+        },
         sweep_variables=frozenset({"turn_angle", "mach"}),
     ),
     "detached_shock": _CalculatorSchema(
@@ -234,7 +358,7 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
 
 def calculator_names() -> frozenset[str]:
     """Return the calculator discriminators supported by schema version one."""
-    return frozenset(_SCHEMAS)
+    return frozenset(_SCHEMAS) | {"flow_sequence"}
 
 
 def _validate_number(value: object, rule: _FieldRule, path: str) -> float:
@@ -355,6 +479,16 @@ def validate_calculator_payload(
     has_sweep: bool,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object] | None]:
     """Validate and normalize one calculator-discriminated payload."""
+    if calculator == "flow_sequence":
+        from aerophysics.gui.sequence_adapter import validate_sequence_payload
+
+        if mode != "single" or has_sweep:
+            raise _SchemaError("flow_sequence supports only single mode")
+        try:
+            inputs, gas = validate_sequence_payload(inputs_si, models)
+        except (ValueError, TypeError) as error:
+            raise _SchemaError(str(error)) from error
+        return inputs, gas, None
     schema = _SCHEMAS[calculator]
     normalized_inputs = _validate_object(inputs_si, schema.inputs, "inputs_si")
     normalized_models = _validate_object(models, schema.models, "models")

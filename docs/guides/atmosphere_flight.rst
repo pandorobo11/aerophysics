@@ -21,6 +21,30 @@ The input is geometric altitude in metres. The implemented range is -5 to
 86 km; this is a reference atmosphere, not a weather forecast. See
 :doc:`../models/gas_and_atmosphere` for equations and all returned fields.
 
+GUI altitude coordinate
+-----------------------
+
+The atmosphere/flight page accepts either geometric altitude ``h`` (the
+default) or geopotential altitude ``H``. The selected coordinate applies to
+the altitude input, altitude sweep bounds, and plot axes. Changing the
+selection reinterprets the entered numbers in the selected coordinate.
+Both altitudes remain available in the result table and CSV.
+
+The existing conversion is ``H = R h / (R + h)``, with
+``R = 6,356,766 m``; its inverse is ``h = R H / (R - H)``. Altitudes are
+positive upwards from sea level. The valid range remains geometric
+-5,000 to 86,000 m (approximately -5,003.936 to 84,852.046 geopotential m).
+Values outside that physical range are rejected after conversion. The
+standard-atmosphere model and Python API are unchanged.
+
+Saved settings store the resolved geometric altitude in
+``inputs_si.geometric_altitude`` and the selection in
+``models.altitude_basis``. Sweep bounds use the selected coordinate in metres.
+Older settings without ``altitude_basis`` use geometric altitude.
+The flow-sequence page also offers this selection for standard-atmosphere
+initialization; its ``inputs_si.initial.altitude`` is in the coordinate stored
+in ``inputs_si.initial.altitude_basis`` (geometric when omitted).
+
 Mach-defined flight condition
 -----------------------------
 

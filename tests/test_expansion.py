@@ -40,26 +40,7 @@ def test_inverse_round_trip_vectorizes_and_expands_bracket() -> None:
     assert_allclose(result, mach, rtol=1e-11, atol=1e-11)
 
 
-def test_ten_degree_expansion_from_mach_two() -> None:
-    result = prandtl_meyer_expansion(2.0, float(degrees_to_radians(10.0)))
-    assert result.downstream_mach == pytest.approx(2.38488715, rel=1e-8)
-    assert result.static_temperature_ratio == pytest.approx(0.84209055, rel=1e-8)
-    assert result.static_pressure_ratio == pytest.approx(0.54796873, rel=1e-8)
-    assert result.static_density_ratio == pytest.approx(0.65072424, rel=1e-8)
-    assert result.downstream_prandtl_meyer_angle == pytest.approx(
-        float(result.upstream_prandtl_meyer_angle) + float(result.turn_angle)
-    )
-
-
-def test_zero_turn_is_identity() -> None:
-    result = prandtl_meyer_expansion(3.0, 0.0)
-    assert result.downstream_mach == pytest.approx(3.0)
-    assert result.static_temperature_ratio == pytest.approx(1.0)
-    assert result.static_pressure_ratio == pytest.approx(1.0)
-    assert result.static_density_ratio == pytest.approx(1.0)
-
-
-def test_expansion_broadcasts() -> None:
+def test_expansion_reference_values_zero_turn_and_broadcasting() -> None:
     result = prandtl_meyer_expansion(
         [[2.0], [3.0]], degrees_to_radians([0.0, 5.0, 10.0])
     )
@@ -76,9 +57,20 @@ def test_expansion_broadcasts() -> None:
         assert isinstance(value, np.ndarray)
         assert value.shape == (2, 3)
         assert value.dtype == np.float64
-    assert np.all(
-        np.asarray(result.downstream_mach) >= np.asarray(result.upstream_mach)
+    for value, reference, identity in (
+        (result.downstream_mach, 2.38488715, 3.0),
+        (result.static_temperature_ratio, 0.84209055, 1.0),
+        (result.static_pressure_ratio, 0.54796873, 1.0),
+        (result.static_density_ratio, 0.65072424, 1.0),
+    ):
+        assert np.asarray(value)[0, 2] == pytest.approx(reference, rel=1e-8)
+        assert np.asarray(value)[1, 0] == pytest.approx(identity)
+    assert np.asarray(result.downstream_prandtl_meyer_angle) == pytest.approx(
+        np.asarray(result.upstream_prandtl_meyer_angle) + np.asarray(result.turn_angle)
     )
+    scalar = prandtl_meyer_expansion(2.0, float(degrees_to_radians(10.0)))
+    assert isinstance(scalar.downstream_mach, float)
+    assert scalar.downstream_mach == pytest.approx(2.38488715, rel=1e-8)
 
 
 def test_custom_gas() -> None:

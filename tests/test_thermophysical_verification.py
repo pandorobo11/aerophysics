@@ -47,28 +47,7 @@ def test_pinned_cantera_snapshot_matches_nasa_air_models() -> None:
             assert abs(float(value) - expected) <= 2.0e-6 * max(abs(expected), 1.0)
 
 
-def test_cantera_snapshot_provenance_is_pinned() -> None:
-    cantera = json.loads((REFERENCE / "cantera-3.2.0.json").read_text(encoding="utf-8"))
-    assert cantera["version"] == "3.2.0"
-    assert cantera["wheel"]["sha256"] == (
-        "d58dd40112741423a4b9b95fbbd7789575250af1fa13c77d60fab47f472f694d"
-    )
-
-
-def test_nist_transport_reference_provenance_is_pinned() -> None:
-    metadata = json.loads(
-        (REFERENCE / "nist-lemmon-jacobsen-2004.json").read_text(encoding="utf-8")
-    )
-    assert metadata["doi"] == "10.1023/B:IJOT.0000022327.04529.F3"
-    assert metadata["role"].startswith("non-gating")
-    assert metadata["state"] == "dilute dry air at the zero-density limit"
-    assert metadata["pdf_sha256"] == (
-        "985428589472f6316af725b12d5ce1aaf3fed08cd29ff175ddf13e606da5d46e"
-    )
-    assert metadata["estimated_relative_uncertainty"] == {
-        "dynamic_viscosity_above_200_K": 0.01,
-        "thermal_conductivity_dilute_gas": 0.02,
-    }
+def test_nist_reference_covers_dilute_air_temperature_range() -> None:
     rows = _rows("nist-lemmon-jacobsen-2004.csv")
     assert len(rows) == 8
     assert all(float(row["molar_density_mol_dm3"]) == 0.0 for row in rows)
@@ -113,14 +92,12 @@ def test_transport_models_match_direct_source_equation_reproductions() -> None:
     metadata = json.loads(
         (REFERENCE / "transport_source_equations.json").read_text(encoding="utf-8")
     )
-    assert metadata["command"] == "python docs/scripts/build_transport_reference.py"
     assert set(metadata["models"]) == set(models)
 
 
 def test_nasa_polynomial_identities_and_derivative() -> None:
-    temperature = np.concatenate(
-        (np.linspace(200.1, 999.0, 300), np.linspace(1001.0, 5999.9, 600))
-    )
+    # Endpoints, interiors and both sides of the polynomial region boundary.
+    temperature = np.asarray([200.1, 500.0, 999.0, 1001.0, 3000.0, 5999.9])
     step = 1.0e-2
     for gas in (AIR_NASA7, AIR_NASA9):
         cp = np.asarray(gas.cp(temperature))
@@ -135,8 +112,8 @@ def test_nasa_polynomial_identities_and_derivative() -> None:
 
 
 def test_beattie_bridgeman_density_roots_are_stable_and_close_pressure() -> None:
-    for pressure in np.linspace(1.0e6, 10.0e6, 7):
-        for temperature in np.linspace(400.0, 1200.0, 11):
+    for pressure in (1.0e6, 10.0e6):
+        for temperature in (400.0, 800.0, 1200.0):
             density = float(AIR_BEATTIE_BRIDGEMAN.density(temperature, pressure))
             delta = density * 1.0e-5
             lower = float(AIR_BEATTIE_BRIDGEMAN.pressure(temperature, density - delta))

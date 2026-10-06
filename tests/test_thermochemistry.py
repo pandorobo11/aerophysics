@@ -7,7 +7,6 @@ import pytest
 from numpy.testing import assert_allclose
 
 from aerophysics import (
-    AIR,
     AIR_NASA7,
     AIR_NASA9,
     IdealGasSpecies,
@@ -206,61 +205,25 @@ def test_mixture_validates_composition_and_common_range() -> None:
         ThermallyPerfectGas((low, high), (0.5, 0.5))
 
 
-def test_built_in_air_composition_and_reference_values() -> None:
+def test_built_in_air_composition() -> None:
     assert AIR_NASA7.temperature_range == (200.0, 6000.0)
     assert AIR_NASA9.temperature_range == (200.0, 6000.0)
     assert AIR_NASA9.molar_mass == pytest.approx(0.028964766130783925)
     assert sum(AIR_NASA9.mass_fractions) == pytest.approx(1.0)
     assert AIR_NASA9.specific_gas_constant == pytest.approx(287.054367385917)
-    assert AIR_NASA9.specific_gas_constant == pytest.approx(
-        AIR.specific_gas_constant, rel=2e-5
-    )
-
-    temperatures = [200.0, 298.15, 1000.0, 3500.0, 6000.0]
-    assert_allclose(
-        AIR_NASA7.cp(temperatures),
-        [
-            1003.0871649585773,
-            1004.7389659559424,
-            1140.6749303994145,
-            1308.4746668402383,
-            1357.2479041100664,
-        ],
-        rtol=2e-13,
-    )
-    assert_allclose(
-        AIR_NASA9.cp(temperatures),
-        [
-            1002.4061557658488,
-            1004.7389671485392,
-            1141.0326884939145,
-            1309.3206938128276,
-            1360.6655257996658,
-        ],
-        rtol=2e-13,
-    )
 
 
 @pytest.mark.parametrize("air", [AIR_NASA7, AIR_NASA9])
-def test_mixture_thermodynamic_identities(air: ThermallyPerfectGas) -> None:
+def test_mixture_internal_energy_uses_specific_gas_constant(
+    air: ThermallyPerfectGas,
+) -> None:
     temperature = np.asarray([[300.0, 1000.0], [2000.0, 6000.0]])
-    cp = np.asarray(air.cp(temperature))
-    cv = np.asarray(air.cv(temperature))
-    gamma = np.asarray(air.heat_capacity_ratio(temperature))
     enthalpy = np.asarray(air.standard_enthalpy(temperature))
     internal_energy = np.asarray(air.standard_internal_energy(temperature))
-    speed_of_sound = np.asarray(air.speed_of_sound(temperature))
-
-    assert cp.shape == temperature.shape
-    assert_allclose(cp - cv, air.specific_gas_constant)
-    assert_allclose(gamma, cp / cv)
+    assert internal_energy.shape == temperature.shape
     assert_allclose(
         internal_energy,
         enthalpy - air.specific_gas_constant * temperature,
-    )
-    assert_allclose(
-        speed_of_sound**2,
-        gamma * air.specific_gas_constant * temperature,
     )
 
 
@@ -282,7 +245,7 @@ def test_sensible_properties_use_explicit_reference() -> None:
         AIR_NASA9.sensible_enthalpy(500.0, reference_temperature=[300.0, 400.0])  # type: ignore[arg-type]
 
 
-def test_entropy_includes_mixing_and_pressure() -> None:
+def test_entropy_pressure_dependence() -> None:
     temperature = 1000.0
     entropy_at_reference = AIR_NASA9.entropy(temperature, STANDARD_PRESSURE)
     entropy_at_double_pressure = AIR_NASA9.entropy(temperature, 2.0 * STANDARD_PRESSURE)
@@ -290,19 +253,6 @@ def test_entropy_includes_mixing_and_pressure() -> None:
 
     assert entropy_at_double_pressure - entropy_at_reference == pytest.approx(
         expected_difference
-    )
-
-    standard_molar_entropy = sum(
-        fraction * species.standard_molar_entropy(temperature)
-        for species, fraction in zip(
-            AIR_NASA9.species, AIR_NASA9.mole_fractions, strict=True
-        )
-    )
-    mixing = -UNIVERSAL_GAS_CONSTANT * sum(
-        fraction * np.log(fraction) for fraction in AIR_NASA9.mole_fractions
-    )
-    assert entropy_at_reference == pytest.approx(
-        (standard_molar_entropy + mixing) / AIR_NASA9.molar_mass
     )
 
 

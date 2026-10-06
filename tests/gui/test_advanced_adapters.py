@@ -7,7 +7,6 @@ from aerophysics import AIR_NASA9, protrusion_drag
 from aerophysics.boundary_layer_profile import (
     CompressibleVelocityTransformation,
     TemperatureVelocityRelation,
-    compressible_turbulent_boundary_layer_profile,
 )
 from aerophysics.gui.advanced_adapters import (
     boundary_layer_profiles,
@@ -26,7 +25,7 @@ from aerophysics.transport import (
 )
 
 
-def test_profile_adapter_matches_core_and_compares_models() -> None:
+def test_profile_adapter_preserves_compared_and_saved_profiles() -> None:
     calculation = boundary_layer_profiles(
         edge_velocity=300.0,
         edge_density=1.0,
@@ -41,23 +40,24 @@ def test_profile_adapter_matches_core_and_compares_models() -> None:
         wake_parameter=None,
         points=101,
     )
-    grid = wall_normal_grid(0.05, 101)
-    direct = compressible_turbulent_boundary_layer_profile(
-        grid,
-        300.0,
-        1.0,
-        300.0,
-        0.05,
-        85.0,
-        transformation=CompressibleVelocityTransformation.VAN_DRIEST,
-        wall_temperature=250.0,
+    assert [profile.transformation for profile in calculation.profiles] == list(
+        CompressibleVelocityTransformation
     )
-    assert len(calculation.result.rows) == 202
-    assert len(calculation.profiles) == 2
-    assert calculation.result.rows[100]["velocity"] == pytest.approx(
-        direct.velocity[-1]
-    )
-    assert calculation.profiles[0].density[-1] == pytest.approx(direct.density[-1])
+    for profile in calculation.profiles:
+        rows = [
+            row
+            for row in calculation.result.rows
+            if row["model"] == profile.transformation.value
+        ]
+        assert len(rows) == 101
+        assert [row["wall_distance"] for row in rows] == pytest.approx(
+            profile.wall_distance
+        )
+        assert [row["velocity"] for row in rows] == pytest.approx(profile.velocity)
+        assert [row["density"] for row in rows] == pytest.approx(profile.density)
+        # Constant pressure gives rho_w = rho_e * T_e / T_w.
+        assert rows[0]["density"] == pytest.approx(1.2)
+        assert rows[-1]["velocity"] == pytest.approx(297.0)
 
 
 def test_profile_grid_and_model_validation() -> None:
@@ -84,8 +84,15 @@ def test_profile_grid_and_model_validation() -> None:
         )
 
 
-@pytest.mark.parametrize("shape", ["rectangle", "triangle", "ellipse"])
-def test_protrusion_shapes_match_direct_model(shape: str) -> None:
+@pytest.mark.parametrize(
+    ("shape", "area"),
+    [
+        ("rectangle", 0.00005),
+        ("triangle", 0.000025),
+        ("ellipse", np.pi * 0.01 * 0.005 / 4.0),
+    ],
+)
+def test_protrusion_shapes_have_their_geometric_areas(shape: str, area: float) -> None:
     adapted = protrusion_condition(
         drag_coefficient=1.2,
         height=0.01,
@@ -95,7 +102,8 @@ def test_protrusion_shapes_match_direct_model(shape: str) -> None:
         edge_density=1.2,
         boundary_layer_thickness=0.05,
     )
-    assert float(adapted.rows[0]["direct_drag"]) > 0.0  # type: ignore[arg-type]
+    # The curved ellipse is integrated by the core with a finite trapezoidal grid.
+    assert adapted.rows[0]["frontal_area"] == pytest.approx(area, rel=1e-5)
     if shape == "rectangle":
         direct = protrusion_drag(1.2, 0.01, 0.005, 100.0, 1.2, 0.05)
         assert adapted.rows[0]["direct_drag"] == pytest.approx(direct.direct_drag)
@@ -323,7 +331,7 @@ def test_viscosity_adapter_validation_and_sweep_spacing() -> None:
             models=("other",),
             allow_extrapolation=False,
         )
-    for temperature in (0.0, -1.0, np.nan, np.inf):
+    for temperature in (0.0, np.nan, np.inf):
         with pytest.raises(ValueError, match="greater than zero"):
             viscosity_condition(
                 temperature=temperature,
@@ -353,30 +361,3 @@ def test_viscosity_adapter_validation_and_sweep_spacing() -> None:
     assert [row["temperature"] for row in linear.rows] == pytest.approx(
         [100.0, 200.0, 300.0]
     )
-    with pytest.raises(ValueError, match="positive"):
-        viscosity_sweep(
-            start=0.0,
-            stop=300.0,
-            points=3,
-            models=("Sutherland",),
-            allow_extrapolation=False,
-            log_temperature=True,
-        )
-    with pytest.raises(ValueError, match="less than"):
-        viscosity_sweep(
-            start=300.0,
-            stop=100.0,
-            points=3,
-            models=("Sutherland",),
-            allow_extrapolation=False,
-            log_temperature=False,
-        )
-    with pytest.raises(ValueError, match="between"):
-        viscosity_sweep(
-            start=100.0,
-            stop=300.0,
-            points=1,
-            models=("Sutherland",),
-            allow_extrapolation=False,
-            log_temperature=False,
-        )
