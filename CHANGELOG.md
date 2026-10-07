@@ -7,6 +7,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Keep Billig shock coordinates as owned, read-only snapshots so input-array
+  changes cannot alter a previously computed shock shape.
 - Reload flat-plate GUI settings with an unspecified Mach number when
   compressibility correction is disabled.
 - Preserve validated sequence temperatures at thermal range boundaries when
