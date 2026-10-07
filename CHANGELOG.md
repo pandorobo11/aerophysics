@@ -7,6 +7,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Keep Billig shock coordinates as owned, read-only snapshots so input-array
+  changes cannot alter a previously computed shock shape.
 - Preserve validated sequence temperatures at thermal range boundaries when
   ratio restoration overshoots by exactly one ULP, while rejecting larger
   excursions and out-of-range user inputs. Bracket stagnation temperature
