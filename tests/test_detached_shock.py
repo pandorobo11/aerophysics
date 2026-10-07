@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from numpy.typing import ArrayLike
 
 from aerophysics.detached_shock import (
     DetachedShockGeometry,
@@ -155,6 +156,49 @@ def test_billig_shape_case_axis_and_asymptote() -> None:
         result.shock_y[1, 2] - result.shock_y[1, 1]
     )
     assert far_slope == pytest.approx(-1.0 / np.tan(beta), rel=2e-7)
+
+
+@pytest.mark.parametrize("geometry", tuple(DetachedShockGeometry))
+@pytest.mark.parametrize(
+    "mach,radius,expected_shape",
+    [(4.0, 1.0, (3,)), ([[2.0], [4.0]], [1.0, 2.0, 3.0], (2, 3, 3))],
+    ids=("scalar-case", "broadcast-cases"),
+)
+def test_billig_shape_keeps_coordinates_after_input_mutation(
+    geometry: DetachedShockGeometry,
+    mach: ArrayLike,
+    radius: ArrayLike,
+    expected_shape: tuple[int, ...],
+) -> None:
+    transverse = np.asarray([-0.1, 0.0, 0.1])
+    result = billig_shock_shape(mach, radius, transverse, geometry=geometry)
+    expected_x = result.shock_x.copy()
+    expected_y = np.broadcast_to(transverse, expected_shape).copy()
+
+    assert transverse.flags.writeable
+    transverse[:] = [-10.0, 0.0, 10.0]
+
+    np.testing.assert_array_equal(result.shock_x, expected_x)
+    np.testing.assert_array_equal(result.shock_y, expected_y)
+    np.testing.assert_array_equal(result.transverse_coordinates, expected_y)
+    for coordinates in (result.shock_x, result.shock_y, result.transverse_coordinates):
+        assert coordinates.shape == expected_shape
+        assert coordinates.dtype == np.dtype(np.float64)
+        assert coordinates.flags.owndata
+        assert not np.shares_memory(coordinates, transverse)
+
+
+@pytest.mark.parametrize("geometry", tuple(DetachedShockGeometry))
+@pytest.mark.parametrize("mach", [4.0, [[2.0], [4.0]]], ids=("scalar", "array"))
+def test_billig_shape_coordinates_are_read_only(
+    geometry: DetachedShockGeometry, mach: ArrayLike
+) -> None:
+    result = billig_shock_shape(mach, 1.0, [-0.1, 0.0, 0.1], geometry=geometry)
+
+    for coordinates in (result.shock_x, result.shock_y, result.transverse_coordinates):
+        assert not coordinates.flags.writeable
+        with pytest.raises(ValueError, match="read-only"):
+            coordinates.flat[0] = 0.0
 
 
 @pytest.mark.parametrize("geometry", tuple(DetachedShockGeometry))
