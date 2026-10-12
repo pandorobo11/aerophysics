@@ -64,7 +64,16 @@ class CompressibilityCorrection(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class FlatPlateBoundaryLayerResult:
-    """Local boundary-layer properties and accumulated one-sided drag."""
+    """Local boundary-layer properties and accumulated one-sided drag.
+
+    ``local_skin_friction_coefficient`` and
+    ``average_skin_friction_coefficient`` are always referred to the edge
+    dynamic pressure ``rho_e U_e**2/2`` for every compressibility correction,
+    so ``wall_shear_stress`` and ``drag_per_unit_width`` are these
+    coefficients multiplied by the edge dynamic pressure. With Eckert
+    portions, ``effective_reynolds_number`` is the reference Reynolds number
+    ``Re*`` at which the incompressible correlations are evaluated.
+    """
 
     distance: FloatResult
     reynolds_number: FloatResult
@@ -143,6 +152,21 @@ def _turbulent_thicknesses(
     return thickness, displacement, momentum
 
 
+def _edge_basis_friction(
+    correlations: tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray],
+    density_ratio: FloatArray,
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
+    """Rescale friction coefficients by ``rho*/rho_e``; thicknesses are lengths."""
+    thickness, displacement, momentum, local_friction, average_friction = correlations
+    return (
+        thickness,
+        displacement,
+        momentum,
+        density_ratio * local_friction,
+        density_ratio * average_friction,
+    )
+
+
 def _validate_model_choices(
     regime: BoundaryLayerRegime,
     turbulent_correlation: TurbulentCorrelation,
@@ -206,7 +230,15 @@ def _eckert_effective_reynolds(
     prandtl_number: float,
     gas: PerfectGas,
     viscosity_model: DynamicViscosityModel,
-) -> tuple[FloatArray, FloatArray, FloatArray]:
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
+    """Return ``Re*``, recovery and wall temperatures, and ``rho*/rho_e``.
+
+    The edge pressure is constant through the layer, so the perfect-gas
+    reference-to-edge density ratio is ``T_e/T*``.  Correlations evaluated at
+    ``Re*`` give coefficients on the reference dynamic pressure
+    ``rho* U_e**2/2``; multiplying by this ratio converts them to the edge
+    dynamic-pressure basis.
+    """
     recovery = _recovery_temperature(
         edge_temperature,
         mach,
@@ -218,18 +250,18 @@ def _eckert_effective_reynolds(
         recovery if specified_wall_temperature is None else specified_wall_temperature
     )
     reference = 0.22 * recovery + 0.28 * edge_temperature + 0.50 * wall
+    density_ratio = edge_temperature / reference
     reference_viscosity = np.asarray(
         viscosity_model.dynamic_viscosity(reference), dtype=np.float64
     )
     effective_reynolds = (
-        reynolds
-        * (edge_temperature / reference)
-        * (edge_viscosity / reference_viscosity)
+        reynolds * density_ratio * (edge_viscosity / reference_viscosity)
     )
     return (
         np.asarray(effective_reynolds, dtype=np.float64),
         recovery,
         np.asarray(wall, dtype=np.float64),
+        np.asarray(density_ratio, dtype=np.float64),
     )
 
 
@@ -444,7 +476,9 @@ def flat_plate_boundary_layer(
     compressibility_correction:
         ``NONE``, Eckert's reference-temperature method, or Van Driest II.
         With Van Driest II, laminar portions use Eckert and turbulent portions
-        use Van Driest II.
+        use Van Driest II. Eckert correlations evaluated at ``Re*`` give
+        coefficients on the reference dynamic pressure ``rho* U_e**2/2``;
+        they are converted to the edge basis with ``rho*/rho_e = T_e/T*``.
     mach, edge_temperature:
         Required for a compressibility correction. Temperature is in K.
     wall_temperature:
@@ -465,6 +499,13 @@ def flat_plate_boundary_layer(
     correlation and a one-seventh-power velocity-profile approximation.
     ``drag_per_unit_width`` is accumulated from the leading edge to
     ``distance`` on one side of the plate.
+
+    Skin-friction coefficients are reported on the edge dynamic-pressure
+    basis for all compressibility corrections. Eckert thicknesses are the
+    incompressible length correlations evaluated at ``Re*`` and are not
+    rescaled; the momentum thickness is therefore the reference-density
+    value, for which ``2 d(theta)/dx`` equals the reference-basis friction
+    coefficient.
     """
     transition = _validate_model_choices(
         regime, turbulent_correlation, transition_reynolds
@@ -537,6 +578,10 @@ def flat_plate_boundary_layer(
     turbulent_thickness_reynolds = np.asarray(reynolds, dtype=np.float64)
     turbulent_friction_factor = np.ones_like(reynolds)
     turbulent_reynolds_factor = np.ones_like(reynolds)
+    # Reference-to-edge density ratios that convert Eckert coefficients from
+    # the reference dynamic-pressure basis to the edge basis.
+    laminar_density_ratio = np.ones_like(reynolds)
+    turbulent_density_ratio = np.ones_like(reynolds)
     recovery_temperature: FloatArray | None = None
     used_wall_temperature: FloatArray | None = None
     if compressibility_correction is not CompressibilityCorrection.NONE:
@@ -557,6 +602,7 @@ def flat_plate_boundary_layer(
             laminar_reynolds,
             laminar_recovery,
             laminar_wall,
+            laminar_density_ratio,
         ) = _eckert_effective_reynolds(
             reynolds,
             edge_temperature_values,
@@ -576,6 +622,7 @@ def flat_plate_boundary_layer(
                 turbulent_friction_reynolds,
                 turbulent_recovery,
                 turbulent_wall,
+                turbulent_density_ratio,
             ) = _eckert_effective_reynolds(
                 reynolds,
                 edge_temperature_values,
@@ -621,7 +668,9 @@ def flat_plate_boundary_layer(
                 laminar_wall,
             )
 
-    laminar = _laminar_correlations(x, laminar_reynolds)
+    laminar = _edge_basis_friction(
+        _laminar_correlations(x, laminar_reynolds), laminar_density_ratio
+    )
     if regime is BoundaryLayerRegime.LAMINAR:
         selected = laminar
     elif regime is BoundaryLayerRegime.TURBULENT:
@@ -636,8 +685,11 @@ def flat_plate_boundary_layer(
                 average_i / turbulent_friction_factor,
             )
         else:
-            turbulent = _turbulent_correlations(
-                x, turbulent_friction_reynolds, turbulent_correlation
+            turbulent = _edge_basis_friction(
+                _turbulent_correlations(
+                    x, turbulent_friction_reynolds, turbulent_correlation
+                ),
+                turbulent_density_ratio,
             )
         selected = turbulent
     else:
@@ -662,19 +714,26 @@ def flat_plate_boundary_layer(
                 turbulent_reynolds_factor * np.maximum(reynolds, transition),
                 turbulent_correlation,
             )
-            turbulent = (*turbulent_thickness, local, average)
+            turbulent = (
+                *turbulent_thickness,
+                turbulent_density_ratio * local,
+                turbulent_density_ratio * average,
+            )
         laminar_transition_reynolds = laminar_reynolds / reynolds * transition
-        laminar_average = 1.328 / np.sqrt(laminar_transition_reynolds)
+        laminar_average = (
+            laminar_density_ratio * 1.328 / np.sqrt(laminar_transition_reynolds)
+        )
         if compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II:
             _, turbulent_average_i = _willems_friction(
                 turbulent_reynolds_factor * transition
             )
             turbulent_average = turbulent_average_i / turbulent_friction_factor
         else:
-            _, turbulent_average = _turbulent_friction(
+            _, turbulent_average_reference = _turbulent_friction(
                 turbulent_reynolds_factor * transition,
                 turbulent_correlation,
             )
+            turbulent_average = turbulent_density_ratio * turbulent_average_reference
         mixed_average = turbulent[4] + (transition / reynolds) * (
             laminar_average - turbulent_average
         )

@@ -155,7 +155,7 @@ def test_eckert_laminar_adiabatic_wall() -> None:
     assert result.wall_temperature == pytest.approx(recovery)
     assert result.effective_reynolds_number == pytest.approx(effective_reynolds)
     assert result.local_skin_friction_coefficient == pytest.approx(
-        0.664 / np.sqrt(effective_reynolds)
+        edge_temperature / reference * 0.664 / np.sqrt(effective_reynolds)
     )
 
 
@@ -205,7 +205,229 @@ def test_eckert_uses_supplied_edge_viscosity_in_correction() -> None:
     assert result.wall_temperature == 300.0
     assert result.effective_reynolds_number == pytest.approx(expected_reynolds)
     assert result.average_skin_friction_coefficient == pytest.approx(
-        0.074 * expected_reynolds**-0.2
+        220.0 / reference * 0.074 * expected_reynolds**-0.2
+    )
+
+
+@pytest.mark.parametrize(
+    ("correction", "regime", "transition_reynolds"),
+    [
+        (CompressibilityCorrection.ECKERT, BoundaryLayerRegime.LAMINAR, None),
+        (CompressibilityCorrection.ECKERT, BoundaryLayerRegime.TURBULENT, None),
+        (CompressibilityCorrection.ECKERT, BoundaryLayerRegime.TRANSITIONAL, 2e6),
+        (CompressibilityCorrection.VAN_DRIEST_II, BoundaryLayerRegime.LAMINAR, None),
+    ],
+)
+def test_eckert_reduces_to_none_in_incompressible_limit(
+    correction: CompressibilityCorrection,
+    regime: BoundaryLayerRegime,
+    transition_reynolds: float | None,
+) -> None:
+    # M = 0 and T_w = T_e give T* = T_r = T_e and mu* = mu_e, so the
+    # reference-density conversion T_e/T* and the Reynolds scaling are unity.
+    # Van Driest II laminar portions use Eckert; its turbulent portions use
+    # the Willems equations rather than the selected correlation.
+    edge_temperature = 250.0
+    viscosity = float(AIR_VISCOSITY.dynamic_viscosity(edge_temperature))
+    arguments: dict[str, Any] = {
+        "distance": [0.05, 0.2, 0.8],
+        "edge_velocity": 120.0,
+        "edge_density": 1.2,
+        "edge_dynamic_viscosity": viscosity,
+        "regime": regime,
+        "transition_reynolds": transition_reynolds,
+    }
+    reference = flat_plate_boundary_layer(**arguments)
+    corrected = flat_plate_boundary_layer(
+        **arguments,
+        compressibility_correction=correction,
+        mach=0.0,
+        edge_temperature=edge_temperature,
+        wall_temperature=edge_temperature,
+    )
+    for name in (
+        "effective_reynolds_number",
+        "boundary_layer_thickness",
+        "displacement_thickness",
+        "momentum_thickness",
+        "local_skin_friction_coefficient",
+        "average_skin_friction_coefficient",
+        "wall_shear_stress",
+        "drag_per_unit_width",
+    ):
+        assert_allclose(
+            getattr(corrected, name),
+            getattr(reference, name),
+            rtol=1e-12,
+            err_msg=name,
+        )
+
+
+def _hypersonic_cold_wall_state() -> tuple[float, float, float]:
+    """Return U_e, rho_e and mu_e for M=6, T_e=240 K and Re'=2e7 1/m."""
+    edge_viscosity = float(AIR_VISCOSITY.dynamic_viscosity(240.0))
+    edge_velocity = 6.0 * np.sqrt(
+        AIR.heat_capacity_ratio * AIR.specific_gas_constant * 240.0
+    )
+    edge_density = 2e7 * edge_viscosity / edge_velocity
+    return float(edge_velocity), float(edge_density), edge_viscosity
+
+
+def test_eckert_hypersonic_cold_wall_uses_reference_dynamic_pressure() -> None:
+    edge_velocity, edge_density, edge_viscosity = _hypersonic_cold_wall_state()
+    distance = np.array([0.05, 0.5, 1.0])
+    result = flat_plate_boundary_layer(
+        distance,
+        edge_velocity,
+        edge_density,
+        edge_viscosity,
+        regime=BoundaryLayerRegime.TURBULENT,
+        compressibility_correction=CompressibilityCorrection.ECKERT,
+        mach=6.0,
+        edge_temperature=240.0,
+        wall_temperature=300.0,
+    )
+
+    recovery = 240.0 * (1.0 + np.cbrt(0.72) * 0.2 * 36.0)
+    reference_temperature = 0.22 * recovery + 0.28 * 240.0 + 0.50 * 300.0
+    assert reference_temperature == pytest.approx(610.73, abs=0.01)
+    reference_density = edge_density * 240.0 / reference_temperature
+    reference_viscosity = float(AIR_VISCOSITY.dynamic_viscosity(reference_temperature))
+    reference_reynolds = (
+        reference_density * edge_velocity * distance / reference_viscosity
+    )
+    average_reference = 0.455 / np.log10(reference_reynolds) ** 2.58
+    local_reference = average_reference * (1.0 - 2.58 / np.log(reference_reynolds))
+
+    assert_allclose(result.effective_reynolds_number, reference_reynolds, rtol=1e-12)
+    assert_allclose(
+        result.wall_shear_stress,
+        0.5 * reference_density * edge_velocity**2 * local_reference,
+        rtol=1e-12,
+    )
+    assert_allclose(
+        result.drag_per_unit_width,
+        0.5 * reference_density * edge_velocity**2 * distance * average_reference,
+        rtol=1e-12,
+    )
+    edge_dynamic_pressure = 0.5 * edge_density * edge_velocity**2
+    assert_allclose(
+        result.local_skin_friction_coefficient,
+        np.asarray(result.wall_shear_stress) / edge_dynamic_pressure,
+        rtol=1e-12,
+    )
+    # Regression values for Re_x = 1e6, 1e7 and 2e7.
+    assert_allclose(
+        result.wall_shear_stress, [550.21382, 367.23657, 328.78010], rtol=1e-6
+    )
+
+
+def test_eckert_hypersonic_cold_wall_laminar_uses_reference_dynamic_pressure() -> None:
+    edge_velocity, edge_density, edge_viscosity = _hypersonic_cold_wall_state()
+    distance = np.array([0.05, 0.5])
+    arguments: dict[str, Any] = {
+        "regime": BoundaryLayerRegime.LAMINAR,
+        "mach": 6.0,
+        "edge_temperature": 240.0,
+        "wall_temperature": 300.0,
+    }
+    eckert = flat_plate_boundary_layer(
+        distance,
+        edge_velocity,
+        edge_density,
+        edge_viscosity,
+        compressibility_correction=CompressibilityCorrection.ECKERT,
+        **arguments,
+    )
+    van_driest = flat_plate_boundary_layer(
+        distance,
+        edge_velocity,
+        edge_density,
+        edge_viscosity,
+        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+        **arguments,
+    )
+
+    recovery = 240.0 * (1.0 + np.sqrt(0.72) * 0.2 * 36.0)
+    reference_temperature = 0.22 * recovery + 0.28 * 240.0 + 0.50 * 300.0
+    reference_density = edge_density * 240.0 / reference_temperature
+    reference_viscosity = float(AIR_VISCOSITY.dynamic_viscosity(reference_temperature))
+    reference_reynolds = (
+        reference_density * edge_velocity * distance / reference_viscosity
+    )
+    expected_shear = (
+        0.5 * reference_density * edge_velocity**2 * 0.664 / np.sqrt(reference_reynolds)
+    )
+    # Chapman--Rubesin form: C_f sqrt(Re_x) = 0.664 sqrt(rho* mu* / rho_e mu_e).
+    chapman_rubesin = (
+        reference_density * reference_viscosity / (edge_density * edge_viscosity)
+    )
+    edge_reynolds = edge_density * edge_velocity * distance / edge_viscosity
+
+    for result in (eckert, van_driest):
+        assert_allclose(result.wall_shear_stress, expected_shear, rtol=1e-12)
+        assert_allclose(
+            result.local_skin_friction_coefficient,
+            0.664 * np.sqrt(chapman_rubesin / edge_reynolds),
+            rtol=1e-12,
+        )
+        assert_allclose(result.drag_per_unit_width, 2.0 * distance * expected_shear)
+    # The thickness path is unchanged: Blasius lengths evaluated at Re*.
+    assert_allclose(
+        eckert.boundary_layer_thickness,
+        5.0 * distance / np.sqrt(reference_reynolds),
+        rtol=1e-12,
+    )
+
+
+def test_eckert_transition_mixes_edge_basis_average_friction() -> None:
+    edge_velocity, edge_density, edge_viscosity = _hypersonic_cold_wall_state()
+    transition = 2e6
+    x_transition = transition / 2e7
+    distances = np.array([x_transition, x_transition * (1.0 + 1e-9), 1.0])
+    result = flat_plate_boundary_layer(
+        distances,
+        edge_velocity,
+        edge_density,
+        edge_viscosity,
+        regime=BoundaryLayerRegime.TRANSITIONAL,
+        transition_reynolds=transition,
+        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
+        compressibility_correction=CompressibilityCorrection.ECKERT,
+        mach=6.0,
+        edge_temperature=240.0,
+        wall_temperature=300.0,
+    )
+
+    def reference_state(recovery_factor: float) -> tuple[float, float]:
+        recovery = 240.0 * (1.0 + recovery_factor * 0.2 * 36.0)
+        temperature = 0.22 * recovery + 0.28 * 240.0 + 0.50 * 300.0
+        reynolds_scale = (
+            240.0
+            / temperature
+            * edge_viscosity
+            / float(AIR_VISCOSITY.dynamic_viscosity(temperature))
+        )
+        return 240.0 / temperature, reynolds_scale
+
+    laminar_ratio, laminar_scale = reference_state(np.sqrt(0.72))
+    turbulent_ratio, turbulent_scale = reference_state(np.cbrt(0.72))
+    laminar_average = laminar_ratio * 1.328 / np.sqrt(laminar_scale * transition)
+    expected_average = turbulent_ratio * 0.074 * (turbulent_scale * 2e7) ** -0.2 + (
+        transition / 2e7
+    ) * (
+        laminar_average
+        - turbulent_ratio * 0.074 * (turbulent_scale * transition) ** -0.2
+    )
+    average = np.asarray(result.average_skin_friction_coefficient)
+    drag = np.asarray(result.drag_per_unit_width)
+    assert average[2] == pytest.approx(expected_average, rel=1e-12)
+    # Accumulated drag is continuous: across the infinitesimal step it grows
+    # only by the local turbulent wall shear times the step length.  The
+    # power-law local coefficient is the exact derivative of its average.
+    shear = np.asarray(result.wall_shear_stress)
+    assert drag[1] - drag[0] == pytest.approx(
+        shear[1] * (distances[1] - distances[0]), rel=1e-5
     )
 
 
@@ -386,7 +608,14 @@ def test_van_driest_transition_accumulated_drag_is_continuous() -> None:
         wall_temperature=300.0,
     )
     drag = np.asarray(result.drag_per_unit_width)
-    assert drag[1] == pytest.approx(drag[0], rel=2e-9)
+    # Accumulated drag is continuous: across the infinitesimal step it grows
+    # only by about the local turbulent wall shear times the step length.  The
+    # Willems local and average equations are separate fits, so the local
+    # coefficient is not the exact derivative of the average.
+    shear = np.asarray(result.wall_shear_stress)
+    assert drag[1] - drag[0] == pytest.approx(
+        shear[1] * (distances[1] - distances[0]), rel=0.1
+    )
 
 
 def test_compressibility_inputs_broadcast() -> None:
