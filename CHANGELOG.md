@@ -7,6 +7,12 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Convert Eckert reference-temperature skin friction from the reference to the
+  edge dynamic-pressure basis with `rho*/rho_e = T_e/T*`. Laminar and
+  turbulent Eckert portions, including laminar portions of Van Driest II
+  calculations, previously omitted this factor and overpredicted local and
+  average friction, wall shear, and drag by `T*/T_e` (about 2.5 for a Mach 6
+  cold wall). Thicknesses and the Van Driest II turbulent path are unchanged.
 - Keep Billig shock coordinates as owned, read-only snapshots so input-array
   changes cannot alter a previously computed shock shape.
 - Reload flat-plate GUI settings with an unspecified Mach number when

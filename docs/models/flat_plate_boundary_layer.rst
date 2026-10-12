@@ -250,9 +250,38 @@ model, while :math:`\mu_e` is the supplied ``edge_dynamic_viscosity`` used in
 the definition of :math:`Re_x`. The implementation therefore preserves one
 edge state even when the supplied edge viscosity and the selected model do not
 coincide exactly.
-The incompressible thickness and friction correlations are evaluated at
-:math:`Re_x^*`. The implemented reference-temperature expression is recorded
-by :ref:`Glass and Hunt (1988) <ref-glass-hunt-1988>`.
+The implemented reference-temperature expression is recorded by
+:ref:`Glass and Hunt (1988) <ref-glass-hunt-1988>`.
+
+The incompressible friction correlations evaluated at :math:`Re_x^*` give the
+coefficient referred to the reference density
+:math:`\rho^*=\rho_eT_e/T^*`, which follows from the perfect-gas law at the
+constant edge pressure:
+
+.. math::
+
+   C_f^*=\frac{\tau_w}{\tfrac{1}{2}\rho^*U_e^2}=C_{f,\mathrm{inc}}(Re_x^*),
+   \qquad
+   C_{f,x}=\frac{\rho^*}{\rho_e}C_f^*=\frac{T_e}{T^*}C_{f,\mathrm{inc}}(Re_x^*).
+
+The average coefficient is converted in the same way, because :math:`T^*` is
+constant along a plate with constant edge and wall conditions. The returned
+coefficients, ``wall_shear_stress``, and ``drag_per_unit_width`` therefore use
+the edge dynamic-pressure definitions given above
+(:ref:`White, 2006 <ref-white-2006>`). For laminar flow this is the familiar
+Chapman--Rubesin form :math:`C_{f,x}=0.664\sqrt{C^*/Re_x}` with
+:math:`C^*=\rho^*\mu^*/(\rho_e\mu_e)`. At :math:`M\to0` with
+:math:`T_w=T_e` and a supplied edge viscosity :math:`\mu_e=\mu(T_e)`,
+:math:`T^*=T_e` and the correction reduces to ``NONE``. If the supplied edge
+viscosity differs from the selected model, the effective Reynolds number need
+not equal :math:`Re_x`.
+
+The thickness correlations are evaluated at :math:`Re_x^*` without a density
+conversion. :math:`\delta_{99}`, :math:`\delta^*`, and :math:`\theta_m` are
+reference-property estimates and are not rescaled. For laminar Blasius flow,
+:math:`2\,\mathrm{d}\theta_m/\mathrm{d}x=C_f^*` rather than :math:`C_{f,x}`.
+The turbulent thickness and skin-friction correlations are independent
+engineering estimates and need not satisfy this differential relation exactly.
 
 Van Driest II method
 ~~~~~~~~~~~~~~~~~~~~
@@ -328,7 +357,8 @@ Brent's method. A missing bracket or failed solve raises
 adiabatic limit :math:`M\to0`, the implementation assigns
 :math:`F_C=F_\theta=F_x=1` directly.
 
-Laminar portions of a VD2 calculation still use Eckert. Compressible
+Laminar portions of a VD2 calculation still use Eckert, including the
+:math:`T_e/T^*` conversion to the edge basis. Compressible
 thicknesses are engineering estimates obtained from the incompressible
 relations at :math:`F_\theta Re_x`, not the friction Reynolds number
 :math:`Re_{x,i}`. ``turbulent_correlation`` is ignored for VD2 turbulent
