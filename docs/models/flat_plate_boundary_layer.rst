@@ -274,10 +274,11 @@ Chapman--Rubesin form :math:`C_{f,x}=0.664\sqrt{C^*/Re_x}` with
 :math:`T_w=T_e`, :math:`T^*=T_e` and the correction reduces to ``NONE``.
 
 The thickness correlations are evaluated at :math:`Re_x^*` without a density
-conversion. :math:`\delta_{99}` and :math:`\delta^*` are reference-property
-length estimates, and :math:`\theta_m` is the reference-density momentum
-thickness, so :math:`2\,\mathrm{d}\theta_m/\mathrm{d}x=C_f^*` rather than
-:math:`C_{f,x}`.
+conversion. :math:`\delta_{99}`, :math:`\delta^*`, and :math:`\theta_m` are
+reference-property estimates and are not rescaled. For laminar Blasius flow,
+:math:`2\,\mathrm{d}\theta_m/\mathrm{d}x=C_f^*` rather than :math:`C_{f,x}`.
+The turbulent thickness and skin-friction correlations are independent
+engineering estimates and need not satisfy this differential relation exactly.
 
 Van Driest II method
 ~~~~~~~~~~~~~~~~~~~~
