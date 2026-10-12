@@ -69,8 +69,9 @@ class FlatPlateBoundaryLayerResult:
     ``local_skin_friction_coefficient`` and
     ``average_skin_friction_coefficient`` are always referred to the edge
     dynamic pressure ``rho_e U_e**2/2`` for every compressibility correction,
-    so ``wall_shear_stress`` and ``drag_per_unit_width`` are these
-    coefficients multiplied by the edge dynamic pressure. With Eckert
+    so ``wall_shear_stress`` is the local coefficient multiplied by the edge
+    dynamic pressure, while ``drag_per_unit_width`` is the average coefficient
+    multiplied by the edge dynamic pressure and ``distance``. With Eckert
     portions, ``effective_reynolds_number`` is the reference Reynolds number
     ``Re*`` at which the incompressible correlations are evaluated.
     """
@@ -503,9 +504,10 @@ def flat_plate_boundary_layer(
     Skin-friction coefficients are reported on the edge dynamic-pressure
     basis for all compressibility corrections. Eckert thicknesses are the
     incompressible length correlations evaluated at ``Re*`` and are not
-    rescaled; the momentum thickness is therefore the reference-density
-    value, for which ``2 d(theta)/dx`` equals the reference-basis friction
-    coefficient.
+    rescaled; the momentum thickness is a reference-property estimate. For laminar
+    Blasius flow, ``2 d(theta)/dx`` equals the reference-basis friction
+    coefficient; the turbulent thickness estimate is an independent
+    engineering correlation.
     """
     transition = _validate_model_choices(
         regime, turbulent_correlation, transition_reynolds
