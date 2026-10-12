@@ -270,10 +270,11 @@ coefficients, ``wall_shear_stress``, and ``drag_per_unit_width`` therefore use
 the edge dynamic-pressure definitions given above
 (:ref:`White, 2006 <ref-white-2006>`). For laminar flow this is the familiar
 Chapman--Rubesin form :math:`C_{f,x}=0.664\sqrt{C^*/Re_x}` with
-:math:`C^*=\rho^*\mu^*/(\rho_e\mu_e)`. At :math:`M\to0` with :math:`T_w=T_e` and a supplied edge viscosity
-:math:`\mu_e=\mu(T_e)`, :math:`T^*=T_e` and the correction reduces to
-``NONE``. If the supplied edge viscosity differs from the selected model,
-the effective Reynolds number need not equal :math:`Re_x`.
+:math:`C^*=\rho^*\mu^*/(\rho_e\mu_e)`. At :math:`M\to0` with
+:math:`T_w=T_e` and a supplied edge viscosity :math:`\mu_e=\mu(T_e)`,
+:math:`T^*=T_e` and the correction reduces to ``NONE``. If the supplied edge
+viscosity differs from the selected model, the effective Reynolds number need
+not equal :math:`Re_x`.
 
 The thickness correlations are evaluated at :math:`Re_x^*` without a density
 conversion. :math:`\delta_{99}`, :math:`\delta^*`, and :math:`\theta_m` are

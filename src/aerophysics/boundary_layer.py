@@ -504,9 +504,9 @@ def flat_plate_boundary_layer(
     Skin-friction coefficients are reported on the edge dynamic-pressure
     basis for all compressibility corrections. Eckert thicknesses are the
     incompressible length correlations evaluated at ``Re*`` and are not
-    rescaled; the momentum thickness is a reference-property estimate. For laminar
-    Blasius flow, ``2 d(theta)/dx`` equals the reference-basis friction
-    coefficient; the turbulent thickness estimate is an independent
+    rescaled; the momentum thickness is a reference-property estimate. For
+    laminar Blasius flow, ``2 d(theta)/dx`` equals the reference-basis
+    friction coefficient; the turbulent thickness estimate is an independent
     engineering correlation.
     """
     transition = _validate_model_choices(
