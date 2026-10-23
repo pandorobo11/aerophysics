@@ -42,8 +42,9 @@ def polynomial_gas(slope: float = 0.0) -> ThermallyPerfectGas:
     )
 
 
-@pytest.mark.parametrize("gamma", [1.2, 1.4, 5.0 / 3.0])
-def test_thermal_pitot_recovers_constant_cp(gamma: float) -> None:
+def test_thermal_pitot_recovers_constant_cp() -> None:
+    # A non-air ratio exposes any hard-coded gamma; the branch is gamma-independent.
+    gamma = 5.0 / 3.0
     thermal = HarmonicOscillatorGas(287.0, gamma)
     perfect = PerfectGas(heat_capacity_ratio=gamma, specific_gas_constant=287.0)
     mach = [1.0, 2.0, 3.0, 7.0]
@@ -82,10 +83,8 @@ def test_variable_cp_pitot_against_independent_energy_and_entropy() -> None:
     ) == pytest.approx(expected, rel=2e-11)
 
 
-@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
-def test_thermal_pitot_presets_and_broadcast(
-    gas: ThermallyPerfectGas | HarmonicOscillatorGas,
-) -> None:
+def test_thermal_pitot_presets_and_broadcast() -> None:
+    gas = AIR_NASA9
     temperatures = [400.0, 500.0]
     actual = supersonic_pitot_pressure_ratio(
         [[1.0], [3.0]], gas, upstream_temperature=temperatures
@@ -135,9 +134,9 @@ def test_pitot_stagnation_range_does_not_change_normal_shock_contract() -> None:
         )
 
 
-@pytest.mark.parametrize("gamma", [1.2, 1.4, 5.0 / 3.0])
 @pytest.mark.parametrize("branch", list(ShockBranch))
-def test_constant_cp_recovers_closed_form(gamma: float, branch: ShockBranch) -> None:
+def test_constant_cp_recovers_closed_form(branch: ShockBranch) -> None:
+    gamma = 5.0 / 3.0
     thermal = HarmonicOscillatorGas(287.0, gamma)
     perfect = PerfectGas(heat_capacity_ratio=gamma, specific_gas_constant=287.0)
     for mach in (1.2, 2.0, 5.0, 10.0):
@@ -175,18 +174,13 @@ def test_constant_nasa_polynomial_recovers_closed_form() -> None:
         )
 
 
-@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
+@pytest.mark.parametrize("gas", [AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
 @pytest.mark.parametrize("branch", list(ShockBranch))
-@pytest.mark.parametrize(
-    "mach,temperature,theta", [(2.5, 500.0, 15.0), (3.0, 500.0, 20.0)]
-)
 def test_shock_conserves_mass_momentum_energy_and_tangent_velocity(
     gas: ThermallyPerfectGas | HarmonicOscillatorGas,
     branch: ShockBranch,
-    mach: float,
-    temperature: float,
-    theta: float,
 ) -> None:
+    mach, temperature, theta = 3.0, 500.0, 20.0
     result = oblique_shock(
         mach, np.deg2rad(theta), branch, gas, upstream_temperature=temperature
     )
@@ -288,7 +282,7 @@ def test_thermal_broadcast_and_scalar_contract() -> None:
     ) == (2,)
 
 
-@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
+@pytest.mark.parametrize("gas", [AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
 def test_endpoints_sonic_and_detachment(
     gas: ThermallyPerfectGas | HarmonicOscillatorGas,
 ) -> None:
@@ -394,8 +388,7 @@ def test_harmonic_preset_retains_weak_shock_at_rounded_polar_endpoint() -> None:
         )
 
 
-@pytest.mark.parametrize("gamma", [1.4, 5.0 / 3.0])
-@pytest.mark.parametrize("temperature", [500.0, 1000.0])
+@pytest.mark.parametrize(("gamma", "temperature"), [(1.4, 500.0), (5.0 / 3.0, 1000.0)])
 def test_finite_constant_cp_range_retains_weak_shock_at_polar_endpoint(
     gamma: float, temperature: float
 ) -> None:

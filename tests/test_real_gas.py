@@ -17,7 +17,6 @@ from aerophysics import (
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.isentropic import (
     MachBranch,
-    _real_flow_state,
     area_ratio,
     choked_mass_flux,
     critical_ratios,
@@ -254,9 +253,11 @@ def test_beattie_bridgeman_exact_total_temperature_endpoint() -> None:
         allow_extrapolation=False,
     )
     total = AIR_BEATTIE_BRIDGEMAN.state(45.0, 1.0e5)
-    static = AIR_BEATTIE_BRIDGEMAN._scalar_state_from_density(
-        float(state.static_temperature), float(state.static_density)
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", ApplicabilityWarning)
+        static = AIR_BEATTIE_BRIDGEMAN.state(
+            state.static_temperature, state.static_pressure, allow_extrapolation=True
+        )
     assert state.static_temperature == pytest.approx(45.0, abs=2e-12)
     assert state.static_pressure > 0.0
     assert state.static_density > 0.0
@@ -420,7 +421,12 @@ def test_real_isentropic_solver_rejects_disconnected_validity_gap(
 ) -> None:
     disconnected = BeattieBridgemanGas(287.05287, 1.4, *coefficients)
     with pytest.raises(ModelRangeError, match=r"no connected.*solution"):
-        _real_flow_state(mach, total_temperature, 55.716069666e6, disconnected)
+        isentropic_state(
+            mach,
+            disconnected,
+            total_temperature=total_temperature,
+            total_pressure=55.716069666e6,
+        )
 
 
 def test_zero_beattie_bridgeman_correction_is_harmonic_oscillator_limit() -> None:
@@ -618,21 +624,28 @@ def test_beattie_bridgeman_high_mach_regression_and_static_range_handling() -> N
     static_temperatures = np.asarray(state.static_temperature, dtype=np.float64)
     static_densities = np.asarray(state.static_density, dtype=np.float64)
     velocities = np.asarray(state.velocity, dtype=np.float64)
+    static_pressures = np.asarray(state.static_pressure, dtype=np.float64)
     scalar_states = [
-        gas._scalar_state_from_density(float(temperature), float(density))
-        for temperature, density in zip(
-            static_temperatures, static_densities, strict=True
+        gas.state(float(temperature), float(pressure))
+        for temperature, pressure in zip(
+            static_temperatures, static_pressures, strict=True
         )
     ]
-    assert np.all(np.asarray(state.static_pressure) > 0.0)
-    assert np.all(np.asarray(state.static_density) > 0.0)
-    assert all(
-        gas._dp_drho_scalar(item.temperature, item.density) > 0.0
-        for item in scalar_states
-    )
+    assert np.all(static_pressures > 0.0)
+    assert np.all(static_densities > 0.0)
+    for item in scalar_states:
+        # Mechanical stability: dp/drho at constant temperature is positive.
+        delta = 1.0e-5 * float(item.density)
+        assert gas.pressure(item.temperature, item.density + delta) > gas.pressure(
+            item.temperature, item.density - delta
+        )
     assert all(item.cp > 0.0 and item.cv > 0.0 for item in scalar_states)
     assert all(item.speed_of_sound**2 > 0.0 for item in scalar_states)
-    assert_allclose([item.entropy for item in scalar_states], total.entropy, atol=2e-8)
+    assert_allclose(
+        [float(item.entropy) for item in scalar_states],
+        float(total.entropy),
+        atol=2e-8,
+    )
     assert_allclose(
         [
             item.enthalpy + 0.5 * velocity**2
@@ -681,14 +694,19 @@ def test_beattie_bridgeman_continuation_reaches_very_low_temperature() -> None:
         total_temperature=total_temperature,
         total_pressure=total_pressure,
     )
-    static = gas._scalar_state_from_density(
-        float(state.static_temperature), float(state.static_density)
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", ApplicabilityWarning)
+        static = gas.state(
+            state.static_temperature, state.static_pressure, allow_extrapolation=True
+        )
     total = gas.state(total_temperature, total_pressure)
     assert state.static_temperature < total_temperature * np.exp(-0.8)
     assert static.pressure > 0.0
     assert static.density > 0.0
-    assert gas._dp_drho_scalar(static.temperature, static.density) > 0.0
+    delta = 1.0e-5 * float(static.density)
+    assert gas.pressure(static.temperature, static.density + delta) > gas.pressure(
+        static.temperature, static.density - delta
+    )
     assert static.cp > 0.0
     assert static.cv > 0.0
     assert static.entropy == pytest.approx(total.entropy, abs=2e-8)

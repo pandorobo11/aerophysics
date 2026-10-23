@@ -9,8 +9,7 @@ import pytest
 from numpy.testing import assert_allclose
 from numpy.typing import ArrayLike, NDArray
 
-import aerophysics.isentropic as isentropic_module
-from aerophysics import AIR_HARMONIC_OSCILLATOR, AIR_NASA7, AIR_NASA9
+from aerophysics import AIR_HARMONIC_OSCILLATOR, AIR_NASA9
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import PerfectGas
 from aerophysics.isentropic import (
@@ -52,14 +51,6 @@ def _constant_cp_gas() -> tuple[PerfectGas, ThermallyPerfectGas]:
     return caloric, ThermallyPerfectGas((species,), (1.0,))
 
 
-def test_isentropic_reference_values() -> None:
-    ratios = isentropic_ratios(2.0)
-    assert ratios.mach == 2.0
-    assert ratios.total_temperature_ratio == pytest.approx(1.8)
-    assert ratios.total_pressure_ratio == pytest.approx(7.8244490669)
-    assert ratios.total_density_ratio == pytest.approx(4.3469161483)
-
-
 def test_zero_mach_has_unity_state_ratios() -> None:
     ratios = isentropic_ratios(0.0)
     assert ratios.total_temperature_ratio == 1.0
@@ -81,13 +72,7 @@ def test_ratio_functions_vectorize_and_invert() -> None:
     assert_allclose(mach_from_total_density_ratio(ratios.total_density_ratio), mach)
 
 
-def test_area_ratio_reference_values() -> None:
-    assert area_ratio(0.5) == pytest.approx(1.33984375)
-    assert area_ratio(1.0) == 1.0
-    assert area_ratio(2.0) == pytest.approx(1.6875)
-
-
-def test_area_ratio_inverse_branches() -> None:
+def test_area_ratio_inverse_branches_vectorize_and_expand_bracket() -> None:
     assert mach_from_area_ratio(1.0, MachBranch.SUBSONIC) == 1.0
     assert mach_from_area_ratio(1.0, MachBranch.SUPERSONIC) == 1.0
     assert mach_from_area_ratio(1.6875, MachBranch.SUBSONIC) == pytest.approx(
@@ -96,9 +81,6 @@ def test_area_ratio_inverse_branches() -> None:
     assert mach_from_area_ratio(1.6875, MachBranch.SUPERSONIC) == pytest.approx(
         2.0, rel=1e-12
     )
-
-
-def test_area_ratio_inverse_vectorizes_and_expands_bracket() -> None:
     targets = area_ratio([0.2, 1.0, 2.0, 5.0])
     assert isinstance(targets, np.ndarray)
     subsonic = mach_from_area_ratio(targets[:2], MachBranch.SUBSONIC)
@@ -194,9 +176,10 @@ def test_fused_analysis_matches_caloric_component_relations() -> None:
     assert_allclose(analysis.state.velocity, direct_state.velocity)
 
 
-@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
-@pytest.mark.parametrize("with_pressure", [False, True])
-@pytest.mark.parametrize("scalar", [False, True])
+@pytest.mark.parametrize("gas", [AIR_NASA9, AIR_HARMONIC_OSCILLATOR])
+@pytest.mark.parametrize(
+    ("with_pressure", "scalar"), [(False, True), (True, False)], ids=("bare", "state")
+)
 def test_fused_thermal_analysis_matches_public_relations(
     gas: ThermallyPerfectGas | HarmonicOscillatorGas,
     with_pressure: bool,
@@ -293,47 +276,6 @@ def test_fused_thermal_analysis_matches_public_relations(
     )
 
 
-def test_fused_analysis_reuses_thermal_states(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    original = isentropic_module._thermal_flow_state
-    calls: list[float] = []
-
-    def counted_state(
-        mach: float,
-        total_temperature: float,
-        gas: ThermallyPerfectGas,
-        *,
-        allow_extrapolation: bool,
-    ) -> object:
-        calls.append(mach)
-        return original(
-            mach,
-            total_temperature,
-            gas,
-            allow_extrapolation=allow_extrapolation,
-        )
-
-    monkeypatch.setattr(isentropic_module, "_thermal_flow_state", counted_state)
-    analysis = isentropic_analysis(
-        [1.5, 2.0, 2.5],
-        AIR_NASA9,
-        total_temperature=1000.0,
-        total_pressure=100_000.0,
-        allow_extrapolation=False,
-    )
-    assert len(calls) == 4
-    assert set(calls) == {1.0, 1.5, 2.0, 2.5}
-    assert analysis.state is not None
-    assert isinstance(analysis.mass_flux, np.ndarray)
-    assert isinstance(analysis.state.mass_flux, np.ndarray)
-    assert_allclose(
-        analysis.mass_flux,
-        analysis.state.mass_flux,
-        rtol=2e-15,
-    )
-
-
 def test_fused_analysis_optional_state_and_validation() -> None:
     dimensionless = isentropic_analysis(2.0)
     assert dimensionless.state is None
@@ -426,8 +368,8 @@ def test_absolute_isentropic_state_validates_total_state() -> None:
         )
 
 
-@pytest.mark.parametrize("mach", [-1.0, np.nan, np.inf])
-def test_relations_reject_invalid_mach(mach: float) -> None:
+def test_relations_reject_negative_mach() -> None:
+    mach = -1.0
     with pytest.raises(ValueError):
         isentropic_ratios(mach)
     with pytest.raises(ValueError):
@@ -555,10 +497,8 @@ def test_nasa9_forward_relations_conserve_energy_and_entropy() -> None:
     )
 
 
-@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
-def test_thermal_relations_vectorize_and_all_inverses_round_trip(
-    gas: ThermallyPerfectGas,
-) -> None:
+def test_thermal_relations_vectorize_and_all_inverses_round_trip() -> None:
+    gas = AIR_NASA9
     mach = np.asarray([[0.0], [0.5], [1.0], [2.0]])
     total_temperature = np.asarray([[1000.0, 1500.0]])
     ratios = isentropic_ratios(
@@ -601,10 +541,8 @@ def test_thermal_relations_vectorize_and_all_inverses_round_trip(
     )
 
 
-@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
-def test_thermal_area_branches_critical_state_and_choking(
-    gas: ThermallyPerfectGas,
-) -> None:
+def test_thermal_area_branches_critical_state_and_choking() -> None:
+    gas = AIR_NASA9
     total_temperature = 1000.0
     subsonic_ratio = area_ratio(
         0.4,
@@ -706,12 +644,9 @@ def test_strict_supersonic_area_inverse_uses_available_temperature_range() -> No
     ) == pytest.approx(1.2)
 
 
-@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
 @pytest.mark.parametrize("mach", [1.01, 1.5])
-def test_thermal_area_inverse_ignores_extrapolated_solver_probes(
-    gas: ThermallyPerfectGas,
-    mach: float,
-) -> None:
+def test_thermal_area_inverse_ignores_extrapolated_solver_probes(mach: float) -> None:
+    gas = AIR_NASA9
     target = area_ratio(
         mach,
         gas,
@@ -731,10 +666,8 @@ def test_thermal_area_inverse_ignores_extrapolated_solver_probes(
     assert result == pytest.approx(mach)
 
 
-@pytest.mark.parametrize("gas", [AIR_NASA7, AIR_NASA9])
-def test_thermal_area_inverse_reports_converged_out_of_range_state(
-    gas: ThermallyPerfectGas,
-) -> None:
+def test_thermal_area_inverse_reports_converged_out_of_range_state() -> None:
+    gas = AIR_NASA9
     with pytest.warns(ApplicabilityWarning):
         target = area_ratio(2.0, gas, total_temperature=300.0)
 

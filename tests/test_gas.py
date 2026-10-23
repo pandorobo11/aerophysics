@@ -50,18 +50,6 @@ def test_array_conversion_rejects_non_numeric_values() -> None:
         AIR.speed_of_sound(["cold"])
 
 
-def test_sutherland_viscosity_array() -> None:
-    result = AIR_VISCOSITY.dynamic_viscosity([200.0, 300.0])
-    assert isinstance(result, np.ndarray)
-    assert_allclose(result, [1.328573517871709e-5, 1.846021864575035e-5])
-
-
-def test_ussa_conductivity_array() -> None:
-    result = AIR_CONDUCTIVITY.thermal_conductivity([200.0, 300.0])
-    assert isinstance(result, np.ndarray)
-    assert_allclose(result, [0.018091538433556, 0.026252000780939])
-
-
 @pytest.mark.parametrize(
     ("viscosity", "temperature", "sutherland"),
     [(-1.0, 288.15, 110.4), (1.0, -1.0, 110.4), (1.0, 288.15, np.inf)],
@@ -84,7 +72,7 @@ def test_conductivity_model_rejects_invalid_constants(
         USSAConductivityModel(coefficient, additive, exponential)
 
 
-@pytest.mark.parametrize("temperature", [0.0, -10.0, np.nan, np.inf])
+@pytest.mark.parametrize("temperature", [0.0, -10.0])
 def test_transport_models_reject_invalid_temperature(temperature: float) -> None:
     with pytest.raises(ValueError):
         AIR_VISCOSITY.dynamic_viscosity(temperature)

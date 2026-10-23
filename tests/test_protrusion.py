@@ -7,7 +7,9 @@ from aerophysics.exceptions import ApplicabilityWarning
 from aerophysics.protrusion import ProtrusionProfile, protrusion_drag
 
 
-def test_constant_width_one_seventh_power_matches_analytic_solution() -> None:
+def test_constant_width_dimensional_outputs_and_metadata() -> None:
+    # The one-seventh-power shielding integral is covered by the viscous-flow
+    # verification against its closed form.
     height = 0.02
     thickness = 0.1
     result = protrusion_drag(
@@ -18,18 +20,16 @@ def test_constant_width_one_seventh_power_matches_analytic_solution() -> None:
         edge_density=1.2,
         boundary_layer_thickness=thickness,
     )
-    expected_shielding = 7.0 / 9.0 * (height / thickness) ** (2.0 / 7.0)
+    shielding = result.shielding_factor
     expected_area = height * 0.01
     expected_edge_pressure = 0.5 * 1.2 * 100.0**2
     assert result.frontal_area == pytest.approx(expected_area)
     assert result.edge_dynamic_pressure == pytest.approx(expected_edge_pressure)
-    assert result.shielding_factor == pytest.approx(expected_shielding, rel=2e-4)
     assert result.effective_dynamic_pressure == pytest.approx(
-        expected_edge_pressure * expected_shielding, rel=2e-4
+        expected_edge_pressure * shielding
     )
     assert result.direct_drag == pytest.approx(
-        1.2 * expected_edge_pressure * expected_area * expected_shielding,
-        rel=2e-4,
+        1.2 * expected_edge_pressure * expected_area * shielding
     )
     assert result.height_to_boundary_layer_thickness == pytest.approx(0.2)
     assert result.profile is ProtrusionProfile.TURBULENT_ONE_SEVENTH_POWER

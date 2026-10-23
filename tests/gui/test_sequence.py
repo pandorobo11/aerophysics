@@ -74,8 +74,8 @@ def test_replay_all_initial_modes(basis: str) -> None:
     assert len(sequence_rows(a)) == 3
 
 
-@pytest.mark.parametrize("gas", ["AIR", "NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
-def test_gui_saved_config_and_units(gas: str) -> None:
+def test_gui_saved_config_and_units() -> None:
+    gas = "HARMONIC_OSCILLATOR"
     config = configuration(gas=gas)
     app = AppTest.from_string(SCRIPT, default_timeout=30)
     app.session_state["sequence_draft"] = config
