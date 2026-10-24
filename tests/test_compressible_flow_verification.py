@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import ast
 import csv
+import json
 import math
+import runpy
 from pathlib import Path
+from typing import Any
 
 from aerophysics.expansion import prandtl_meyer_angle
 from aerophysics.isentropic import area_ratio, isentropic_ratios
 from aerophysics.shocks import ShockBranch, conical_shock, normal_shock, oblique_shock
 
 REFERENCE = Path(__file__).parent / "reference_data/compressible_flow"
+SP3004_CAPTURE = (
+    Path(__file__).resolve().parents[1] / "docs/scripts/capture_sp3004_reference.py"
+)
 
 
 def _rows(name: str) -> list[dict[str, str]]:
@@ -115,3 +122,76 @@ def test_nasa_sp3004_conical_table_cells_match_public_api() -> None:
         assert abs(float(result.shock_angle) / expected_angle - 1.0) <= float(
             row["relative_tolerance"]
         )
+
+
+def _sp3004_capture() -> dict[str, Any]:
+    return runpy.run_path(str(SP3004_CAPTURE))
+
+
+def test_sp3004_capture_never_imports_the_solver() -> None:
+    tree = ast.parse(SP3004_CAPTURE.read_text(encoding="utf-8"))
+    modules = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    }
+    assert not any(module.startswith("aerophysics") for module in modules)
+
+
+def test_sp3004_capture_rejects_undecodable_and_inconsistent_cells() -> None:
+    capture = _sp3004_capture()
+    cell = capture["_Cell"]
+    table = capture["_Table"](
+        2.5,
+        2.0,
+        21,
+        35,
+        {
+            "shock_angle": cell(0.0, 0.0, "+52369890+00"),
+            "surface_mstar": cell(0.0, 0.0, "+1624256?+01"),
+            "post_shock_mstar": cell(0.0, 0.0, "+16328751+01"),
+            "pressure": cell(0.0, 0.0, "+10302014+01"),
+            "density": cell(0.0, 0.0, "+10214806+01"),
+            "temperature": None,
+        },
+        2.0,
+        0.5236989,
+    )
+    errors: list[str] = []
+    values = capture["_resolve"](table, errors)
+    # A damaged or missing cell is never filled from any other source.
+    assert "surface_mstar" not in values
+    assert "temperature" not in values
+    assert len(errors) == 2
+    assert all("table 21, PDF pages 35-36" in error for error in errors)
+
+    errors = []
+    values.update(surface_mstar=1.6242561, temperature=1.0185375)
+    capture["_check"](table, values, errors)
+    assert any("p/(rho T)" in error for error in errors)
+    assert any("total-enthalpy" in error for error in errors)
+
+
+def test_sp3004_fixture_records_source_locations_and_transcriptions() -> None:
+    capture = _sp3004_capture()
+    rows = _rows("nasa_sp3004_conical.csv")
+    tables = capture["SOURCE_TABLES"]
+    assert [
+        (float(row["cone_half_angle_deg"]), float(row["upstream_mach"])) for row in rows
+    ] == [(cone, mach) for cone, mach, _, _ in tables]
+    for row, (_, _, table, page) in zip(rows, tables, strict=True):
+        assert int(row["table"]) == table
+        assert int(row["printed_page"]) == page - capture["PRINTED_PAGE_OFFSET"]
+    metadata = json.loads(
+        (REFERENCE / "nasa_sp3004_conical.json").read_text(encoding="utf-8")
+    )
+    recorded = {
+        (entry["table"], entry["field"]): entry["value"]
+        for entry in metadata["manual_cells"]
+    }
+    assert recorded == {
+        key: value for key, (value, _) in capture["MANUAL_CELLS"].items()
+    }

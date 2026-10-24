@@ -28,6 +28,15 @@ uses Semantic Versioning, including during the pre-1.0 period.
   `1e-3` rad previously could return the zero-angle Mach-wave state (unit
   surface ratios) or a root up to 24% off the requested angle. Resolvable
   results are unchanged.
+- Recapture the NASA SP-3004 cone-table verification fixture from the report
+  without solver values. The capture script previously read the wrong scan
+  pages for 21 of 46 cases and silently replaced unmatched or mismatched cells
+  with rounded `conical_shock` results, so 29 rows partly or wholly verified
+  the solver against itself. Tables are now located from verified pages,
+  cells are selected by table position, damaged OCR cells are transcribed
+  from the scan with recorded locations, and every table passes internal
+  consistency checks. Table numbers and printed pages are corrected. The
+  solver still agrees with every cell within the `1e-4` tolerance.
 - Keep Billig shock coordinates as owned, read-only snapshots so input-array
   changes cannot alter a previously computed shock shape.
 - Reload flat-plate GUI settings with an unspecified Mach number when
