@@ -1,10 +1,12 @@
 """Tests for normal and oblique perfect-gas shocks."""
 
+import warnings
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from aerophysics.exceptions import NoAttachedShockError
+from aerophysics.exceptions import NoAttachedShockError, ShockConvergenceError
 from aerophysics.gas import PerfectGas
 from aerophysics.shocks import (
     ShockBranch,
@@ -190,6 +192,50 @@ def test_conical_attached_limit_and_detached_error() -> None:
     assert attached.shock_angle == pytest.approx(limit.shock_angle)
     with pytest.raises(NoAttachedShockError):
         conical_shock(2.0, float(limit.cone_half_angle) + 1e-6)
+
+
+@pytest.mark.parametrize(
+    "mach", [float(np.nextafter(1.0, np.inf)), 1.0 + 1e-13, 1.0 + 1e-10, 1.0 + 9e-7]
+)
+def test_near_sonic_conical_limit_raises_public_convergence_error(mach: float) -> None:
+    # The attached interval between the Mach angle and pi/2 collapses as
+    # M -> 1+; below M - 1 = 1e-6 Taylor--Maccoll trials are unresolvable.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ShockConvergenceError, match="numerical resolution"):
+            maximum_attached_cone_angle(mach)
+        with pytest.raises(ShockConvergenceError, match="numerical resolution"):
+            conical_shock(mach, 1e-12)
+        with pytest.raises(ShockConvergenceError, match="numerical resolution"):
+            conical_shock([2.0, mach], [0.1, 1e-12])
+    # The zero-angle Mach-wave limit remains exact.
+    wave = conical_shock(mach, 0.0)
+    assert wave.shock_angle == pytest.approx(np.arcsin(1.0 / mach), rel=1e-15)
+    assert wave.surface_mach == mach
+
+
+@pytest.mark.parametrize(("mach", "cone_angle"), [(1.01, 1e-4), (2.0, 1e-7)])
+def test_unresolvable_slender_cone_raises_public_convergence_error(
+    mach: float, cone_angle: float
+) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ShockConvergenceError, match="numerical resolution"):
+            conical_shock(mach, cone_angle)
+
+
+def test_near_sonic_resolvable_conical_limit_follows_asymptote() -> None:
+    # Near M = 1 the attached cone-angle limit approaches 0.7792 sqrt(M - 1).
+    machs = 1.0 + np.array([1.01e-6, 1e-5])
+    limit = maximum_attached_cone_angle(machs)
+    cone = np.asarray(limit.cone_half_angle)
+    beta = np.asarray(limit.shock_angle)
+    assert_allclose(cone / np.sqrt(machs - 1.0), 0.77925, rtol=1e-4)
+    assert np.all((np.arcsin(1.0 / machs) < beta) & (beta < 0.5 * np.pi))
+    result = conical_shock(1.01, 0.05)
+    assert np.arcsin(1.0 / 1.01) < result.shock_angle < 0.5 * np.pi
+    assert result.surface_pressure_ratio > 1.0
+    assert 0.0 < result.total_pressure_ratio <= 1.0
 
 
 @pytest.mark.parametrize("mach", [1.0, 0.9])

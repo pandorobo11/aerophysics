@@ -13,6 +13,12 @@ uses Semantic Versioning, including during the pre-1.0 period.
   calculations, previously omitted this factor and overpredicted local and
   average friction, wall shear, and drag by `T*/T_e` (about 2.5 for a Mach 6
   cold wall). Thicknesses and the Van Driest II turbulent path are unchanged.
+- Raise `ShockConvergenceError` for unresolvable perfect-gas conical shocks
+  instead of leaking `ValueError`, `RuntimeError`, or `RuntimeWarning` from
+  the numerical solvers, and stop trial Taylor--Maccoll integrations at the
+  singular line `a^2 = V_theta^2`. This applies to nonzero cone half-angles
+  with `M - 1 < 1e-6`, which previously could hang or return a non-physical
+  attached limit, and to very slender cones. Resolvable results are unchanged.
 - Keep Billig shock coordinates as owned, read-only snapshots so input-array
   changes cannot alter a previously computed shock shape.
 - Reload flat-plate GUI settings with an unspecified Mach number when
