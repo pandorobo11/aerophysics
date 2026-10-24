@@ -804,6 +804,39 @@ def test_unstable_beattie_bridgeman_state_fails_explicitly() -> None:
         pathological.density(300.0, 1.0e6)
 
 
+@pytest.mark.parametrize("pressure", [2.5e-303, 1.0e-200, 1.0e-9, 1.0, 1.0e5, 1.0e7])
+def test_zero_correction_beattie_bridgeman_density_keeps_relative_accuracy(
+    pressure: float,
+) -> None:
+    # With zero corrections the EOS is exactly p = rho R T, so the density
+    # inverse and its EOS pressure closure must hold relative to the state
+    # scale even when the density is far below any fixed absolute tolerance.
+    # abs=0.0 because pytest.approx otherwise adds an absolute tolerance of
+    # 1e-12, which would accept any density at these dilute scales.
+    gas = BeattieBridgemanGas(287.0, 1.4, 0.0, 0.0, 0.0, 0.0, 0.0)
+    temperature = 300.0
+    expected_density = pressure / (287.0 * temperature)
+    density = float(gas.density(temperature, pressure))
+    state = gas.state(temperature, pressure)
+    reference = gas.state(temperature, 1.0e5)
+
+    for value in (density, state.density):
+        assert value == pytest.approx(expected_density, rel=1e-14, abs=0.0)
+        closure = float(gas.pressure(temperature, value)) / pressure
+        assert closure == pytest.approx(1.0, rel=1e-14, abs=0.0)
+    assert state.cp == pytest.approx(reference.cp, rel=1e-14)
+    assert state.speed_of_sound == pytest.approx(reference.speed_of_sound, rel=1e-14)
+
+
+@pytest.mark.parametrize("pressure", [1.0e-310, 5.0e-324])
+def test_beattie_bridgeman_rejects_unrepresentable_density_scale(
+    pressure: float,
+) -> None:
+    gas = BeattieBridgemanGas(287.0, 1.4, 0.0, 0.0, 0.0, 0.0, 0.0)
+    with pytest.raises(ModelRangeError, match="density scale is not representable"):
+        gas.density(300.0, pressure)
+
+
 def test_beattie_bridgeman_density_selects_lowest_stable_gas_root() -> None:
     gas = BeattieBridgemanGas(
         287.0,
