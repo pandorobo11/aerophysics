@@ -26,9 +26,17 @@ cells were visually checked against the scan.
 Axisymmetric flow is compared with :ref:`NASA SP-3004 <ref-sims-1964>`. The committed
 fixture covers every published cone half-angle from 2.5 to 30 degrees for
 Mach 1.5, 2, 3, and 5 where the report provides an attached-flow solution.
-The source's compact numeric notation is decoded from the PDF text layer;
-damaged OCR cells are recovered at the report's eight-significant-digit
-precision and checked against adjacent state relations.
+Each table is located from a visually verified PDF page. The cone-surface
+row, shock row, and footer cells are selected by their position and decoded
+from the PDF text layer's compact numeric notation. No package solver value is
+used to select or replace a cell. The 33 damaged or misread OCR cells were
+transcribed from the scan image. Their table, page, and OCR text are recorded
+in ``nasa_sp3004_conical.json``. Every table is checked against relations
+internal to the report: the shock-row angle matches the header,
+:math:`p_s/p_\infty=(\rho_s/\rho_\infty)(T_s/T_\infty)`, the surface
+temperature follows total-enthalpy conservation for the tabulated surface
+velocity, and the post-shock velocity satisfies the oblique-shock
+Rankine--Hugoniot relations at the tabulated shock angle.
 
 Detached-shock formulas are checked directly against
 :ref:`Ambrosio--Wortman <ref-ambrosio-wortman-1962>`,

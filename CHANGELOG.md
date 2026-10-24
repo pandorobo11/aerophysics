@@ -13,6 +13,15 @@ uses Semantic Versioning, including during the pre-1.0 period.
   calculations, previously omitted this factor and overpredicted local and
   average friction, wall shear, and drag by `T*/T_e` (about 2.5 for a Mach 6
   cold wall). Thicknesses and the Van Driest II turbulent path are unchanged.
+- Recapture the NASA SP-3004 cone-table verification fixture from the report
+  without solver values. The capture script previously read the wrong scan
+  pages for 21 of 46 cases and silently replaced unmatched or mismatched cells
+  with rounded `conical_shock` results, so 29 rows partly or wholly verified
+  the solver against itself. Tables are now located from verified pages,
+  cells are selected by table position, damaged OCR cells are transcribed
+  from the scan with recorded locations, and every table passes internal
+  consistency checks. Table numbers and printed pages are corrected. The
+  solver still agrees with every cell within the `1e-4` tolerance.
 - Keep Billig shock coordinates as owned, read-only snapshots so input-array
   changes cannot alter a previously computed shock shape.
 - Reload flat-plate GUI settings with an unspecified Mach number when

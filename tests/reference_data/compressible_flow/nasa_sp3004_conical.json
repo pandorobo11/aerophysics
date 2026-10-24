@@ -22,6 +22,206 @@
     3.0,
     5.0
   ],
-  "method": "PDF text-layer cells selected and decoded from the report's compact notation",
+  "method": "Cells selected by table position from the PDF text layer of visually verified table pages and decoded from the report's compact notation; no solver values are used. Damaged OCR cells are transcribed from the scan image. Each table is checked for header/shock-row agreement, p = rho T, total-enthalpy consistency of the surface temperature, and Rankine-Hugoniot consistency of the post-shock velocity.",
+  "manual_cells": [
+    {
+      "table": 23,
+      "field": "post_shock_mstar",
+      "value": "1.9636795",
+      "location": "PDF p. 40, shock row, M* column; OCR '419636795+01'"
+    },
+    {
+      "table": 36,
+      "field": "temperature",
+      "value": "1.0174631",
+      "location": "PDF p. 66, footer Ts/Too; OCR reads 10174691"
+    },
+    {
+      "table": 44,
+      "field": "pressure",
+      "value": "1.4033150",
+      "location": "PDF p. 82, footer Ps/Poo; OCR '+I_033150+01-'"
+    },
+    {
+      "table": 57,
+      "field": "surface_mstar",
+      "value": "1.9153173",
+      "location": "PDF p. 107, cone-surface row, M* column; no OCR word"
+    },
+    {
+      "table": 89,
+      "field": "surface_mstar",
+      "value": "1.5214464",
+      "location": "PDF p. 171, cone-surface row, M* column; no OCR word"
+    },
+    {
+      "table": 95,
+      "field": "surface_mstar",
+      "value": "2.1463663",
+      "location": "PDF p. 183, cone-surface row, M* column; OCR reads 21463669"
+    },
+    {
+      "table": 104,
+      "field": "shock_angle",
+      "value": "0.78592364",
+      "location": "PDF p. 201, shock row and p. 200 header; OCR reads 78592564 and 78592361"
+    },
+    {
+      "table": 106,
+      "field": "temperature",
+      "value": "1.1373037",
+      "location": "PDF p. 205, footer Ts/Too; OCR reads 11373097"
+    },
+    {
+      "table": 108,
+      "field": "density",
+      "value": "1.6849445",
+      "location": "PDF p. 209, footer rho_s/rho_oo; OCR '+168494_+01'"
+    },
+    {
+      "table": 112,
+      "field": "surface_mstar",
+      "value": "2.1161444",
+      "location": "PDF p. 216, cone-surface row, M* column; OCR '+2116144_+01'"
+    },
+    {
+      "table": 121,
+      "field": "temperature",
+      "value": "1.1204385",
+      "location": "PDF p. 234, footer Ts/Too; OCR '1204385+01'"
+    },
+    {
+      "table": 129,
+      "field": "post_shock_mstar",
+      "value": "2.0941342",
+      "location": "PDF p. 250, shock row, M* column; OCR '+20941542+0'"
+    },
+    {
+      "table": 140,
+      "field": "surface_mstar",
+      "value": "1.4062005",
+      "location": "PDF p. 270, cone-surface row, M* column; OCR '+140620C5+01'"
+    },
+    {
+      "table": 146,
+      "field": "density",
+      "value": "3.0369857",
+      "location": "PDF p. 283, footer rho_s/rho_oo; OCR '+30369857+01UPs/PoO'"
+    },
+    {
+      "table": 155,
+      "field": "surface_mstar",
+      "value": "1.0683100",
+      "location": "PDF p. 299, cone-surface row, M* column; no OCR word"
+    },
+    {
+      "table": 174,
+      "field": "post_shock_mstar",
+      "value": "1.3857733",
+      "location": "PDF p. 337, shock row, M* column; OCR reads 13857753"
+    },
+    {
+      "table": 190,
+      "field": "post_shock_mstar",
+      "value": "1.3328842",
+      "location": "PDF p. 369, shock row, M* column; OCR '+1.3328842+01'"
+    },
+    {
+      "table": 190,
+      "field": "shock_angle",
+      "value": "0.78882392",
+      "location": "PDF p. 369, shock row; OCR reads 78692392, p. 368 header reads 78882392"
+    },
+    {
+      "table": 192,
+      "field": "post_shock_mstar",
+      "value": "1.6442293",
+      "location": "PDF p. 373, shock row, M* column; OCR reads 15442293"
+    },
+    {
+      "table": 192,
+      "field": "surface_mstar",
+      "value": "1.6089479",
+      "location": "PDF p. 372, cone-surface row, M* column; OCR '+IS089479+01'"
+    },
+    {
+      "table": 196,
+      "field": "post_shock_mstar",
+      "value": "1.9088824",
+      "location": "PDF p. 381, shock row, M* column; OCR '+190S8824+01'"
+    },
+    {
+      "table": 196,
+      "field": "pressure",
+      "value": "9.1261264",
+      "location": "PDF p. 381, footer Ps/Poo; OCR '+g1261264+01'"
+    },
+    {
+      "table": 196,
+      "field": "surface_mstar",
+      "value": "1.8943970",
+      "location": "PDF p. 380, cone-surface row, M* column; OCR '+IS94397g+oi'"
+    },
+    {
+      "table": 206,
+      "field": "post_shock_mstar",
+      "value": "1.2749761",
+      "location": "PDF p. 401, shock row, M* column; no OCR word"
+    },
+    {
+      "table": 206,
+      "field": "pressure",
+      "value": "2.8063347",
+      "location": "PDF p. 401, footer Ps/Poo; OCR reads 29063347"
+    },
+    {
+      "table": 206,
+      "field": "shock_angle",
+      "value": "0.83913453",
+      "location": "PDF p. 401, shock row and p. 400 header; OCR '+8391345.5+00'"
+    },
+    {
+      "table": 206,
+      "field": "temperature",
+      "value": "1.3695501",
+      "location": "PDF p. 401, footer Ts/Too; OCR '3695501'"
+    },
+    {
+      "table": 208,
+      "field": "post_shock_mstar",
+      "value": "1.5879080",
+      "location": "PDF p. 405, shock row, M* column; no OCR word"
+    },
+    {
+      "table": 208,
+      "field": "pressure",
+      "value": "4.6226939",
+      "location": "PDF p. 405, footer Ps/Poo; OCR reads 43226939"
+    },
+    {
+      "table": 212,
+      "field": "density",
+      "value": "3.9856925",
+      "location": "PDF p. 413, footer rho_s/rho_oo; OCR '+398569_5+01\"'"
+    },
+    {
+      "table": 212,
+      "field": "post_shock_mstar",
+      "value": "1.8505089",
+      "location": "PDF p. 413, shock row, M* column; OCR reads 19505089"
+    },
+    {
+      "table": 212,
+      "field": "pressure",
+      "value": "10.492909",
+      "location": "PDF p. 413, footer Ps/Poo; OCR '+10492909+02I'"
+    },
+    {
+      "table": 212,
+      "field": "surface_mstar",
+      "value": "1.8350366",
+      "location": "PDF p. 412, cone-surface row, M* column; OCR reads 19350366"
+    }
+  ],
   "command": "python docs/scripts/capture_sp3004_reference.py"
 }

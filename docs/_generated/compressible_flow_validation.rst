@@ -59,7 +59,7 @@ The largest difference/tolerance ratio is ``0.4571`` at Mach ``2.5``, deflection
 NASA SP-3004 cone-table comparison
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The maximum relative difference is ``8.191e-05`` at Mach ``2``, cone half-angle ``30 deg`` (``Pass``).
+The maximum relative difference is ``5.05e-05`` at Mach ``5``, cone half-angle ``2.5 deg`` (``Pass``).
 
 Physical and mathematical invariants
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
