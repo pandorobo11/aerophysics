@@ -343,6 +343,14 @@ The sonic state for the same reservoir defines :math:`G^*`.  Non-positive
 compressibility, heat capacity, or sound speed, and absence of a stable gas
 root raise :class:`~aerophysics.exceptions.ModelRangeError`.
 
+The density inverse solves for :math:`\rho/\rho_\mathrm{ideal}`, where
+:math:`\rho_\mathrm{ideal}=p/(RT)`, so its accuracy is relative to the state
+rather than to a fixed density in kg/m³.  The returned density must reproduce
+the requested pressure through the same equation of state to a relative
+tolerance of :math:`10^{-12}`.  A state whose :math:`\rho_\mathrm{ideal}` is
+not a finite normal float64 value also raises
+:class:`~aerophysics.exceptions.ModelRangeError`.
+
 >>> from aerophysics import AIR_BEATTIE_BRIDGEMAN
 >>> from aerophysics.isentropic import isentropic_state
 >>> real = isentropic_state(
