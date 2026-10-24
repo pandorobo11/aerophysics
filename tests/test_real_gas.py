@@ -811,15 +811,19 @@ def test_zero_correction_beattie_bridgeman_density_keeps_relative_accuracy(
     # With zero corrections the EOS is exactly p = rho R T, so the density
     # inverse and its EOS pressure closure must hold relative to the state
     # scale even when the density is far below any fixed absolute tolerance.
+    # abs=0.0 because pytest.approx otherwise adds an absolute tolerance of
+    # 1e-12, which would accept any density at these dilute scales.
     gas = BeattieBridgemanGas(287.0, 1.4, 0.0, 0.0, 0.0, 0.0, 0.0)
     temperature = 300.0
+    expected_density = pressure / (287.0 * temperature)
+    density = float(gas.density(temperature, pressure))
     state = gas.state(temperature, pressure)
     reference = gas.state(temperature, 1.0e5)
 
-    assert state.density == pytest.approx(pressure / (287.0 * temperature), rel=1e-14)
-    assert gas.pressure(temperature, state.density) == pytest.approx(
-        pressure, rel=1e-14
-    )
+    for value in (density, state.density):
+        assert value == pytest.approx(expected_density, rel=1e-14, abs=0.0)
+        closure = float(gas.pressure(temperature, value)) / pressure
+        assert closure == pytest.approx(1.0, rel=1e-14, abs=0.0)
     assert state.cp == pytest.approx(reference.cp, rel=1e-14)
     assert state.speed_of_sound == pytest.approx(reference.speed_of_sound, rel=1e-14)
 
