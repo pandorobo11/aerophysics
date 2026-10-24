@@ -214,7 +214,19 @@ def test_near_sonic_conical_limit_raises_public_convergence_error(mach: float) -
     assert wave.surface_mach == mach
 
 
-@pytest.mark.parametrize(("mach", "cone_angle"), [(1.01, 1e-4), (2.0, 1e-7)])
+@pytest.mark.parametrize(
+    ("mach", "cone_angle"),
+    [
+        (1.01, 1e-4),
+        (2.0, 1e-7),
+        # Brent converges to the Mach-angle endpoint, the zero-angle Mach wave.
+        (10.0, 1e-6),
+        (20.0, 1e-6),
+        (1.00000101, 1e-12),
+        # The converged root misses the requested cone angle by about 24%.
+        (5.0, 9.5e-5),
+    ],
+)
 def test_unresolvable_slender_cone_raises_public_convergence_error(
     mach: float, cone_angle: float
 ) -> None:
@@ -222,6 +234,19 @@ def test_unresolvable_slender_cone_raises_public_convergence_error(
         warnings.simplefilter("error")
         with pytest.raises(ShockConvergenceError, match="numerical resolution"):
             conical_shock(mach, cone_angle)
+        with pytest.raises(ShockConvergenceError, match="numerical resolution"):
+            conical_shock([mach, 2.0], [cone_angle, 0.1])
+    # The zero-angle Mach wave remains the exact result for theta_c = 0.
+    wave = conical_shock(mach, 0.0)
+    assert wave.shock_angle == pytest.approx(np.arcsin(1.0 / mach), rel=1e-15)
+    assert wave.surface_pressure_ratio == 1.0
+
+
+def test_resolvable_slender_cone_matches_requested_angle() -> None:
+    result = conical_shock([10.0, 2.0], [0.01, 0.01])
+    shock_angle = np.asarray(result.shock_angle)
+    assert np.all(shock_angle > np.arcsin(1.0 / np.array([10.0, 2.0])))
+    assert np.all(np.asarray(result.surface_pressure_ratio) > 1.0)
 
 
 def test_near_sonic_resolvable_conical_limit_follows_asymptote() -> None:

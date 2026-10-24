@@ -281,8 +281,13 @@ shock-angle interval collapses, and the attached cone-angle limit approaches
 approach the Mach wave within floating-point resolution, the perfect-gas
 solver raises :class:`~aerophysics.exceptions.ShockConvergenceError`.  A trial
 Taylor--Maccoll integration that reaches the singular line
-:math:`a^2=V_\theta^2` is treated as unresolved.  Neither case substitutes a
-normal, detached, or Mach-wave solution.
+:math:`a^2=V_\theta^2` is treated as unresolved.  A converged shock-angle
+root is accepted only if its integrated cone half-angle matches the request
+to a relative tolerance of :math:`10^{-3}`.  Near the Mach wave the cone angle
+is extremely sensitive to the shock angle, so this rejects slender-cone roots
+that miss the requested cone or collapse onto the zero-angle Mach wave; in
+practice it affects only cone half-angles below about :math:`10^{-3}` rad.
+Neither case substitutes a normal, detached, or Mach-wave solution.
 
 The model assumes a sharp circular cone, zero angle
 of attack, steady inviscid adiabatic flow, and an attached axisymmetric shock.

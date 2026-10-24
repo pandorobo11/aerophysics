@@ -18,7 +18,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
   the numerical solvers, and stop trial Taylor--Maccoll integrations at the
   singular line `a^2 = V_theta^2`. This applies to nonzero cone half-angles
   with `M - 1 < 1e-6`, which previously could hang or return a non-physical
-  attached limit, and to very slender cones. Resolvable results are unchanged.
+  attached limit, and to very slender cones. A converged root must now match
+  the requested cone half-angle to `1e-3` relative; slender cones below about
+  `1e-3` rad previously could return the zero-angle Mach-wave state (unit
+  surface ratios) or a root up to 24% off the requested angle. Resolvable
+  results are unchanged.
 - Keep Billig shock coordinates as owned, read-only snapshots so input-array
   changes cannot alter a previously computed shock shape.
 - Reload flat-plate GUI settings with an unspecified Mach number when

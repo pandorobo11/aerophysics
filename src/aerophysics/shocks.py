@@ -57,6 +57,11 @@ _CONE_LIMIT_BETA_MARGIN: Final = 1e-7
 # resolvable at the ODE tolerances; the computed cone-angle maximum departs
 # from its 0.7792 sqrt(M - 1) asymptote by more than 1e-5 near M - 1 = 1e-7.
 _NEAR_SONIC_MACH_EXCESS: Final = 1e-6
+# Brent convergence bounds the shock-angle bracket, not the cone-angle
+# boundary condition.  Near the Mach wave the cone angle is extremely
+# sensitive to the shock angle, so slender-cone roots can miss the requested
+# cone angle or collapse onto the zero-angle Mach-wave state.
+_CONE_ANGLE_RELATIVE_RESIDUAL: Final = 1e-3
 
 
 class ShockBranch(StrEnum):
@@ -764,7 +769,10 @@ def _conical_shock_scalar(
     if not root_result.converged:
         raise unresolved
     state = _conical_surface_state_scalar(mach, float(beta), gas)
-    if state is None:
+    if state is None or (
+        abs(state.cone_half_angle - cone_half_angle)
+        > _CONE_ANGLE_RELATIVE_RESIDUAL * cone_half_angle
+    ):
         raise unresolved
     return float(beta), state
 
