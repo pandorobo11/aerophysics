@@ -13,6 +13,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
   calculations, previously omitted this factor and overpredicted local and
   average friction, wall shear, and drag by `T*/T_e` (about 2.5 for a Mach 6
   cold wall). Thicknesses and the Van Driest II turbulent path are unchanged.
+- Solve Beattie--Bridgeman density for `rho / rho_ideal` with a normalized
+  pressure residual and verify the EOS pressure closure before returning it.
+  The fixed absolute `1e-12 kg/m^3` tolerance previously returned a density
+  15.6% low at 1e-9 Pa and 300 K for a zero-correction model. States whose
+  ideal-gas density is not a normal float64 now raise `ModelRangeError`.
 - Raise `ShockConvergenceError` for unresolvable perfect-gas conical shocks
   instead of leaking `ValueError`, `RuntimeError`, or `RuntimeWarning` from
   the numerical solvers, and stop trial Taylor--Maccoll integrations at the
