@@ -34,7 +34,11 @@ from aerophysics._thermal_shocks import (
     properties,
     theta_from_beta,
 )
-from aerophysics.exceptions import ModelRangeError, NoAttachedShockError
+from aerophysics.exceptions import (
+    ModelRangeError,
+    NoAttachedShockError,
+    ShockConvergenceError,
+)
 from aerophysics.gas import AIR, PerfectGas
 from aerophysics.real_gas import HarmonicOscillatorGas
 from aerophysics.thermochemistry import ThermallyPerfectGas
@@ -48,6 +52,16 @@ _ODE_RTOL: Final = 1e-10
 _ODE_ATOL: Final = 1e-12
 _CONE_ANGLE_TOLERANCE: Final = 1e-10
 _CONE_AXIS_FLOOR: Final = 1e-8
+_CONE_LIMIT_BETA_MARGIN: Final = 1e-7
+# Below this M - 1 the Taylor--Maccoll trials near the Mach wave are not
+# resolvable at the ODE tolerances; the computed cone-angle maximum departs
+# from its 0.7792 sqrt(M - 1) asymptote by more than 1e-5 near M - 1 = 1e-7.
+_NEAR_SONIC_MACH_EXCESS: Final = 1e-6
+# Brent convergence bounds the shock-angle bracket, not the cone-angle
+# boundary condition.  Near the Mach wave the cone angle is extremely
+# sensitive to the shock angle, so slender-cone roots can miss the requested
+# cone angle or collapse onto the zero-angle Mach-wave state.
+_CONE_ANGLE_RELATIVE_RESIDUAL: Final = 1e-3
 
 
 class ShockBranch(StrEnum):
@@ -137,6 +151,26 @@ class _ConeSurfaceEvent:
 
 
 _CONE_SURFACE_EVENT = _ConeSurfaceEvent()
+
+
+class _SingularLineEvent:
+    """Stop where the polar velocity reaches the local sound speed.
+
+    Behind an attached shock the polar velocity is subsonic and decreases in
+    magnitude toward the cone.  Reaching ``a**2 = V_theta**2`` makes the
+    Taylor--Maccoll equation singular and identifies an unresolvable trial.
+    """
+
+    terminal: bool = True
+    direction: float = -1.0
+
+    def __init__(self, gas: PerfectGas) -> None:
+        self.gamma = gas.heat_capacity_ratio
+
+    def __call__(self, _angle: float, velocity: FloatArray) -> float:
+        radial, polar = velocity
+        sound_speed_squared = 0.5 * (self.gamma - 1.0) * (1.0 - radial**2 - polar**2)
+        return float(sound_speed_squared - polar**2)
 
 
 def _validate_supersonic_mach(mach: ArrayLike) -> tuple[FloatArray, bool]:
@@ -505,7 +539,9 @@ def _mach_from_limiting_velocity(speed_squared: float, gas: PerfectGas) -> float
     gamma = gas.heat_capacity_ratio
     sound_speed_squared = 0.5 * (gamma - 1.0) * (1.0 - speed_squared)
     if sound_speed_squared <= 0.0:
-        raise RuntimeError("Taylor-Maccoll integration left the physical state space")
+        raise ShockConvergenceError(
+            "Taylor-Maccoll integration left the physical state space"
+        )
     return float(np.sqrt(speed_squared / sound_speed_squared))
 
 
@@ -516,9 +552,13 @@ def _taylor_maccoll_rhs(
     gamma = gas.heat_capacity_ratio
     sound_speed_squared = 0.5 * (gamma - 1.0) * (1.0 - radial**2 - polar**2)
     denominator = sound_speed_squared - polar**2
-    polar_derivative = (
-        radial * polar**2 - sound_speed_squared * (2.0 * radial + polar / np.tan(angle))
-    ) / denominator
+    # A singular trial state yields a non-finite derivative, which makes the
+    # integrator report failure instead of emitting floating-point warnings.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        polar_derivative = (
+            radial * polar**2
+            - sound_speed_squared * (2.0 * radial + polar / np.tan(angle))
+        ) / denominator
     return np.asarray([polar, polar_derivative], dtype=np.float64)
 
 
@@ -539,13 +579,16 @@ def _conical_surface_state_scalar(
     polar = -limiting_velocity * np.sin(shock_angle_value) / float(density_ratio)
     initial = np.asarray([radial, polar], dtype=np.float64)
     post_shock_mach = _mach_from_limiting_velocity(float(initial @ initial), gas)
+    singular_line = _SingularLineEvent(gas)
+    if singular_line(shock_angle_value, initial) <= 0.0:
+        return None
 
     solution = solve_ivp(
         lambda angle, velocity: _taylor_maccoll_rhs(angle, velocity, gas),
         (shock_angle_value, _CONE_AXIS_FLOOR),
         initial,
         method="DOP853",
-        events=_CONE_SURFACE_EVENT,
+        events=(_CONE_SURFACE_EVENT, singular_line),
         rtol=_ODE_RTOL,
         atol=_ODE_ATOL,
     )
@@ -556,6 +599,7 @@ def _conical_surface_state_scalar(
         or event_times is None
         or event_states is None
         or not event_times[0].size
+        or event_times[1].size
     ):
         return None
     cone_half_angle = float(event_times[0][0])
@@ -573,10 +617,18 @@ def _conical_surface_state_scalar(
 
 @lru_cache(maxsize=512)
 def _attached_conical_limit_scalar(mach: float, gas: PerfectGas) -> tuple[float, float]:
+    if mach - 1.0 < _NEAR_SONIC_MACH_EXCESS:
+        # As M -> 1+, the Mach angle approaches pi/2 and the attached
+        # shock-angle interval collapses to a numerically degenerate width.
+        raise ShockConvergenceError(
+            f"attached conical shock for Mach {mach:.17g} is below numerical "
+            f"resolution; Mach must exceed 1 + {_NEAR_SONIC_MACH_EXCESS:g} "
+            "for a nonzero cone half-angle"
+        )
     mach_angle = float(np.arcsin(1.0 / mach))
     beta_values = np.linspace(
-        mach_angle + 1e-7,
-        0.5 * np.pi - 1e-7,
+        mach_angle + _CONE_LIMIT_BETA_MARGIN,
+        0.5 * np.pi - _CONE_LIMIT_BETA_MARGIN,
         33,
         dtype=np.float64,
     )
@@ -592,7 +644,7 @@ def _attached_conical_limit_scalar(mach: float, gas: PerfectGas) -> tuple[float,
     )
     peak_index = int(np.argmax(cone_angles))
     if not np.isfinite(cone_angles[peak_index]):
-        raise RuntimeError(
+        raise ShockConvergenceError(
             "Taylor-Maccoll integration could not find an attached shock"
         )
     lower = float(beta_values[max(peak_index - 1, 0)])
@@ -608,10 +660,16 @@ def _attached_conical_limit_scalar(mach: float, gas: PerfectGas) -> tuple[float,
         method="bounded",
         options={"xatol": _ROOT_XTOL, "maxiter": _ROOT_MAXITER},
     )
+    if not optimum.success:
+        raise ShockConvergenceError(
+            f"conical cone-angle maximization failed for Mach {mach:.17g}"
+        )
     beta_peak = float(optimum.x)
     peak_state = _conical_surface_state_scalar(mach, beta_peak, gas)
     if peak_state is None:
-        raise RuntimeError("Taylor-Maccoll integration failed at the attached limit")
+        raise ShockConvergenceError(
+            "Taylor-Maccoll integration failed at the attached limit"
+        )
     return peak_state.cone_half_angle, beta_peak
 
 
@@ -682,31 +740,41 @@ def _conical_shock_scalar(
     if abs(cone_half_angle - maximum_angle) <= _CONE_ANGLE_TOLERANCE:
         state = _conical_surface_state_scalar(mach, beta_peak, gas)
         if state is None:
-            raise RuntimeError(
+            raise ShockConvergenceError(
                 "Taylor-Maccoll integration failed at the attached limit"
             )
         return beta_peak, state
 
+    unresolved = ShockConvergenceError(
+        f"conical shock for Mach {mach:.17g} and cone half-angle "
+        f"{cone_half_angle:.17g} rad is below numerical resolution"
+    )
+
     def residual(beta: float) -> float:
         state = _conical_surface_state_scalar(mach, beta, gas)
         if state is None:
-            raise RuntimeError("Taylor-Maccoll integration failed during root solving")
+            raise unresolved
         return state.cone_half_angle - cone_half_angle
 
-    beta = float(
-        brentq(
-            residual,
-            mach_angle,
-            beta_peak,
-            xtol=_ROOT_XTOL,
-            rtol=_ROOT_RTOL,
-            maxiter=_ROOT_MAXITER,
-        )
+    beta, root_result = brentq(
+        residual,
+        mach_angle,
+        beta_peak,
+        xtol=_ROOT_XTOL,
+        rtol=_ROOT_RTOL,
+        maxiter=_ROOT_MAXITER,
+        full_output=True,
+        disp=False,
     )
-    state = _conical_surface_state_scalar(mach, beta, gas)
-    if state is None:
-        raise RuntimeError("Taylor-Maccoll integration failed for the conical shock")
-    return beta, state
+    if not root_result.converged:
+        raise unresolved
+    state = _conical_surface_state_scalar(mach, float(beta), gas)
+    if state is None or (
+        abs(state.cone_half_angle - cone_half_angle)
+        > _CONE_ANGLE_RELATIVE_RESIDUAL * cone_half_angle
+    ):
+        raise unresolved
+    return float(beta), state
 
 
 def conical_shock(

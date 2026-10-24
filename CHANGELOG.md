@@ -18,6 +18,16 @@ uses Semantic Versioning, including during the pre-1.0 period.
   The fixed absolute `1e-12 kg/m^3` tolerance previously returned a density
   15.6% low at 1e-9 Pa and 300 K for a zero-correction model. States whose
   ideal-gas density is not a normal float64 now raise `ModelRangeError`.
+- Raise `ShockConvergenceError` for unresolvable perfect-gas conical shocks
+  instead of leaking `ValueError`, `RuntimeError`, or `RuntimeWarning` from
+  the numerical solvers, and stop trial Taylor--Maccoll integrations at the
+  singular line `a^2 = V_theta^2`. This applies to nonzero cone half-angles
+  with `M - 1 < 1e-6`, which previously could hang or return a non-physical
+  attached limit, and to very slender cones. A converged root must now match
+  the requested cone half-angle to `1e-3` relative; slender cones below about
+  `1e-3` rad previously could return the zero-angle Mach-wave state (unit
+  surface ratios) or a root up to 24% off the requested angle. Resolvable
+  results are unchanged.
 - Keep Billig shock coordinates as owned, read-only snapshots so input-array
   changes cannot alter a previously computed shock shape.
 - Reload flat-plate GUI settings with an unspecified Mach number when
