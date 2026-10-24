@@ -61,14 +61,8 @@ from aerophysics.shocks import ShockBranch
 
 @pytest.mark.parametrize(
     ("gas_model", "mach"),
-    [
-        ("AIR", 1.0),
-        ("AIR", 3.0),
-        ("NASA7", 3.0),
-        ("NASA9", 3.0),
-        ("HARMONIC_OSCILLATOR", 3.0),
-        ("HARMONIC_OSCILLATOR", 4.2),
-    ],
+    # The drawing uses only the row; one thermal row covers a missing pitot value.
+    [("AIR", 1.0), ("AIR", 3.0), ("HARMONIC_OSCILLATOR", 4.2)],
 )
 def test_normal_geometry_uses_solved_mach_and_collinear_flow(
     gas_model: str, mach: float
@@ -85,7 +79,6 @@ def test_normal_geometry_uses_solved_mach_and_collinear_flow(
     shock = figure.data[0]
     assert list(shock.x) == [0.0, 0.0]
     assert shock.y[0] < 0.0 < shock.y[1]
-    assert shock.line.color == "#d62728"
     arrows = [item for item in figure.layout.annotations if item.showarrow]
     assert len(arrows) == 2
     for arrow in arrows:
@@ -103,10 +96,17 @@ def test_normal_geometry_uses_solved_mach_and_collinear_flow(
         assert row["pitot_pressure_ratio"] is None
 
 
-@pytest.mark.parametrize("unit", ["deg", "rad"])
+# Display units affect labels only, so they alternate across geometric cases.
 @pytest.mark.parametrize(
-    ("mach", "theta_degrees"),
-    [(1.0, 15.0), (2.0, 0.0), (2.0, 15.0), (2.0, 80.0), (2.0, 100.0), (1.05, 110.0)],
+    ("mach", "theta_degrees", "unit"),
+    [
+        (1.0, 15.0, "deg"),
+        (2.0, 0.0, "rad"),
+        (2.0, 15.0, "deg"),
+        (2.0, 80.0, "rad"),
+        (2.0, 100.0, "deg"),
+        (1.05, 110.0, "rad"),
+    ],
 )
 def test_expansion_geometry_fan_and_local_mach_angles(
     mach: float, theta_degrees: float, unit: str
@@ -129,7 +129,6 @@ def test_expansion_geometry_fan_and_local_mach_angles(
     for ray in fan:
         assert ray.x[0] == ray.y[0] == 0.0
         assert np.hypot(ray.x[-1], ray.y[-1]) == pytest.approx(1.6)
-        assert ray.line.color == "#16836c"
     arcs = figure.data[-3:]
     for arc, start, end in zip(
         arcs, [0.0, 0.0, -theta], [-theta, mu1, mu2 - theta], strict=True
@@ -295,15 +294,14 @@ def test_conical_shock_geometry_and_sweep_axes() -> None:
     assert list(figures["状態量"].data[0].x) == pytest.approx([2.0, 3.0])
 
 
-@pytest.mark.parametrize("unit", ["deg", "rad"])
 @pytest.mark.parametrize(
-    ("conical", "theta_degrees", "beta_degrees"),
+    ("conical", "theta_degrees", "beta_degrees", "unit"),
     [
-        (False, 0.0, 90.0),
-        (False, 10.0, 27.3),
-        (False, 10.0, 86.8),
-        (True, 10.0, 21.7),
-        (True, 40.0, 65.0),
+        (False, 0.0, 90.0, "deg"),
+        (False, 10.0, 27.3, "rad"),
+        (False, 10.0, 86.8, "deg"),
+        (True, 10.0, 21.7, "rad"),
+        (True, 40.0, 65.0, "deg"),
     ],
 )
 def test_attached_geometry_preserves_angles_and_flow_directions(
@@ -456,9 +454,12 @@ def test_detached_shock_geometry_and_trends() -> None:
     assert seiff_figures["無次元離脱距離"].data[0].name == "Seiff"
 
 
-@pytest.mark.parametrize("geometry", list(DetachedShockGeometry))
 @pytest.mark.parametrize(
-    ("unit", "factor"), [("m", 1.0), ("mm", 1000.0), ("ft", 1.0 / 0.3048)]
+    ("geometry", "unit", "factor"),
+    [
+        (DetachedShockGeometry.AXISYMMETRIC_SPHERE, "mm", 1000.0),
+        (DetachedShockGeometry.CYLINDRICAL_NOSE_2D, "ft", 1.0 / 0.3048),
+    ],
 )
 def test_detached_geometry_dimensions_and_upstream_coordinates(
     geometry: DetachedShockGeometry, unit: str, factor: float

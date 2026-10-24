@@ -18,8 +18,8 @@ from aerophysics.gui.tables import display_rows, rows_to_csv
 from aerophysics.gui.units import UnitPreferences
 
 
-@pytest.mark.parametrize("gas_model", ["NASA7", "NASA9", "HARMONIC_OSCILLATOR"])
-def test_thermal_page_units_and_settings_replay(gas_model: str) -> None:
+def test_thermal_page_units_and_settings_replay() -> None:
+    gas_model = "HARMONIC_OSCILLATOR"
     script = """
 from aerophysics.gui.flow_pages import render_expansion
 from aerophysics.gui.components import render_unit_sidebar

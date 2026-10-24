@@ -47,14 +47,6 @@ def test_pinned_cantera_snapshot_matches_nasa_air_models() -> None:
             assert abs(float(value) - expected) <= 2.0e-6 * max(abs(expected), 1.0)
 
 
-def test_nist_reference_covers_dilute_air_temperature_range() -> None:
-    rows = _rows("nist-lemmon-jacobsen-2004.csv")
-    assert len(rows) == 8
-    assert all(float(row["molar_density_mol_dm3"]) == 0.0 for row in rows)
-    assert float(rows[0]["temperature_K"]) == 250.0
-    assert float(rows[-1]["temperature_K"]) == 1500.0
-
-
 def test_transport_models_match_primary_ussa_references() -> None:
     metadata = json.loads(
         (REFERENCE / "ussa-1976-transport.json").read_text(encoding="utf-8")

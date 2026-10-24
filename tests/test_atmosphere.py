@@ -13,47 +13,13 @@ from aerophysics.atmosphere import (
 from aerophysics.exceptions import ModelRangeError
 
 
-def test_sea_level_reference_state() -> None:
+def test_sea_level_scalar_contract_and_conductivity() -> None:
+    # Tabulated sea-level values are covered by the official-table verification.
     state = standard_atmosphere(0.0)
     assert isinstance(state.pressure, float)
     assert state.geometric_altitude == 0.0
     assert state.geopotential_altitude == 0.0
-    assert state.temperature == pytest.approx(288.15)
-    assert state.pressure == pytest.approx(101_325.0)
-    assert state.density == pytest.approx(1.225, rel=1e-6)
-    assert state.speed_of_sound == pytest.approx(340.294, rel=1e-6)
-    assert state.gravity == pytest.approx(9.80665)
-    assert state.dynamic_viscosity == pytest.approx(1.7894e-5)
-    assert state.kinematic_viscosity == pytest.approx(1.46074e-5, rel=1e-5)
     assert state.thermal_conductivity == pytest.approx(0.025325884264264)
-    assert state.prandtl_number == pytest.approx(0.70986, rel=1e-5)
-
-
-@pytest.mark.parametrize(
-    ("geopotential_altitude", "temperature", "pressure"),
-    [
-        (11_000.0, 216.65, 22_632.1),
-        (20_000.0, 216.65, 5_474.89),
-        (32_000.0, 228.65, 868.019),
-        (47_000.0, 270.65, 110.906),
-        (51_000.0, 270.65, 66.9389),
-        (71_000.0, 214.65, 3.95642),
-    ],
-)
-def test_geopotential_layer_boundary_reference_values(
-    geopotential_altitude: float, temperature: float, pressure: float
-) -> None:
-    geometric_altitude = geopotential_to_geometric(geopotential_altitude)
-    state = standard_atmosphere(geometric_altitude)
-    assert state.temperature == pytest.approx(temperature, abs=1e-10)
-    assert state.pressure == pytest.approx(pressure, rel=1e-5)
-
-
-def test_geometric_altitude_endpoints() -> None:
-    state = standard_atmosphere([-5_000.0, 86_000.0])
-    assert isinstance(state.temperature, np.ndarray)
-    assert_allclose(state.temperature, [320.676, 186.946], rtol=5e-6)
-    assert_allclose(state.pressure, [177_762.0, 0.37338], rtol=5e-4)
 
 
 def test_array_shape_and_derived_properties() -> None:

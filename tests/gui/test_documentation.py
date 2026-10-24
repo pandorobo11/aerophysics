@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from unittest.mock import patch
+from urllib.request import urlopen
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -53,16 +54,16 @@ render_documentation()
 
 def test_local_documentation_server(tmp_path: Path) -> None:
     (tmp_path / "index.html").write_text("docs-ready", encoding="utf-8")
-    with (
-        patch("aerophysics.gui.launcher.ThreadingHTTPServer") as server_class,
-        patch("aerophysics.gui.launcher.threading.Thread") as thread_class,
-    ):
-        server, _thread = _start_documentation_server(tmp_path)
-    address, handler = server_class.call_args.args
-    assert address == (LOOPBACK_ADDRESS, 0)
-    assert callable(handler)
-    thread_class.assert_called_once_with(target=server.serve_forever, daemon=True)
-    thread_class.return_value.start.assert_called_once_with()
+    server, thread = _start_documentation_server(tmp_path)
+    try:
+        host, port = server.server_address[:2]
+        assert host == LOOPBACK_ADDRESS
+        with urlopen(f"http://{LOOPBACK_ADDRESS}:{port}/index.html", timeout=5) as page:
+            assert page.read() == b"docs-ready"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_gui_launcher_binds_streamlit_to_loopback(

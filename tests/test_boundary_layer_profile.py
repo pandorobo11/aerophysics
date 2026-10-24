@@ -126,10 +126,15 @@ def test_forward_nonuniform_properties_match_differential_mappings() -> None:
 
 @pytest.mark.parametrize(
     ("transformation", "relation"),
+    # The transformation and temperature relation are independent choices.
     [
-        (transformation, relation)
+        (transformation, TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY)
         for transformation in CompressibleVelocityTransformation
+    ]
+    + [
+        (CompressibleVelocityTransformation.VAN_DRIEST, relation)
         for relation in TemperatureVelocityRelation
+        if relation is not TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY
     ],
 )
 def test_inverse_profile_satisfies_edge_and_property_relations(

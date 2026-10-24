@@ -17,7 +17,8 @@ from aerophysics.gas import AIR, AIR_VISCOSITY
 from aerophysics.transport import AIR_BLOTTNER_VISCOSITY
 
 
-def test_blasius_laminar_reference_values() -> None:
+def test_blasius_dimensional_outputs() -> None:
+    # Nondimensional Blasius values are covered by the source-equation verification.
     result = flat_plate_boundary_layer(
         1.0,
         10.0,
@@ -26,11 +27,6 @@ def test_blasius_laminar_reference_values() -> None:
         regime=BoundaryLayerRegime.LAMINAR,
     )
     assert result.reynolds_number == pytest.approx(1e6)
-    assert result.boundary_layer_thickness == pytest.approx(0.005)
-    assert result.displacement_thickness == pytest.approx(0.0017208)
-    assert result.momentum_thickness == pytest.approx(0.000664)
-    assert result.local_skin_friction_coefficient == pytest.approx(0.000664)
-    assert result.average_skin_friction_coefficient == pytest.approx(0.001328)
     assert result.wall_shear_stress == pytest.approx(0.0332)
     assert result.drag_per_unit_width == pytest.approx(0.0664)
     assert result.effective_reynolds_number == result.reynolds_number
@@ -38,7 +34,7 @@ def test_blasius_laminar_reference_values() -> None:
     assert result.wall_temperature is None
 
 
-def test_one_fifth_power_turbulent_reference_values() -> None:
+def test_one_fifth_power_turbulent_integral_thicknesses() -> None:
     result = flat_plate_boundary_layer(
         1.0,
         10.0,
@@ -47,12 +43,10 @@ def test_one_fifth_power_turbulent_reference_values() -> None:
         regime=BoundaryLayerRegime.TURBULENT,
         turbulent_correlation=TurbulentCorrelation.POWER_LAW,
     )
-    factor = 1e6**-0.2
-    assert result.boundary_layer_thickness == pytest.approx(0.37 * factor)
-    assert result.displacement_thickness == pytest.approx(0.37 * factor / 8.0)
-    assert result.momentum_thickness == pytest.approx(0.37 * factor * 7.0 / 72.0)
-    assert result.local_skin_friction_coefficient == pytest.approx(0.0592 * factor)
-    assert result.average_skin_friction_coefficient == pytest.approx(0.074 * factor)
+    # delta and C_f are covered by the source-equation verification.
+    delta = float(result.boundary_layer_thickness)
+    assert result.displacement_thickness == pytest.approx(delta / 8.0)
+    assert result.momentum_thickness == pytest.approx(delta * 7.0 / 72.0)
 
 
 def test_schlichting_is_default_and_local_is_drag_derivative() -> None:
@@ -125,40 +119,6 @@ def test_array_inputs_broadcast_and_return_float64() -> None:
         assert value.dtype == np.float64
 
 
-def test_eckert_laminar_adiabatic_wall() -> None:
-    edge_temperature = 250.0
-    mach = 2.0
-    viscosity = float(AIR_VISCOSITY.dynamic_viscosity(edge_temperature))
-    result = flat_plate_boundary_layer(
-        1.0,
-        500.0,
-        0.5,
-        viscosity,
-        regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
-        mach=mach,
-        edge_temperature=edge_temperature,
-    )
-    recovery = edge_temperature * (
-        1.0 + np.sqrt(0.72) * 0.5 * (AIR.heat_capacity_ratio - 1.0) * mach**2
-    )
-    reference = 0.22 * recovery + 0.28 * edge_temperature + 0.50 * recovery
-    edge_reynolds = 0.5 * 500.0 / viscosity
-    effective_reynolds = (
-        edge_reynolds
-        * edge_temperature
-        / reference
-        * viscosity
-        / float(AIR_VISCOSITY.dynamic_viscosity(reference))
-    )
-    assert result.recovery_temperature == pytest.approx(recovery)
-    assert result.wall_temperature == pytest.approx(recovery)
-    assert result.effective_reynolds_number == pytest.approx(effective_reynolds)
-    assert result.local_skin_friction_coefficient == pytest.approx(
-        edge_temperature / reference * 0.664 / np.sqrt(effective_reynolds)
-    )
-
-
 def test_eckert_accepts_blottner_mixture_viscosity_model() -> None:
     edge_temperature = 1000.0
     edge_viscosity = float(AIR_BLOTTNER_VISCOSITY.dynamic_viscosity(edge_temperature))
@@ -174,7 +134,20 @@ def test_eckert_accepts_blottner_mixture_viscosity_model() -> None:
         wall_temperature=1000.0,
         viscosity_model=AIR_BLOTTNER_VISCOSITY,
     )
-    assert result.effective_reynolds_number > 0.0
+    sutherland = flat_plate_boundary_layer(
+        1.0,
+        1000.0,
+        0.1,
+        edge_viscosity,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressibility_correction=CompressibilityCorrection.ECKERT,
+        mach=1.0,
+        edge_temperature=edge_temperature,
+        wall_temperature=1000.0,
+    )
+    assert result.effective_reynolds_number != pytest.approx(
+        sutherland.effective_reynolds_number, rel=1e-3
+    )
 
 
 def test_eckert_uses_supplied_edge_viscosity_in_correction() -> None:
@@ -459,31 +432,6 @@ def _van_driest_factors(
     )
 
 
-def test_van_driest_uses_supplied_edge_viscosity_in_correction() -> None:
-    edge_temperature = 250.0
-    mach = 2.0
-    _, momentum_factor, reynolds_factor, recovery = _van_driest_factors(
-        mach, edge_temperature
-    )
-
-    result = flat_plate_boundary_layer(
-        1.0,
-        100.0,
-        1.0,
-        1e-5,
-        regime=BoundaryLayerRegime.TURBULENT,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
-        mach=mach,
-        edge_temperature=edge_temperature,
-    )
-    assert result.effective_reynolds_number == pytest.approx(1e7 * reynolds_factor)
-    assert result.wall_temperature == pytest.approx(recovery)
-    assert result.boundary_layer_thickness == pytest.approx(
-        0.37 * (1e7 * momentum_factor) ** -0.2
-    )
-
-
 @pytest.mark.parametrize(
     ("mach", "wall_temperature"),
     [(2.0, None), (5.0, 300.0)],
@@ -504,11 +452,17 @@ def test_van_driest_local_and_average_implicit_residuals(
         edge_temperature=edge_temperature,
         wall_temperature=wall_temperature,
     )
-    friction_factor, _, reynolds_factor, _ = _van_driest_factors(
+    friction_factor, momentum_factor, reynolds_factor, recovery = _van_driest_factors(
         mach, edge_temperature, wall_temperature
     )
+    expected_wall = recovery if wall_temperature is None else wall_temperature
+    assert result.wall_temperature == pytest.approx(expected_wall)
     assert result.effective_reynolds_number == pytest.approx(
         result.reynolds_number * reynolds_factor
+    )
+    # Thickness uses Re_x*F_theta, not the friction Reynolds number.
+    assert result.boundary_layer_thickness == pytest.approx(
+        0.37 * (float(result.reynolds_number) * momentum_factor) ** -0.2
     )
 
     local = float(result.local_skin_friction_coefficient)
@@ -631,6 +585,9 @@ def test_compressibility_inputs_broadcast() -> None:
     )
     assert isinstance(result.wall_temperature, np.ndarray)
     assert result.wall_temperature.shape == (2, 3)
+    # Without an explicit wall temperature the wall is adiabatic.
+    assert result.recovery_temperature is not None
+    assert_allclose(result.wall_temperature, np.asarray(result.recovery_temperature))
     assert isinstance(result.effective_reynolds_number, np.ndarray)
     assert result.effective_reynolds_number.shape == (2, 3)
 
@@ -671,6 +628,17 @@ def test_inputs_must_broadcast() -> None:
             1.0,
             1e-5,
             regime=BoundaryLayerRegime.LAMINAR,
+        )
+    with pytest.raises(ValueError, match="broadcastable"):
+        flat_plate_boundary_layer(
+            [1.0, 2.0],
+            10.0,
+            1.0,
+            1e-5,
+            regime=BoundaryLayerRegime.LAMINAR,
+            compressibility_correction=CompressibilityCorrection.ECKERT,
+            mach=[1.0, 2.0, 3.0],
+            edge_temperature=250.0,
         )
 
 
@@ -849,26 +817,6 @@ def test_van_driest_array_inputs_broadcast() -> None:
         assert value.dtype == np.float64
 
 
-def test_van_driest_selection_uses_eckert_for_laminar_flow() -> None:
-    result = flat_plate_boundary_layer(
-        1.0,
-        10.0,
-        1.0,
-        1e-5,
-        regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
-        mach=0.0,
-        edge_temperature=250.0,
-    )
-    expected_reynolds = (
-        float(result.reynolds_number)
-        * 1e-5
-        / float(AIR_VISCOSITY.dynamic_viscosity(250.0))
-    )
-    assert result.effective_reynolds_number == pytest.approx(expected_reynolds)
-    assert result.wall_temperature == 250.0
-
-
 def test_van_driest_rejects_degenerate_thermal_state() -> None:
     with pytest.raises(ModelRangeError, match="undefined"):
         flat_plate_boundary_layer(
@@ -894,19 +842,5 @@ def test_van_driest_reports_unbracketed_willems_solution() -> None:
             regime=BoundaryLayerRegime.TURBULENT,
             compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
             mach=0.0,
-            edge_temperature=250.0,
-        )
-
-
-def test_thermal_inputs_must_broadcast() -> None:
-    with pytest.raises(ValueError, match="broadcastable"):
-        flat_plate_boundary_layer(
-            [1.0, 2.0],
-            10.0,
-            1.0,
-            1e-5,
-            regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
-            mach=[1.0, 2.0, 3.0],
             edge_temperature=250.0,
         )

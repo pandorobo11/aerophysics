@@ -8,7 +8,11 @@ from numpy.typing import NDArray
 
 from aerophysics import AIR_HARMONIC_OSCILLATOR, standard_atmosphere
 from aerophysics.boundary_layer import BoundaryLayerRegime, flat_plate_boundary_layer
-from aerophysics.detached_shock import DetachedShockGeometry, shock_standoff_distance
+from aerophysics.detached_shock import (
+    DetachedShockGeometry,
+    billig_shock_shape,
+    shock_standoff_distance,
+)
 from aerophysics.expansion import prandtl_meyer_expansion
 from aerophysics.isentropic import isentropic_ratios
 from aerophysics.shocks import normal_shock
@@ -62,6 +66,28 @@ type VectorCalculation = Callable[[FloatArray], float | FloatArray]
                 ).upstream_mach
             ),
         ),
+        (
+            np.asarray([-0.1, 0.0, 0.1]),
+            lambda values: (
+                billig_shock_shape(
+                    [[2.0], [4.0]],
+                    1.0,
+                    values,
+                    geometry=DetachedShockGeometry.AXISYMMETRIC_SPHERE,
+                ).shock_y
+            ),
+        ),
+        (
+            np.asarray([-0.1, 0.0, 0.1]),
+            lambda values: (
+                billig_shock_shape(
+                    4.0,
+                    1.0,
+                    values,
+                    geometry=DetachedShockGeometry.CYLINDRICAL_NOSE_2D,
+                ).shock_x
+            ),
+        ),
     ],
     ids=(
         "atmosphere",
@@ -71,6 +97,8 @@ type VectorCalculation = Callable[[FloatArray], float | FloatArray]
         "boundary-layer",
         "real-gas",
         "detached-shock",
+        "billig-shock-y",
+        "billig-shock-x",
     ),
 )
 def test_vectorized_results_are_owned_read_only_snapshots(

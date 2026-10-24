@@ -7,16 +7,23 @@ from aerophysics.gui.config import dump_configuration, load_configuration
 
 
 @pytest.mark.parametrize(
-    "module,function,prefix,calculator",
+    "module,function,prefix,calculator,gas_model",
     [
-        ("flow_pages", "render_normal_shock", "normal", "normal_shock"),
-        ("pages", "render_shock", "shock", "oblique_shock"),
-        ("pages", "render_conical_shock", "cone_shock", "conical_shock"),
-        ("flow_pages", "render_isentropic", "isentropic", "isentropic"),
+        ("flow_pages", "render_normal_shock", "normal", "normal_shock", "NASA9"),
+        ("pages", "render_shock", "shock", "oblique_shock", "NASA9"),
+        # Thermally perfect cones are slow; the page logic is gas-independent.
+        (
+            "pages",
+            "render_conical_shock",
+            "cone_shock",
+            "conical_shock",
+            "HARMONIC_OSCILLATOR",
+        ),
+        ("flow_pages", "render_isentropic", "isentropic", "isentropic", "NASA9"),
     ],
 )
 def test_flow_output_settings_units_and_sweep_replay(
-    module: str, function: str, prefix: str, calculator: str
+    module: str, function: str, prefix: str, calculator: str, gas_model: str
 ) -> None:
     script = f"""
 from aerophysics.gui.{module} import {function}
@@ -26,7 +33,7 @@ from aerophysics.gui.components import render_unit_sidebar
     # Match existing thermal cone tests for explicit integration, not controls.
     calculation_timeout = 60 if calculator == "conical_shock" else 30
     app = AppTest.from_string(script, default_timeout=30).run()
-    app.selectbox(key=f"{prefix}_gas_model").set_value("NASA9").run()
+    app.selectbox(key=f"{prefix}_gas_model").set_value(gas_model).run()
     app.checkbox(key=f"{prefix}_with_heat_capacities").check().run()
     if prefix == "isentropic":
         app.checkbox(key="isentropic_with_flux").check().run()
