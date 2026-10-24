@@ -18,8 +18,8 @@ from scipy.optimize import brentq
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 
-_ROOT_XTOL: Final = 1e-12
 _ROOT_RTOL: Final = 4.0 * np.finfo(np.float64).eps
+_PRESSURE_CLOSURE_RTOL: Final = 1e-12
 _ROOT_MAXITER: Final = 100
 _DENSITY_BRACKET_STEPS: Final = 200
 
@@ -536,28 +536,44 @@ class BeattieBridgemanGas:
                 )
 
         ideal_density = pressure / (self.specific_gas_constant * temperature)
+        if not np.isfinite(ideal_density) or ideal_density < np.finfo(np.float64).tiny:
+            raise ModelRangeError(
+                "Beattie--Bridgeman ideal-gas density scale is not representable"
+            )
         lower = 0.0
-        upper = max(0.25 * ideal_density, np.finfo(np.float64).tiny)
+        upper = 0.25 * ideal_density
         if stable_upper is not None:
             upper = min(upper, stable_upper)
         for _ in range(_DENSITY_BRACKET_STEPS):
             residual = self._pressure_scalar(temperature, upper) - pressure
             derivative = self._dp_drho_scalar(temperature, upper)
             if residual >= 0.0:
-                density = float(
+                # Solve for rho / rho_ideal with a normalized residual so the
+                # stopping criterion is independent of the absolute density
+                # scale, which spans hundreds of decades for dilute states.
+                density_ratio = float(
                     brentq(
-                        lambda value: (
-                            self._pressure_scalar(temperature, value) - pressure
+                        lambda ratio: (
+                            self._pressure_scalar(temperature, ratio * ideal_density)
+                            / pressure
+                            - 1.0
                         ),
-                        lower,
-                        upper,
-                        xtol=_ROOT_XTOL,
+                        lower / ideal_density,
+                        upper / ideal_density,
+                        xtol=_ROOT_RTOL,
                         rtol=_ROOT_RTOL,
                         maxiter=_ROOT_MAXITER,
                     )
                 )
+                density = density_ratio * ideal_density
                 if self._dp_drho_scalar(temperature, density) <= 0.0:
                     break
+                closure = self._pressure_scalar(temperature, density) / pressure
+                if not abs(closure - 1.0) <= _PRESSURE_CLOSURE_RTOL:
+                    raise ModelRangeError(
+                        "Beattie--Bridgeman density does not reproduce the "
+                        "requested pressure"
+                    )
                 return density
             if derivative <= 0.0:
                 break
@@ -601,7 +617,7 @@ class BeattieBridgemanGas:
             * density
             * (1.0 + 0.5 * self.b0 * density - self.b0 * self.b * density**2 / 3.0)
         )
-        cp = cv + temperature * dp_dtemperature**2 / (density**2 * dp_drho)
+        cp = cv + temperature * (dp_dtemperature / density) ** 2 / dp_drho
         gamma = cp / cv
         sound_speed_squared = gamma * dp_drho
         if (

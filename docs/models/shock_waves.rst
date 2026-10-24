@@ -269,6 +269,26 @@ attached-shock limit.  A larger cone half-angle raises
 :class:`~aerophysics.exceptions.NoAttachedShockError` rather than substituting
 a detached-shock approximation.
 
+Inputs are the dimensionless upstream Mach number :math:`M_\infty>1` and the
+cone half-angle in radians, :math:`0\le\theta_c<\pi/2`, measured positive away
+from the axis.  A returned shock angle satisfies
+:math:`\theta_c<\beta<\pi/2` for :math:`\theta_c>0` and equals the Mach angle
+for :math:`\theta_c=0`, which remains exact for any :math:`M_\infty>1`.  As
+:math:`M_\infty\to1^+` the Mach angle approaches :math:`\pi/2`, the attached
+shock-angle interval collapses, and the attached cone-angle limit approaches
+:math:`0.7792\sqrt{M_\infty-1}`.  For a nonzero cone half-angle with
+:math:`M_\infty-1<10^{-6}`, and for very slender cones whose trial shocks
+approach the Mach wave within floating-point resolution, the perfect-gas
+solver raises :class:`~aerophysics.exceptions.ShockConvergenceError`.  A trial
+Taylor--Maccoll integration that reaches the singular line
+:math:`a^2=V_\theta^2` is treated as unresolved.  A converged shock-angle
+root is accepted only if its integrated cone half-angle matches the request
+to a relative tolerance of :math:`10^{-3}`.  Near the Mach wave the cone angle
+is extremely sensitive to the shock angle, so this rejects slender-cone roots
+that miss the requested cone or collapse onto the zero-angle Mach wave; in
+practice it affects only cone half-angles below about :math:`10^{-3}` rad.
+Neither case substitutes a normal, detached, or Mach-wave solution.
+
 The model assumes a sharp circular cone, zero angle
 of attack, steady inviscid adiabatic flow, and an attached axisymmetric shock.
 It does not model bluntness, viscosity, dense-gas effects, or asymmetric cone
