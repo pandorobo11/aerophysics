@@ -318,7 +318,7 @@ render_boundary_layer(UnitPreferences())
 
 @pytest.mark.parametrize(
     ("mode", "mach"),
-    (("single", None), ("single", 0.0)),
+    (("single", None), ("sweep", None), ("single", 0.0)),
 )
 def test_boundary_layer_configuration_round_trip(mode: str, mach: float | None) -> None:
     script = """
@@ -328,8 +328,12 @@ render_boundary_layer(UnitPreferences())
 """
     app = AppTest.from_string(script, default_timeout=30).run()
     if mode == "sweep":
+        # Non-default values detect a restore that falls back to defaults.
         app.radio(key="boundary_mode").set_value("距離スイープ").run()
+        app.number_input(key="boundary_sweep_start").set_value(0.05).run()
+        app.number_input(key="boundary_sweep_stop").set_value(1.5).run()
         app.number_input(key="boundary_sweep_points").set_value(3).run()
+        app.checkbox(key="boundary_sweep_log").uncheck().run()
     if mach is not None:
         app.selectbox(key="boundary_correction").set_value("Eckert基準温度法").run()
         assert app.number_input(key="boundary_mach").value == 0.3
@@ -349,6 +353,11 @@ render_boundary_layer(UnitPreferences())
     assert not app.error
     if mach is not None:
         assert app.number_input(key="boundary_mach").value == mach
+    if mode == "sweep":
+        assert app.number_input(key="boundary_sweep_start").value == pytest.approx(0.05)
+        assert app.number_input(key="boundary_sweep_stop").value == pytest.approx(1.5)
+        assert app.number_input(key="boundary_sweep_points").value == 3
+        assert not app.checkbox(key="boundary_sweep_log").value
     app.button(key="FormSubmitter:boundary_form-計算").click().run()
     assert not app.exception
     assert not app.error

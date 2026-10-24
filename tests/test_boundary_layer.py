@@ -452,13 +452,17 @@ def test_van_driest_local_and_average_implicit_residuals(
         edge_temperature=edge_temperature,
         wall_temperature=wall_temperature,
     )
-    friction_factor, _, reynolds_factor, recovery = _van_driest_factors(
+    friction_factor, momentum_factor, reynolds_factor, recovery = _van_driest_factors(
         mach, edge_temperature, wall_temperature
     )
     expected_wall = recovery if wall_temperature is None else wall_temperature
     assert result.wall_temperature == pytest.approx(expected_wall)
     assert result.effective_reynolds_number == pytest.approx(
         result.reynolds_number * reynolds_factor
+    )
+    # Thickness uses Re_x*F_theta, not the friction Reynolds number.
+    assert result.boundary_layer_thickness == pytest.approx(
+        0.37 * (float(result.reynolds_number) * momentum_factor) ** -0.2
     )
 
     local = float(result.local_skin_friction_coefficient)
