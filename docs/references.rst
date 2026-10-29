@@ -405,3 +405,35 @@ National Institute of Standards and Technology. *Guide for the Use of the
 International System of Units (SI)*, NIST Special Publication 811, Appendix B.
 
 https://www.nist.gov/pml/special-publication-811
+
+Aerodynamic heating
+-------------------
+
+.. _ref-tauber-1989:
+
+Tauber, M. E., *A Review of High-Speed, Convective, Heat-Transfer Computation
+Methods*, NASA TP-2914, 1989.
+
+https://ntrs.nasa.gov/citations/19890017745
+
+.. _ref-fay-riddell-1958:
+
+Fay, J. A. and Riddell, F. R., *Theory of Stagnation Point Heat Transfer in
+Dissociated Air*, Journal of the Aeronautical Sciences, 25(2), 73--85, 1958.
+
+.. _ref-tfaws-2012-aerothermodynamics:
+
+NASA Thermal and Fluids Analysis Workshop (TFAWS) 2012. *Aerothermodynamics
+Course*, Lecture 1, "Stagnation Point Heating", slide 16 (Fay--Riddell
+method).
+
+https://tfaws.nasa.gov/TFAWS12/Proceedings/Aerothermodynamics%20Course.pdf
+
+.. _ref-west-brandis-ntrs:
+
+West, T. K., IV and Brandis, A. M. *Updated Stagnation Point Aeroheating
+Correlations for Mars Entry*. NASA NTRS document 20200002354. Equation (1)
+reproduces the Fay and Riddell (1958) stagnation-point correlation (the outer
+square root on the velocity gradient is omitted in print).
+
+https://ntrs.nasa.gov/citations/20200002354
