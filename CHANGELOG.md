@@ -7,6 +7,17 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add an aerodynamic heating GUI page for sphere stagnation-point heating
+  using Fay--Riddell, Tauber equation 40, or a comparison of both, and swept
+  cylinder stagnation-line heating using Tauber equation 41. Set freestream
+  conditions from standard-atmosphere altitude or manual static temperature
+  and pressure, and calculate single points, Mach sweeps, geometric-altitude
+  sweeps (standard atmosphere only), or cylinder sweep-angle sweeps.
+  Single-point cylinder results include a heat-flux versus sweep-angle plot. Add sidebar heat-flux display units of
+  W/m², kW/m², and MW/m². Existing configuration JSON files with six or nine
+  `display_units` fields still load, defaulting `heat_flux` to W/m²; newly
+  exported configurations include `heat_flux`.
+
 - Add `sphere_stagnation_heat_flux` with `StagnationHeatingModel.FAY_RIDDELL`
   and `TAUBER`, and `swept_cylinder_heat_flux` for laminar convective heating.
   The simplified Fay--Riddell model assumes Lewis number 1, no dissociation,

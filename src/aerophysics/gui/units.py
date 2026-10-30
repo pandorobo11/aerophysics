@@ -13,6 +13,7 @@ QuantityKind = Literal[
     "area",
     "density",
     "force",
+    "heat_flux",
     "inverse_length",
     "length",
     "pressure",
@@ -40,6 +41,7 @@ _FORCE_FACTORS = {"N": 1.0, "lbf": 4.4482216152605}
 _INVERSE_LENGTH_FACTORS = {
     f"1/{unit}": 1.0 / factor for unit, factor in _LENGTH_FACTORS.items()
 }
+_HEAT_FLUX_FACTORS = {"W/m²": 1.0, "kW/m²": 1.0e3, "MW/m²": 1.0e6}
 _TEMPERATURE_UNITS = {"K", "°C", "°F", "°R"}
 
 
@@ -56,6 +58,7 @@ class UnitPreferences:
     force: str = "N"
     inverse_length: str = "1/m"
     angle: str = "deg"
+    heat_flux: str = "W/m²"
 
     def __post_init__(self) -> None:
         allowed = {
@@ -68,6 +71,7 @@ class UnitPreferences:
             "force": _FORCE_FACTORS,
             "inverse_length": _INVERSE_LENGTH_FACTORS,
             "angle": _ANGLE_FACTORS,
+            "heat_flux": _HEAT_FLUX_FACTORS,
         }
         for name, choices in allowed.items():
             value = getattr(self, name)
@@ -92,9 +96,11 @@ class UnitPreferences:
             "angle",
         }
         expected = legacy | {"area", "force", "inverse_length"}
-        if frozenset(values) not in {frozenset(legacy), frozenset(expected)} or not all(
-            isinstance(value, str) for value in values.values()
-        ):
+        if frozenset(values) not in {
+            frozenset(legacy),
+            frozenset(expected),
+            frozenset(expected | {"heat_flux"}),
+        } or not all(isinstance(value, str) for value in values.values()):
             raise ValueError("units contain missing or unsupported fields")
         return cls(**values)
 
@@ -121,6 +127,7 @@ def _factor(kind: QuantityKind, unit: str) -> float:
         "force": _FORCE_FACTORS,
         "inverse_length": _INVERSE_LENGTH_FACTORS,
         "angle": _ANGLE_FACTORS,
+        "heat_flux": _HEAT_FLUX_FACTORS,
     }
     if kind == "temperature":
         if unit not in _TEMPERATURE_UNITS:

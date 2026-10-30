@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from aerophysics.gui.adapters import sweep_values
 
@@ -272,6 +272,26 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
         },
         sweep_variables=frozenset({"turn_angle", "mach"}),
     ),
+    "aerodynamic_heating": _CalculatorSchema(
+        inputs={
+            "upstream_mach": _SUPERSONIC,
+            "radius": _POSITIVE,
+            "wall_temperature": _POSITIVE,
+            "prandtl_number": _POSITIVE,
+            "sweep_angle": _number(minimum=0.0, maximum=math.pi / 2),
+            "geometric_altitude": _number(nullable=True, minimum=0.0),
+            "temperature": _NULLABLE_POSITIVE,
+            "pressure": _NULLABLE_POSITIVE,
+        },
+        models={
+            "geometry": _choice("sphere", "swept_cylinder"),
+            "model": _choice("fay_riddell", "tauber", "comparison"),
+            "freestream": _choice("atmosphere", "manual"),
+        },
+        sweep_variables=frozenset(
+            {"upstream_mach", "geometric_altitude", "sweep_angle"}
+        ),
+    ),
     "detached_shock": _CalculatorSchema(
         inputs={"upstream_mach": _SUPERSONIC, "nose_radius": _POSITIVE},
         models={
@@ -502,6 +522,33 @@ def validate_calculator_payload(
         if not has_sweep:
             raise _SchemaError("sweep mode requires sweep_si")
         normalized_sweep = _validate_sweep(sweep_si, schema)
+    if calculator == "aerodynamic_heating":
+        if (
+            normalized_models["geometry"] == "swept_cylinder"
+            and normalized_models["model"] != "tauber"
+        ):
+            raise _SchemaError("swept cylinder requires the Tauber model")
+        if (
+            normalized_sweep
+            and normalized_sweep["field"] == "geometric_altitude"
+            and normalized_models["freestream"] != "atmosphere"
+        ):
+            raise _SchemaError("altitude sweep requires atmosphere freestream")
+        if (
+            normalized_sweep
+            and normalized_sweep["field"] == "sweep_angle"
+            and normalized_models["geometry"] != "swept_cylinder"
+        ):
+            raise _SchemaError("sweep-angle sweep requires a swept cylinder")
+        if (
+            normalized_sweep
+            and normalized_sweep["field"] == "sweep_angle"
+            and not 0.0
+            <= cast(float, normalized_sweep["start"])
+            < cast(float, normalized_sweep["stop"])
+            <= math.pi / 2
+        ):
+            raise _SchemaError("sweep-angle sweep must lie between zero and pi/2")
     return (normalized_inputs, normalized_models, normalized_sweep)
 
 

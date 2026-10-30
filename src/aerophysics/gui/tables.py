@@ -390,9 +390,36 @@ VISCOSITY_COLUMNS = (
 )
 
 
+HEATING_COLUMNS = (
+    Column("geometric_altitude", "幾何高度 h", "length"),
+    Column("upstream_mach", "上流 Mach M∞"),
+    Column("temperature", "静温 T∞", "temperature"),
+    Column("pressure", "静圧 p∞", "pressure"),
+    Column("freestream_density", "密度 ρ∞", "density"),
+    Column("freestream_velocity", "速度 V∞", "speed"),
+    Column("radius", "半径", "length"),
+    Column("sweep_angle", "後退角 Λ", "angle"),
+    Column("wall_temperature", "壁温 T_w", "temperature"),
+    Column("geometry", "形状"),
+    Column("model", "モデル"),
+    Column("heat_flux", "熱流束 q_w", "heat_flux"),
+    Column("fay_riddell_heat_flux", "Fay–Riddell q_w", "heat_flux"),
+    Column("tauber_heat_flux", "Tauber q_w", "heat_flux"),
+    Column("heat_flux_ratio", "FR/Tauber 比"),
+    Column("stagnation_temperature", "よどみ点温度 T₀", "temperature"),
+    Column("stagnation_pressure", "よどみ点圧力 p_s", "pressure"),
+    Column("total_enthalpy", "全エンタルピー H_s", fixed_unit="J/kg"),
+    Column("recovery_enthalpy", "回復エンタルピー h_aw", fixed_unit="J/kg"),
+    Column("velocity_gradient", "速度勾配 du_e/dx", fixed_unit="1/s"),
+    Column("status", "status"),
+    Column("message", "message"),
+)
+
+
 def columns_for(calculator: str) -> tuple[Column, ...]:
     """Return ordered table columns for a calculator."""
     choices = {
+        "aerodynamic_heating": HEATING_COLUMNS,
         "conical_shock": CONICAL_SHOCK_COLUMNS,
         "detached_shock": DETACHED_SHOCK_COLUMNS,
         "flight": FLIGHT_COLUMNS,

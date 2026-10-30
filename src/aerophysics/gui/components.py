@@ -79,6 +79,8 @@ def _convert_display_input_state() -> None:
 
     fields: dict[QuantityKind, tuple[str, ...]] = {
         "length": (
+            "heating_altitude",
+            "heating_radius",
             "flight_altitude",
             "flight_length",
             "detached_shock_radius",
@@ -98,6 +100,7 @@ def _convert_display_input_state() -> None:
             "protrusion_velocity",
         ),
         "pressure": (
+            "heating_pressure",
             "isentropic_total_pressure",
             "profile_shear",
             "thermo_pressure",
@@ -106,6 +109,8 @@ def _convert_display_input_state() -> None:
             "cone_shock_upstream_pressure",
         ),
         "temperature": (
+            "heating_temperature",
+            "heating_wall_temperature",
             "shock_upstream_temperature",
             "cone_shock_upstream_temperature",
             "normal_upstream_temperature",
@@ -131,6 +136,7 @@ def _convert_display_input_state() -> None:
             "protrusion_density",
         ),
         "angle": (
+            "heating_sweep_angle",
             "shock_theta",
             "cone_shock_angle",
             "expansion_turn",
@@ -140,6 +146,12 @@ def _convert_display_input_state() -> None:
         for key in keys:
             _convert_state_value(key, kind, old, new)
 
+    if _state_matches("heating_sweep_field", "geometric_altitude"):
+        for key in ("heating_sweep_start", "heating_sweep_stop"):
+            _convert_state_value(key, "length", old, new)
+    if _state_matches("heating_sweep_field", "sweep_angle"):
+        for key in ("heating_sweep_start", "heating_sweep_stop"):
+            _convert_state_value(key, "angle", old, new)
     if _state_matches("flight_basis", "velocity"):
         _convert_state_value("flight_motion", "speed", old, new)
         if _state_matches("flight_sweep_field", "motion"):
@@ -224,6 +236,12 @@ def render_unit_sidebar() -> UnitPreferences:
             key="unit_angle",
             on_change=_convert_display_input_state,
         )
+        heat_flux = st.selectbox(
+            "熱流束",
+            ("W/m²", "kW/m²", "MW/m²"),
+            key="unit_heat_flux",
+            on_change=_convert_display_input_state,
+        )
     st.sidebar.caption("計算コアへ渡す前にSIへ明示変換します。")
     preferences = UnitPreferences(
         length=length,
@@ -235,6 +253,7 @@ def render_unit_sidebar() -> UnitPreferences:
         force=force,
         inverse_length=inverse_length_unit(length),
         angle=angle,
+        heat_flux=heat_flux,
     )
     st.session_state[_UNIT_STATE_KEY] = preferences.to_dict()
     return preferences
@@ -436,6 +455,7 @@ def finite_number(
     *,
     key: str,
     min_value: float | None = None,
+    max_value: float | None = None,
     disabled: bool = False,
     help: str | None = None,
     format: str = "%.6g",
@@ -446,6 +466,7 @@ def finite_number(
             st.number_input(
                 label,
                 min_value=min_value,
+                max_value=max_value,
                 key=key,
                 disabled=disabled,
                 help=help,
@@ -457,6 +478,7 @@ def finite_number(
             label,
             value=float(value),
             min_value=min_value,
+            max_value=max_value,
             key=key,
             disabled=disabled,
             help=help,

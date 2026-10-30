@@ -254,3 +254,73 @@ def test_flow_output_configuration_validation(
     payload[field] = value
     with pytest.raises(ConfigurationError):
         validate_configuration(configuration)
+
+
+def test_heating_schema_validation() -> None:
+    from aerophysics.gui.config import ConfigurationError, make_configuration
+    from aerophysics.gui.units import UnitPreferences
+
+    inputs: dict[str, object] = {
+        "upstream_mach": 10.0,
+        "radius": 0.1,
+        "wall_temperature": 300.0,
+        "prandtl_number": 0.72,
+        "sweep_angle": 0.0,
+        "geometric_altitude": 30000.0,
+        "temperature": None,
+        "pressure": None,
+    }
+    models: dict[str, object] = {
+        "geometry": "sphere",
+        "model": "comparison",
+        "freestream": "atmosphere",
+    }
+
+    def config(
+        input_values: dict[str, object],
+        model_values: dict[str, object],
+        sweep: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        return make_configuration(
+            calculator="aerodynamic_heating",
+            mode="sweep" if sweep else "single",
+            inputs_si=input_values,
+            models=model_values,
+            units=UnitPreferences(),
+            sweep_si=sweep,
+        )
+
+    config(inputs, models)
+    for key, value in (("upstream_mach", 1.0), ("radius", 0.0), ("sweep_angle", 2.0)):
+        with pytest.raises((ValueError, ConfigurationError)):
+            config({**inputs, key: value}, models)
+    for key, text_value in (
+        ("geometry", "invalid"),
+        ("model", "invalid"),
+        ("freestream", "invalid"),
+    ):
+        with pytest.raises((ValueError, ConfigurationError)):
+            config(inputs, {**models, key: text_value})
+    with pytest.raises((ValueError, ConfigurationError)):
+        config(
+            inputs,
+            {**models, "freestream": "manual"},
+            {"field": "geometric_altitude", "start": 1.0, "stop": 2.0, "points": 2},
+        )
+    cylinder = {**models, "geometry": "swept_cylinder", "model": "tauber"}
+    config(
+        inputs,
+        cylinder,
+        {"field": "sweep_angle", "start": 0.0, "stop": 1.5, "points": 2},
+    )
+    for model_values, start, stop in (
+        (models, 0.0, 1.0),
+        (cylinder, -0.1, 1.0),
+        (cylinder, 0.0, 2.0),
+    ):
+        with pytest.raises((ValueError, ConfigurationError)):
+            config(
+                inputs,
+                model_values,
+                {"field": "sweep_angle", "start": start, "stop": stop, "points": 2},
+            )
