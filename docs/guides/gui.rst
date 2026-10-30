@@ -30,11 +30,11 @@ Display units and the SI core
 
 The public Python calculation APIs use SI units and radians. The GUI sidebar
 can instead display selected aviation units for length, area, speed, pressure,
-temperature, density, force, inverse length, and angle. Length and inverse
-length share one selector, so choosing feet also displays inverse-length
-results per foot. Choices include
-millimetres and inches, feet per second, kilopascals, hectopascals, pounds-force
-per square foot, Celsius, Rankine, and pounds mass per cubic foot. GUI inputs
+temperature, density, force, inverse length, angle, and heat flux (W/m²,
+kW/m², or MW/m²). Length and inverse length share one selector, so choosing
+feet also displays inverse-length results per foot. Choices include millimetres
+and inches, feet per second, kilopascals, hectopascals, pounds-force per square
+foot, Celsius, Rankine, and pounds mass per cubic foot. GUI inputs
 are converted to SI before calling the calculation core, and results are
 converted from SI only for presentation and CSV export. Changing a sidebar
 unit preserves the represented physical input rather than reinterpreting its
@@ -43,6 +43,17 @@ numeric value.
 Quantities without a sidebar selector, such as mass flux, drag per unit width,
 and dynamic viscosity in ``Pa s``, remain labelled as such. Always use the unit
 shown beside an input or table column.
+
+Aerodynamic heating
+-------------------
+
+The **Aerodynamic heating** page accepts atmospheric altitude or manual
+freestream conditions, geometry, wall temperature and radius. Choose
+Fay--Riddell, Tauber, or their sphere comparison and sweep Mach, altitude, or
+the swept-cylinder sweep angle. Changing the geometry selects a model valid
+for it and clears the previous result. The calculation core uses W/m²; the
+display unit is selectable. See :ref:`aerodynamic-heating-model` for
+assumptions and applicability.
 
 Flow schematics
 ---------------

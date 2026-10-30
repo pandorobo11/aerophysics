@@ -1606,3 +1606,33 @@ def viscosity_figures(
         "粘性係数": _style(absolute, "乾燥空気の動的粘性係数"),
         "Sutherland基準相対差": _style(relative, "Sutherland基準の相対差"),
     }
+
+
+def heating_trends(
+    rows: tuple[Row, ...], preferences: UnitPreferences, *, field: str
+) -> dict[str, go.Figure]:
+    """Plot heating against Mach, geometric altitude, or cylinder sweep angle."""
+    if field == "geometric_altitude":
+        x = _converted(rows, field, "length", preferences)
+        title = f"幾何高度 h [{preferences.length}]"
+    elif field == "sweep_angle":
+        x = _converted(rows, field, "angle", preferences)
+        title = f"後退角 Λ [{preferences.angle}]"
+    else:
+        x = _numeric(rows, "upstream_mach")
+        title = "Mach M∞"
+    figure = go.Figure()
+    for key, label in (
+        ("fay_riddell_heat_flux", "Fay–Riddell"),
+        ("tauber_heat_flux", "Tauber"),
+    ):
+        values = _numeric(rows, key)
+        if np.any(np.isfinite(values)):
+            figure.add_trace(
+                go.Scatter(
+                    x=x, y=_converted(rows, key, "heat_flux", preferences), name=label
+                )
+            )
+    figure.update_xaxes(title_text=title)
+    figure.update_yaxes(title_text=f"熱流束 [{preferences.heat_flux}]")
+    return {"熱流束": _style(figure, "空力加熱")}

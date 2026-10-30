@@ -1034,3 +1034,100 @@ def test_flight_geopotential_outside_range() -> None:
     assert app.error
     assert "between -5000 and 86000" in app.error[0].value
     assert "flight_payload" not in app.session_state
+
+
+def test_heating_page_modes_units_and_replay() -> None:
+    script = """
+from aerophysics.gui.heating_page import render_heating
+from aerophysics.gui.components import render_unit_sidebar
+render_heating(render_unit_sidebar())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error and app.metric and app.warning
+    watts = app.dataframe[0].value["熱流束 q_w [W/m²]"].iloc[0]
+    app.selectbox(key="unit_heat_flux").set_value("MW/m²").run()
+    assert app.dataframe[0].value["熱流束 q_w [MW/m²]"].iloc[0] == pytest.approx(
+        watts * 1e-6
+    )
+    app.selectbox(key="heating_geometry").set_value("swept_cylinder").run()
+    assert app.selectbox(key="heating_model").value == "tauber"
+    assert app.selectbox(key="heating_model").options == ["Tauber"]
+    assert "heating_payload" not in app.session_state and not app.dataframe
+    assert "heating_sweep_angle" in {x.key for x in app.number_input}
+    assert "heating_prandtl" not in {x.key for x in app.number_input}
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error and app.get("plotly_chart")
+    app.radio(key="heating_mode").set_value("sweep").run()
+    app.radio(key="heating_sweep_field").set_value("geometric_altitude").run()
+    assert "heating_altitude" not in {x.key for x in app.number_input}
+    assert "heating_mach" in {x.key for x in app.number_input}
+    app.number_input(key="heating_sweep_points").set_value(3).run()
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error and len(app.dataframe[0].value) == 3
+    result, configuration = app.session_state["heating_payload"]
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_aerodynamic_heating_configuration"] = configuration
+    replay.run()
+    assert replay.radio(key="heating_mode").value == "sweep"
+    assert replay.selectbox(key="heating_geometry").value == "swept_cylinder"
+    assert replay.radio(key="heating_sweep_field").value == "geometric_altitude"
+    replay.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert replay.session_state["heating_payload"][0].rows == result.rows
+    app.radio(key="heating_freestream").set_value("manual").run()
+    assert app.radio(key="heating_sweep_field").options == ["Mach", "後退角"]
+    assert app.radio(key="heating_sweep_field").value == "upstream_mach"
+    assert {"heating_temperature", "heating_pressure"} <= {
+        x.key for x in app.number_input
+    }
+    assert "heating_altitude" not in {x.key for x in app.number_input}
+    app.radio(key="heating_sweep_field").set_value("sweep_angle").run()
+    assert "heating_sweep_angle" not in {x.key for x in app.number_input}
+    assert app.number_input(key="heating_sweep_stop").value == pytest.approx(90.0)
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error and len(app.dataframe[0].value) == 3
+    app.selectbox(key="heating_geometry").set_value("sphere").run()
+    assert app.selectbox(key="heating_model").value == "fay_riddell"
+    assert app.radio(key="heating_sweep_field").value == "upstream_mach"
+
+
+def test_heating_manual_configuration_and_input_units() -> None:
+    script = """
+from aerophysics.gui.heating_page import render_heating
+from aerophysics.gui.components import render_unit_sidebar
+render_heating(render_unit_sidebar())
+"""
+    configuration = make_configuration(
+        calculator="aerodynamic_heating",
+        mode="single",
+        inputs_si={
+            "upstream_mach": 8.0,
+            "radius": 0.2,
+            "wall_temperature": 500.0,
+            "prandtl_number": 0.8,
+            "sweep_angle": 0.25,
+            "geometric_altitude": None,
+            "temperature": 250.0,
+            "pressure": 2000.0,
+        },
+        models={"geometry": "sphere", "model": "comparison", "freestream": "manual"},
+        units=UnitPreferences(),
+    )
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_aerodynamic_heating_configuration"] = configuration
+    app.run()
+    assert app.selectbox(key="heating_model").value == "comparison"
+    assert app.number_input(key="heating_mach").value == 8.0
+    app.selectbox(key="unit_length").set_value("ft").run()
+    app.selectbox(key="unit_temperature").set_value("°C").run()
+    app.selectbox(key="unit_pressure").set_value("kPa").run()
+    assert app.number_input(key="heating_radius").value == pytest.approx(0.2 / 0.3048)
+    assert app.number_input(key="heating_temperature").value == pytest.approx(-23.15)
+    assert app.number_input(key="heating_pressure").value == pytest.approx(2.0)
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error
+    result, saved = app.session_state["heating_payload"]
+    assert len(app.metric) == 5
+    assert saved["inputs_si"]["radius"] == pytest.approx(0.2)
+    assert result.rows[0]["temperature"] == pytest.approx(250.0)
