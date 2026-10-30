@@ -215,6 +215,13 @@ def test_public_models_are_exported_from_their_owning_modules() -> None:
             "transform_compressible_velocity_profile",
             "compressible_turbulent_boundary_layer_profile",
         ),
+        "heating": (
+            "StagnationHeatingModel",
+            "StagnationHeatingResult",
+            "SweptCylinderHeatingResult",
+            "sphere_stagnation_heat_flux",
+            "swept_cylinder_heat_flux",
+        ),
         "protrusion": ("protrusion_drag",),
     }
     for module_name, names in exports.items():

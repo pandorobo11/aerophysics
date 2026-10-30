@@ -5,6 +5,18 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Added
+
+- Add `sphere_stagnation_heat_flux` with `StagnationHeatingModel.FAY_RIDDELL`
+  and `TAUBER`, and `swept_cylinder_heat_flux` for laminar convective heating.
+  The simplified Fay--Riddell model assumes Lewis number 1, no dissociation,
+  and a Newtonian velocity gradient. Tauber's NASA TP-2914 equations 40 and
+  41 cover a sphere and a swept infinite-cylinder stagnation line, respectively.
+  These models require a supersonic perfect-gas freestream, use SI units, and
+  return heat flux positive into the wall. They emit `ApplicabilityWarning`
+  for Fay--Riddell when T_0 > 2000 K, and for Tauber when V > 14 km/s,
+  T_w > 4000 K, or h_inf/(V^2/2) > 0.1 (approximately M < 7.07 for γ = 1.4).
+
 ### Fixed
 
 - Convert Eckert reference-temperature skin friction from the reference to the

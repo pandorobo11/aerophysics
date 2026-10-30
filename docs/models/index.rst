@@ -14,6 +14,7 @@ excluded physics, and primary sources for each calculation model.
    shock_waves
    expansion_waves
    flat_plate_boundary_layer
+   aerodynamic_heating
    compressible_velocity_transformations
    protrusion_drag
    flight_conditions

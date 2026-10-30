@@ -75,10 +75,17 @@ git config core.hooksPath "$(git rev-parse --show-toplevel)/.githooks"
 | 43 | Detached shocks | 1967 | Billig, F. S. | Shock-Wave Shapes around Spherical- and Cylindrical-Nosed Bodies | 未取得 | — | [DOI](https://doi.org/10.2514/3.28969) | 頂点曲率半径と双曲線衝撃波形状の原典。出版社レコードと式を確認したが、公開PDFは保存していない。 |
 | 44 | Detached shocks | 1964 | Seiff, A. | Recent Information on Hypersonic Flow Fields | 未取得 | — | [NASA SP-24 / Google Books](https://books.google.com/books?id=fygCAAAAIAAJ) | 密度比による球の離脱距離相関の原典。書籍表示で書誌と式を確認したが、全文PDFは保存していない。 |
 | 45 | Detached shocks | 1965 | Inouye, M. | Blunt Body Solutions for Spheres and Ellipsoids in Equilibrium Gas Mixtures | 未取得 | — | [NASA NTRS](https://ntrs.nasa.gov/citations/19650012766) | NASA TN D-2780。Seiff式を0.04<ρ1/ρ2<0.16で独立検証した資料。公式レコードと本文を確認したが、PDFは保存していない。 |
+| 46 | Aerodynamic heating | 1989 | Tauber, M. E. | A Review of High-Speed, Convective, Heat-Transfer Computation Methods | 取得済み | `1989_Tauber_Review-High-Speed-Convective-Heat-Transfer-Methods.pdf` | [NASA NTRS](https://ntrs.nasa.gov/api/citations/19890017745/downloads/19890017745.pdf) | 40ページ。NASA TP-2914。式40・41を実装に使用。 |
+| 47 | Aerodynamic heating | 1958 | Fay, J. A.; Riddell, F. R. | Theory of Stagnation Point Heat Transfer in Dissociated Air | 未取得 | — | [AIAA](https://doi.org/10.2514/8.7517) | 出版社版（AIAA）は非OA。公開PDFは確認できなかった。式の形は No. 49・50 で確認。 |
+| 48 | Aerodynamic heating | 2006 | Anderson, J. D., Jr. | Hypersonic and High-Temperature Gas Dynamics, 2nd ed. | 未取得 | — | — | 市販教科書。docsからの参照は外した。 |
+| 49 | Aerodynamic heating | 2018 | West, T. K., IV; Brandis, A. M. | Updated Stagnation Point Aeroheating Correlations for Mars Entry | 取得済み | `2018_West_Updated-Stagnation-Point-Aeroheating-Correlations-Mars.pdf` | [NASA NTRS](https://ntrs.nasa.gov/api/citations/20200002354/downloads/20200002354.pdf) | 12ページ。式(1)にFay–Riddell相関式（係数0.76）。年はPDF作成日による。掲載会議は未確認。式(1)は速度勾配の外側の平方根が印刷で欠落（次元とNo. 50で確認）。 |
+| 50 | Aerodynamic heating | 2012 | NASA TFAWS | Aerothermodynamics Course（TFAWS 2012） | 取得済み | `2012_NASA-TFAWS_Aerothermodynamics-Course.pdf` | [NASA TFAWS](https://tfaws.nasa.gov/TFAWS12/Proceedings/Aerothermodynamics%20Course.pdf) | 142ページ。講義資料。Lecture #1のスライド16にFay–Riddell式（係数0.763、Pr_w、速度勾配の0.5乗）。著者表記は未確認。 |
 
 ## 集計
 
-- 対象: 45件
-- 取得済み: 26件
-- 未取得: 19件
+- 対象: 50件
+- 取得済み: 29件
+- 未取得: 21件
 - 最終確認日: 2026-08-09
+
+2026-10-30 に No. 46〜50 を追加。

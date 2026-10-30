@@ -34,6 +34,13 @@ from aerophysics.detached_shock import (
 from aerophysics.expansion import prandtl_meyer_expansion
 from aerophysics.flight import FlightCondition
 from aerophysics.gas import AIR, PerfectGas
+from aerophysics.heating import (
+    StagnationHeatingModel,
+    StagnationHeatingResult,
+    SweptCylinderHeatingResult,
+    sphere_stagnation_heat_flux,
+    swept_cylinder_heat_flux,
+)
 from aerophysics.protrusion import (
     ProtrusionDragResult,
     ProtrusionProfile,
@@ -98,6 +105,9 @@ __all__ = [
     "ProtrusionDragResult",
     "ProtrusionProfile",
     "ShockBranch",
+    "StagnationHeatingModel",
+    "StagnationHeatingResult",
+    "SweptCylinderHeatingResult",
     "TemperatureVelocityRelation",
     "ThermallyPerfectGas",
     "ThermodynamicState",
@@ -117,6 +127,8 @@ __all__ = [
     "seiff_standoff_distance",
     "seiff_standoff_distance_from_mach",
     "shock_standoff_distance",
+    "sphere_stagnation_heat_flux",
     "standard_atmosphere",
+    "swept_cylinder_heat_flux",
     "transform_compressible_velocity_profile",
 ]
