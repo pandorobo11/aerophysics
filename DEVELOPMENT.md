@@ -2,7 +2,13 @@
 
 This document is the contributor workflow for `aerophysics`, including local
 validation, generated documentation assets, and releases. User-facing model
-documentation belongs in the English Sphinx manual under `docs/`.
+documentation belongs in the English Sphinx manual under `docs/`. Solver
+internals, numerical tolerances, and GUI settings-file details belong in
+[`devdocs/`](devdocs/README.md) instead.
+
+The user manual is opened from the GUI help page, so write it for users:
+start each model page with a plain-language physical background, keep the
+equations and assumptions, and avoid internal implementation detail.
 
 ## Contribution workflow
 
@@ -134,6 +140,32 @@ uv run python docs/scripts/generate_viscosity_comparison.py
 ```
 
 When only one asset family changed, run its applicable `generate_*.py` script.
+Each generator accepts `--check` to compare the committed files without
+writing them.
+
+| Verification record | Generator |
+| --- | --- |
+| Standard atmosphere | `docs/scripts/generate_standard_atmosphere_validation.py` |
+| Compressible flow | `docs/scripts/generate_compressible_flow_validation.py` |
+| Thermophysical properties | `docs/scripts/generate_thermophysical_validation.py` |
+| Viscous flow | `docs/scripts/generate_viscous_flow_validation.py` |
+| Viscosity model comparison | `docs/scripts/generate_viscosity_comparison.py` |
+
+The fixtures behind the thermophysical record are rebuilt separately:
+
+```console
+uv run python docs/scripts/build_transport_reference.py
+uv run python docs/scripts/generate_nist_transport_reference.py
+```
+
+Refresh external snapshots only in isolated environments:
+
+```console
+uv run --isolated --with cantera==3.2.0 python docs/scripts/capture_cantera_reference.py
+```
+
+The standard-atmosphere generator rewrites its RST record and SVGs; with
+`--check` it checks only the deterministic SVGs.
 After every regeneration, inspect the Git diff and confirm that each numerical
 value, table, and SVG change follows from an intentional source or model
 change. Unexpected output must be investigated in the generator, dependency,

@@ -1,12 +1,19 @@
 Sequential flow transformations
 ===============================
 
-The **連続流れ計算** GUI page and :mod:`aerophysics.flow_sequence` apply an
-ordered list of local transformations to a scalar flow state. Select the gas,
-enter the initial condition, add stages, and press **計算**. Stages can be
-named, duplicated, deleted, and moved up or down. Results include the initial
-state and each exit, a stage plot, SI CSV export, and replayable settings JSON.
-Input changes mark the previous result as stale until recalculated.
+Many practical flows pass through several waves in a row. A supersonic inlet,
+for example, may compress the air with one or more oblique shocks, turn it
+with an expansion, and finish with a normal shock. The **連続流れ計算**
+(sequential flow) GUI page and :mod:`aerophysics.flow_sequence` model such a
+path by applying the single-wave models one after another. The exit state of
+each stage becomes the inlet state of the next.
+
+In the GUI, select the gas, enter the initial condition, add stages, and press
+**計算** (calculate). Stages can be named, duplicated, deleted, and moved up or
+down. Results include the initial state and the exit of each stage, a stage
+plot, an SI CSV export, and a settings JSON file that reproduces the case.
+Changing an input marks the previous result as out of date until you
+calculate again.
 
 Python example
 --------------
@@ -64,18 +71,14 @@ Stages and model boundaries
   pressure ratio ``p2/p1``, or area ratio ``A2/A1``. Area input requires an
   explicit ``MachBranch.SUBSONIC`` or ``MachBranch.SUPERSONIC`` exit branch.
   It computes ``A2/A* = (A2/A1)(A1/A*)`` at fixed total conditions and mass
-  flow. Targets below the sonic minimum fail; an inlet at rest cannot
-  define a finite area ratio. A branch change implies a suitable throat,
-  whose geometry is not calculated.
+  flow. An area smaller than the sonic throat area fails, and an inlet at
+  rest cannot define a finite area ratio. Switching between subsonic and
+  supersonic assumes a throat in between; its geometry is not calculated.
 
 The gas and composition remain fixed. The supported models are
 ``PerfectGas``, ``ThermallyPerfectGas`` (including NASA7/NASA9 air), and
 ``HarmonicOscillatorGas``. Thermal models use local heat capacity and
-enthalpy, with their existing temperature limits and no extrapolation.
-Temperature restoration from validated solver ratios repairs at most one ULP
-of boundary overshoot; input temperature checks remain strict. Stagnation
-temperature is bracketed upwards from the static temperature, including for
-custom oscillator gases without an applicability range.
+enthalpy within their temperature limits, without extrapolation.
 
 Chemical reactions, dissociation, heat addition, friction, flow separation,
 wave interactions, duct startability and geometric realizability are outside
@@ -109,11 +112,10 @@ calculation.
 Verification
 ------------
 
-The sequence tests compare normal shocks with independent constant-gamma
-closed forms and mass/momentum conservation; compare cone and oblique
-handoffs with their existing verified APIs; and verify total-enthalpy
-conservation, shock entropy production, isentropic total-pressure
-conservation, all three isentropic input modes, sonic/branch boundaries,
-thermal limits, failure propagation and JSON replay. These checks establish
-composition of the existing models, not CFD or experimental validation of
-an arbitrary physical arrangement.
+The tests compare each stage with the corresponding single-wave API and with
+closed-form constant-gamma results. They also check conservation of mass,
+momentum, and total enthalpy, entropy rise across shocks, constant total
+pressure in isentropic stages, range limits, failure handling, and settings
+replay. These checks confirm that the existing models are chained correctly.
+They are not a CFD or experimental validation of a particular inlet or
+nozzle.

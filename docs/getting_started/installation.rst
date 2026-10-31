@@ -26,7 +26,7 @@ Install the GUI extra and launch the local Streamlit application:
    python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.7.0/aerophysics-0.7.0-py3-none-any.whl"
    aerophysics-gui
 
-The wheel includes an offline copy of this manual. See :doc:`../guides/gui`
+The wheel includes an offline copy of this manual. See :doc:`../gui/index`
 for display-unit handling, case handoffs, CSV and JSON files, and the embedded
 documentation page.
 

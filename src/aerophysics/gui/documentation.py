@@ -12,22 +12,28 @@ RELEASES_URL = "https://github.com/pandorobo11/aerophysics/releases/latest"
 
 DOCUMENTATION_TOPICS = {
     "概要": "index.html",
+    "GUIマニュアル": "gui/index.html",
     "クイックスタート": "getting_started/quickstart.html",
-    "気体・標準大気": "models/gas_and_atmosphere.html",
-    "輸送物性": "models/transport_properties.html",
-    "熱化学": "models/thermochemistry.html",
-    "等エントロピー流れ": "models/isentropic_flow.html",
-    "衝撃波": "models/shock_waves.html",
-    "膨張波": "models/expansion_waves.html",
-    "平板境界層": "models/flat_plate_boundary_layer.html",
-    "突起抗力": "models/protrusion_drag.html",
-    "圧縮性速度変換": "models/compressible_velocity_transformations.html",
+    "記号・モデル選択": "getting_started/conventions.html",
+    "標準大気": "models/standard_atmosphere.html",
     "飛行条件": "models/flight_conditions.html",
+    "気体モデル": "models/gas_models.html",
+    "輸送物性": "models/transport_properties.html",
+    "等エントロピー流れ": "models/isentropic_flow.html",
+    "衝撃波の基礎": "models/shock_waves.html",
+    "垂直・斜め衝撃波": "models/normal_oblique_shocks.html",
+    "円錐衝撃波": "models/conical_shocks.html",
+    "離脱衝撃波": "models/detached_shocks.html",
+    "膨張波": "models/expansion_waves.html",
+    "連続流れ計算": "guides/flow_sequence.html",
+    "平板境界層": "models/flat_plate_boundary_layer.html",
+    "空力加熱": "models/aerodynamic_heating.html",
+    "圧縮性速度変換": "models/compressible_velocity_transformations.html",
+    "突起抗力": "models/protrusion_drag.html",
     "単位変換": "models/unit_conversions.html",
     "検証": "verification/index.html",
     "APIリファレンス": "api/index.html",
     "参考文献": "references.html",
-    "GUIガイド": "guides/gui.html",
 }
 
 
@@ -45,6 +51,15 @@ def documentation_topic_url(relative_path: str, base_url: str) -> str:
     if relative_path not in DOCUMENTATION_TOPICS.values():
         raise ValueError("unsupported documentation topic")
     return urljoin(base_url, relative_path)
+
+
+def render_documentation_link(relative_path: str) -> None:
+    """Link a calculator page to its theory page in the local manual."""
+    base_url = documentation_base_url()
+    if base_url is None:
+        return
+    target = documentation_topic_url(relative_path, base_url)
+    st.link_button("📖 理論・モデルの説明", target)
 
 
 def render_documentation() -> None:

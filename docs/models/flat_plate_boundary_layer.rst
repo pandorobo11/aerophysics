@@ -9,6 +9,34 @@ task-oriented examples, see :doc:`../guides/boundary_layers`. Mean-velocity
 profile transformations are documented separately in
 :doc:`compressible_velocity_transformations`.
 
+Physical background
+-------------------
+
+Air sticks to a solid surface: its velocity at the wall is zero (the no-slip
+condition). The thin region in which the velocity rises from zero to the
+outer-flow value :math:`U_e` is the **boundary layer**. Friction inside it
+produces skin-friction drag, and it grows thicker with distance from the
+leading edge.
+
+A boundary layer starts **laminar**, with smooth, orderly layers. Farther
+downstream, small disturbances grow and the flow becomes **turbulent**, with
+strong mixing. Turbulent mixing brings fast fluid closer to the wall, so a
+turbulent boundary layer has much higher skin friction and grows faster. The
+change, called transition, typically happens between :math:`Re_x\approx
+3\times10^5` and :math:`3\times10^6`, depending on surface finish, noise, and
+free-stream turbulence. This package does not predict where it happens.
+
+The flat plate with no pressure gradient is the simplest case and the
+reference for many engineering estimates:
+
+* The laminar case has an exact similarity solution by **Blasius**.
+* Turbulent results are **empirical correlations** fitted to measurements.
+
+At high Mach number, friction heats the gas near the wall. The hot gas has
+lower density and higher viscosity, which changes skin friction. The
+**compressibility corrections** account for this by evaluating the
+incompressible formulas at suitably chosen reference conditions.
+
 Correlation definition
 ----------------------
 
@@ -221,7 +249,11 @@ This is a prescribed transition location, not a transition-prediction model.
 Compressibility corrections
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Compressibility is opt-in. The recovery temperature is
+Compressibility is opt-in. When fast-moving gas is slowed by friction near
+an insulated wall, the wall heats to the **recovery temperature**
+:math:`T_r`. It is a little below the total temperature, because heat
+conduction carries part of the energy away. The recovery factor :math:`r`
+expresses this:
 
 .. math::
 
@@ -237,6 +269,9 @@ used.
 Eckert reference-temperature method
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Eckert's idea is to keep the incompressible formulas but evaluate density and
+viscosity at a single **reference temperature** :math:`T^*` that represents
+conditions inside the boundary layer, somewhere between the edge and the wall.
 For ``CompressibilityCorrection.ECKERT``,
 
 .. math::
@@ -247,9 +282,8 @@ For ``CompressibilityCorrection.ECKERT``,
 
 Here :math:`\mu^*=\mu(T^*)` is evaluated with the selected dynamic-viscosity
 model, while :math:`\mu_e` is the supplied ``edge_dynamic_viscosity`` used in
-the definition of :math:`Re_x`. The implementation therefore preserves one
-edge state even when the supplied edge viscosity and the selected model do not
-coincide exactly.
+the definition of :math:`Re_x`. For consistent results, supply an edge
+viscosity calculated with the same model as ``viscosity_model``.
 The implemented reference-temperature expression is recorded by
 :ref:`Glass and Hunt (1988) <ref-glass-hunt-1988>`.
 
@@ -286,7 +320,11 @@ engineering estimates and need not satisfy this differential relation exactly.
 Van Driest II method
 ~~~~~~~~~~~~~~~~~~~~
 
-For turbulent ``CompressibilityCorrection.VAN_DRIEST_II``, the
+Van Driest II maps the compressible turbulent boundary layer onto an
+equivalent incompressible one. It is derived from a mixing-length model with
+the density variation across the layer included, and it is generally more
+accurate than a reference-temperature method for turbulent flow at high Mach
+number. For turbulent ``CompressibilityCorrection.VAN_DRIEST_II``, the
 Hopkins--Inouye form first defines
 
 .. math::
@@ -307,8 +345,7 @@ The angular factors are
    \qquad
    \beta=\frac{m+1-F}{\sqrt{(m+1+F)^2-4F}}.
 
-The inverse-sine arguments are clipped to :math:`[-1,1]` only to suppress
-floating-point excursions at the endpoints. The transformation factors are
+The transformation factors are
 
 .. math::
 
@@ -351,11 +388,9 @@ intercept:
    \qquad
    \bar C_f=\frac{\bar C_{f,i}}{F_C}.
 
-Both monotonic equations are solved on a verified positive bracket with
-Brent's method. A missing bracket or failed solve raises
-:class:`~aerophysics.exceptions.ModelRangeError`. At the incompressible
-adiabatic limit :math:`M\to0`, the implementation assigns
-:math:`F_C=F_\theta=F_x=1` directly.
+Both equations are solved numerically. If no solution can be found, the call
+raises :class:`~aerophysics.exceptions.ModelRangeError`. At the
+incompressible adiabatic limit :math:`M\to0`, all factors equal one.
 
 Laminar portions of a VD2 calculation still use Eckert, including the
 :math:`T_e/T^*` conversion to the edge basis. Compressible

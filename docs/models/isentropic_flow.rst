@@ -12,6 +12,39 @@ radians. Convert explicitly with
 For task-oriented model selection and examples, see
 :doc:`../guides/compressible_flow`.
 
+Physical background
+-------------------
+
+Isentropic means "at constant entropy": no friction, no heat transfer, and no
+shock waves. Real flows are close to this away from walls and shocks, for
+example in a well-designed nozzle or outside a thin boundary layer.
+
+**Total (stagnation) state.** Imagine bringing a moving gas to rest without
+losses. The temperature, pressure, and density it would then have are the
+total, or stagnation, values :math:`T_0`, :math:`p_0`, and :math:`\rho_0`. In
+steady adiabatic flow the total enthalpy is constant along a streamline:
+
+.. math::
+
+   h_0=h+\frac{V^2}{2}.
+
+For a calorically perfect gas, :math:`h=c_pT`. Dividing by :math:`c_pT` and
+using :math:`a^2=\gamma RT` and :math:`c_p=\gamma R/(\gamma-1)` gives the
+temperature ratio below. Because the process is isentropic, pressure and
+density follow :math:`p\propto T^{\gamma/(\gamma-1)}` and
+:math:`\rho\propto T^{1/(\gamma-1)}`.
+
+**Area and Mach number.** In a duct, mass conservation requires
+:math:`\rho VA` to stay constant. In subsonic flow, a narrowing duct speeds
+the flow up. In supersonic flow the opposite happens: density falls faster
+than velocity rises, so the duct must widen to keep accelerating the flow.
+Mach one can therefore occur only at the narrowest section, the throat. The
+throat area for sonic flow is written :math:`A^*`.
+
+**Choking.** Once the throat is sonic, lowering the downstream pressure
+further cannot increase the mass flow. The flow is then choked, and the mass
+flow per unit throat area depends only on the reservoir state.
+
 Calorically perfect gas
 -----------------------
 
@@ -32,8 +65,12 @@ The total-to-static ratios returned by
    \qquad
    \frac{\rho_0}{\rho}=F(M)^{1/(\gamma-1)}.
 
-The inverse ratio functions solve these expressions algebraically for
-:math:`M`. Their values at :math:`M=1` are also the total-to-critical ratios.
+The inverse functions ``mach_from_total_temperature_ratio``,
+``mach_from_total_pressure_ratio``, and ``mach_from_total_density_ratio``
+solve these expressions for :math:`M`. The values at :math:`M=1` are the
+total-to-critical (sonic) ratios returned by
+:func:`aerophysics.isentropic.critical_ratios`; for air with
+:math:`\gamma=1.4`, :math:`T_0/T^*=1.2` and :math:`p_0/p^*\approx1.893`.
 
 The quasi-one-dimensional area--Mach relation is
 
@@ -60,19 +97,22 @@ The dimensionless mass-flow parameter and mass flux are
    \frac{\dot m}{A}
    =\frac{p_0}{\sqrt{RT_0}}\operatorname{MFP}(M).
 
-The choked mass flux is the value at :math:`M=1`.
+:func:`~aerophysics.isentropic.mass_flow_parameter` returns
+:math:`\operatorname{MFP}`, and :func:`~aerophysics.isentropic.choked_mass_flux`
+returns the mass flux at :math:`M=1`, the largest value a duct can pass for
+the given reservoir state.
 These calorically perfect relations follow
 :ref:`NACA Report 1135 <ref-naca-report-1135>`.
 
 Fused multi-output analysis
 ---------------------------
 
-Calling each relation independently is useful when only one quantity is
-needed. When a workflow needs ratios, area, mass-flow, and absolute-state
+Calling each relation separately is convenient when only one quantity is
+needed. When a workflow needs ratios, area, mass flow, and absolute-state
 values together, :func:`aerophysics.isentropic.isentropic_analysis` returns
-them as one :class:`~aerophysics.isentropic.IsentropicAnalysis`. For numerical
-gas models, the fused call solves each distinct requested state once and
-shares one Mach-one critical state for each distinct reservoir condition.
+them as one :class:`~aerophysics.isentropic.IsentropicAnalysis`. For gas
+models that need a numerical solve, this avoids solving the same state more
+than once.
 
 >>> from aerophysics.isentropic import isentropic_analysis
 >>> analysis = isentropic_analysis(
@@ -94,10 +134,13 @@ the limiting area ratio as positive infinity; the standalone
 Thermally perfect gas
 ---------------------
 
-Passing a :class:`~aerophysics.thermochemistry.ThermallyPerfectGas` to the
-same API evaluates temperature-dependent enthalpy and entropy. The total
-temperature :math:`T_0` must then be supplied because the ratios are no longer
-functions of Mach number alone. Static temperature is the root of
+At high temperature the heat capacity of air rises, so the constant-:math:`\gamma`
+formulas above lose accuracy. Passing a
+:class:`~aerophysics.thermochemistry.ThermallyPerfectGas` to the same API uses
+temperature-dependent enthalpy and entropy instead. The total temperature
+:math:`T_0` must then be supplied, because the ratios now depend on the actual
+temperature as well as on Mach number. The derivation is the same as above,
+but :math:`h(T)` replaces :math:`c_pT`. Static temperature is the root of
 
 .. math::
 
@@ -147,208 +190,43 @@ values, especially far below 200 K, should be treated cautiously.
 The independent thermally perfect flow reference used for verification is
 :ref:`Witte and Tatum (1994) <ref-witte-tatum-1994>`.
 
-Harmonic-oscillator thermally perfect gas
------------------------------------------
+Harmonic-oscillator gas
+-----------------------
 
-:class:`~aerophysics.real_gas.HarmonicOscillatorGas` represents a
-frozen-composition ideal gas with thermally excited harmonic-vibrational
-modes.  Let :math:`w_j` be the weight of mode :math:`j`,
-:math:`\theta_j` its characteristic temperature, and
+:class:`~aerophysics.real_gas.HarmonicOscillatorGas` (see
+:doc:`gas_models`) is also thermally perfect: its heat capacity depends on
+temperature but not on pressure. The thermally perfect equations above
+therefore apply unchanged, and no reservoir pressure is needed. The
+``AIR_HARMONIC_OSCILLATOR`` preset is documented for reservoir temperatures of
+400--2000 K.
 
-.. math::
-
-   x_j=\frac{\theta_j}{T}.
-
-The three dimensionless vibrational functions used by the implementation are
-
-.. math::
-
-   \Psi_v(T)=\sum_j w_j
-      \frac{x_j^2 e^{x_j}}{(e^{x_j}-1)^2},
-
-.. math::
-
-   \Omega_v(T)=\sum_j w_j\frac{x_j}{e^{x_j}-1},
-   \qquad
-   \Sigma_v(T)=\sum_j w_j\left[
-      \frac{x_j}{e^{x_j}-1}-\ln\left(1-e^{-x_j}\right)\right].
-
-Here :math:`\Psi_v`, :math:`\Omega_v`, and :math:`\Sigma_v` respectively
-control vibrational heat capacity, energy, and entropy.  If
-:math:`\gamma_b` is the base heat-capacity ratio before vibrational
-excitation, the specific heats are
-
-.. math::
-
-   c_v(T)=\frac{R}{\gamma_b-1}+R\Psi_v(T),
-   \qquad
-   c_p(T)=c_v(T)+R,
-   \qquad
-   \gamma(T)=\frac{c_p(T)}{c_v(T)}.
-
-With vibrational zero-point energy omitted, the internal energy and enthalpy
-used by the model are
-
-.. math::
-
-   u(T)=\frac{RT}{\gamma_b-1}+RT\Omega_v(T),
-   \qquad
-   h(T)=u(T)+RT.
-
-Entropy is defined up to an additive constant.  Relative to any reference
-state :math:`T_r,p_r`, its change is
-
-.. math::
-
-   s(T,p)-s(T_r,p_r)
-   =\frac{\gamma_bR}{\gamma_b-1}\ln\frac{T}{T_r}
-    +R\left[\Sigma_v(T)-\Sigma_v(T_r)\right]
-    -R\ln\frac{p}{p_r}.
-
-The remaining state relations retain their ideal-gas form:
-
-.. math::
-
-   \rho=\frac{p}{RT},
-   \qquad
-   a_s(T)=\sqrt{\gamma(T)RT}.
-
-Thus :math:`c_p`, :math:`c_v`, :math:`\gamma`, :math:`u`, :math:`h`, and
-:math:`a_s` depend on temperature but not pressure.  Pressure affects density
-and entropy only.  The thermally perfect isentropic equations above therefore
-apply without a reservoir-pressure input.
-
->>> from aerophysics import AIR_HARMONIC_OSCILLATOR
->>> harmonic = AIR_HARMONIC_OSCILLATOR.state(1200.0, 6.0e6)
->>> round(harmonic.cp, 3), round(harmonic.cv, 3)
-(1176.407, 889.354)
->>> round(harmonic.heat_capacity_ratio, 6)
-1.322766
->>> round(harmonic.speed_of_sound, 3)
-675.014
-
-``AIR_HARMONIC_OSCILLATOR`` uses :math:`R=287.05287` J/(kg K), base
-:math:`\gamma_b=1.4`, and one effective mode at 3055.56 K.  Its documented
-reservoir range is 400--2000 K.  The model is named for its physics, not for
-JAXA: :ref:`Kennard (1938) <ref-kennard-1938>` documents the
-statistical-mechanics relation, while
-:ref:`Watari's JAXA report <ref-watari-2007-report>` and
-:ref:`proceedings paper <ref-watari-2007-proceedings>` record the effective
-air constants and wind-tunnel use.
+.. _beattie-bridgeman-isentropic:
 
 Beattie--Bridgeman real gas
 ---------------------------
 
-:class:`~aerophysics.real_gas.BeattieBridgemanGas` adds density-dependent
-corrections to the harmonic-oscillator caloric model.  Its equation of state
-originates with :ref:`Beattie and Bridgeman (1928)
-<ref-beattie-bridgeman-1928>` and is evaluated in the form
-
-.. math::
-
-   p=\rho RT\left(1+E_1\rho+E_2\rho^2+E_3\rho^3\right),
-
-.. math::
-
-   E_1=B_0-\frac{A_0}{RT}-\frac{c}{T^3},\quad
-   E_2=\frac{A_0a}{RT}-B_0b-\frac{B_0c}{T^3},\quad
-   E_3=\frac{B_0bc}{T^3}.
-
-Heat capacities and sound speed
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Unlike a thermally perfect ideal gas, the Beattie--Bridgeman heat capacities
-depend on both temperature and density.  Using :math:`\Psi_v(T)` and
-:math:`\gamma_b` defined above, the constant-volume specific heat implemented
-by :class:`~aerophysics.real_gas.BeattieBridgemanGas` is
-
-.. math::
-
-   c_v(T,\rho)
-   =\frac{R}{\gamma_b-1}+R\Psi_v(T)
-    +\frac{6Rc\rho}{T^3}
-     \left(1+\frac{B_0\rho}{2}
-              -\frac{B_0b\rho^2}{3}\right).
-
-For compactness, define the isothermal pressure derivatives
-
-.. math::
-
-   p_\rho
-   =\left(\frac{\partial p}{\partial\rho}\right)_T
-   =RT\left(1+2E_1\rho+3E_2\rho^2+4E_3\rho^3\right),
-
-.. math::
-
-   p_T
-   =\left(\frac{\partial p}{\partial T}\right)_\rho
-   =\rho R\left(1+\frac{2c\rho}{T^3}\right)
-      \left(1+B_0\rho-B_0b\rho^2\right).
-
-The thermodynamic identity relating the two heat capacities then gives
-
-.. math::
-
-   c_p(T,\rho)
-   =c_v(T,\rho)+\frac{T p_T^2}{\rho^2p_\rho},
-   \qquad
-   \gamma(T,\rho)=\frac{c_p(T,\rho)}{c_v(T,\rho)}.
-
-The frozen-composition isentropic sound speed :math:`a_s` is
-
-.. math::
-
-   a_s^2
-   =\left(\frac{\partial p}{\partial\rho}\right)_s
-   =\frac{c_p}{c_v}p_\rho.
-
-Thus pressure affects :math:`c_p`, :math:`c_v`, and :math:`a_s` through the
-gas-branch density obtained from the equation of state.  Setting
-:math:`A_0=B_0=a=b=c=0` gives :math:`p_\rho=RT`, :math:`p_T=\rho R`, and
-:math:`c_p=c_v+R`; the model reduces exactly to the corresponding
-harmonic-oscillator ideal gas.
-
->>> from aerophysics import AIR_BEATTIE_BRIDGEMAN
->>> reservoir = AIR_BEATTIE_BRIDGEMAN.state(1200.0, 6.0e6)
->>> round(reservoir.cp, 3), round(reservoir.cv, 3)
-(1173.815, 882.346)
->>> round(reservoir.heat_capacity_ratio, 6)
-1.330334
->>> round(reservoir.speed_of_sound, 3)
-690.207
-
-``AIR_BEATTIE_BRIDGEMAN`` uses the air constants reported by
-:ref:`Randall (1957) <ref-randall-1957-air>` and applied by
-:ref:`Watari (2007) <ref-watari-2007-report>`, with separate N2 and O2
-vibrational modes.  The general caloric derivation is recorded in
-:ref:`Randall's companion report <ref-randall-1957-gases>`. For a specified
-:math:`T_0,p_0,M`, the solver
-restricts the entropy solve to the low-density mechanically stable gas branch
-(below the first :math:`(\partial p/\partial\rho)_T=0` spinodal) and solves
+For the Beattie--Bridgeman gas (see :ref:`beattie-bridgeman-gas`), enthalpy,
+entropy, and sound speed depend on pressure as well as temperature. For a
+specified :math:`T_0,p_0,M`, the solver uses the low-density gas solution of
+the equation of state and solves
 
 .. math::
 
    s(T,p)=s(T_0,p_0),\qquad
    h(T_0,p_0)-h(T,p)=\frac{M^2a_s(T,p)^2}{2}.
 
-The total pressure is therefore required in addition to total temperature.
-With :math:`G=\rho M a_s`, the generalized mass-flow parameter is
+Because the properties now depend on pressure, total pressure is required in
+addition to total temperature. With :math:`G=\rho M a_s`, the generalized
+mass-flow parameter is
 
 .. math::
 
    \Phi=\frac{G\sqrt{RT_0}}{p_0},\qquad
    \frac{A}{A^*}=\frac{G^*}{G}.
 
-The sonic state for the same reservoir defines :math:`G^*`.  Non-positive
-compressibility, heat capacity, or sound speed, and absence of a stable gas
-root raise :class:`~aerophysics.exceptions.ModelRangeError`.
-
-The density inverse solves for :math:`\rho/\rho_\mathrm{ideal}`, where
-:math:`\rho_\mathrm{ideal}=p/(RT)`, so its accuracy is relative to the state
-rather than to a fixed density in kg/m³.  The returned density must reproduce
-the requested pressure through the same equation of state to a relative
-tolerance of :math:`10^{-12}`.  A state whose :math:`\rho_\mathrm{ideal}` is
-not a finite normal float64 value also raises
+The sonic state for the same reservoir defines :math:`G^*`. If the equation
+of state has no physically meaningful gas solution at the requested state
+(for example, non-positive heat capacity or sound speed), the call raises
 :class:`~aerophysics.exceptions.ModelRangeError`.
 
 >>> from aerophysics import AIR_BEATTIE_BRIDGEMAN
@@ -365,22 +243,17 @@ not a finite normal float64 value also raises
 >>> round(real.velocity, 3)
 1056.954
 
-The harmonic-oscillator air preset's documented reservoir range is 400--2000 K.
-The Beattie--Bridgeman air preset instead records the
-:ref:`R. E. Randall, AEDC-TR-57-8 (1957) <ref-randall-1957-air>` tabulated
-air-property range: 70--2200 degR
-(38.8889--1222.2222 K) and 0.025--4000 psia (172.369 Pa--27.5790 MPa).
-That is a tabulation range, not an inherent physical-validity limit of the
-equation of state.  The isentropic API emits one
-:class:`~aerophysics.exceptions.ApplicabilityWarning` per public call outside
-that range, or raises in strict mode.  These are frozen-composition models:
-dissociation, chemical equilibrium, ionisation, condensation, and phase
-changes are outside their scope.
+Outside the preset's tabulated range (38.8889--1222.2222 K and
+172.369 Pa--27.5790 MPa), the isentropic API emits one
+:class:`~aerophysics.exceptions.ApplicabilityWarning` per call, or raises
+:class:`~aerophysics.exceptions.ModelRangeError` when
+``allow_extrapolation=False``.
 
-The GUI exposes ``AIR``, ``NASA7``, ``NASA9``, ``HARMONIC_OSCILLATOR``, and
-``BEATTIE_BRIDGEMAN`` as mutually exclusive choices.  The latter always
-requires reservoir pressure.  Exported rows include total/static temperature,
-static pressure and density, velocity, sound speed, and dynamic pressure.
+The GUI **等エントロピー流れ** (isentropic flow) page offers ``AIR``,
+``NASA7``, ``NASA9``, ``HARMONIC_OSCILLATOR``, and ``BEATTIE_BRIDGEMAN``.
+``BEATTIE_BRIDGEMAN`` always requires reservoir pressure. Exported rows
+include total and static temperature, static pressure and density, velocity,
+sound speed, and dynamic pressure.
 
 .. list-table:: Isentropic-flow symbols
    :header-rows: 1

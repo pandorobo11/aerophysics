@@ -160,10 +160,5 @@ SP-3004 comparison is limited to the four planned Mach numbers.  Thermally
 perfect and real-gas property verification is recorded separately in
 :doc:`thermophysical`.
 
-Regenerate this section with::
-
-   python docs/scripts/generate_compressible_flow_validation.py
-
-Check committed artifacts without writing with::
-
-   python docs/scripts/generate_compressible_flow_validation.py --check
+The commands that regenerate this record are listed in the repository's
+``DEVELOPMENT.md``.

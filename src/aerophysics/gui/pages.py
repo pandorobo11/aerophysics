@@ -40,6 +40,7 @@ from aerophysics.gui.components import (
     render_result_bundle,
 )
 from aerophysics.gui.config import make_configuration
+from aerophysics.gui.documentation import render_documentation_link
 from aerophysics.gui.figures import (
     boundary_layer_figures,
     conical_shock_geometry,
@@ -104,6 +105,7 @@ def render_flight(preferences: UnitPreferences) -> None:
     """Render standard-atmosphere and flight-condition calculations."""
     st.title("大気・飛行条件")
     st.caption("U.S. Standard Atmosphere 1976と統合飛行条件を計算します。")
+    render_documentation_link("models/flight_conditions.html")
     imported = pop_pending_configuration("flight")
     inputs, models, sweep = _configuration_defaults(imported)
     render_configuration_import("flight", "flight")
@@ -404,6 +406,7 @@ def render_shock(preferences: UnitPreferences) -> None:
     """Render attached oblique-shock calculations."""
     st.title("斜め衝撃波")
     st.caption("一定比熱比または温度依存比熱で、斜め衝撃波の弱解・強解を計算します。")
+    render_documentation_link("models/normal_oblique_shocks.html")
     imported = pop_pending_configuration("oblique_shock")
     inputs, models, sweep = _configuration_defaults(imported)
     render_configuration_import("oblique_shock", "shock")
@@ -663,6 +666,7 @@ def render_conical_shock(preferences: UnitPreferences) -> None:
     """Render axisymmetric attached conical-shock calculations."""
     st.title("円錐衝撃波")
     st.caption("Taylor–Maccoll理論による軸対称・付着弱解を計算します。")
+    render_documentation_link("models/conical_shocks.html")
     imported = pop_pending_configuration("conical_shock")
     inputs, models, sweep = _configuration_defaults(imported)
     render_configuration_import("conical_shock", "cone_shock")
@@ -908,6 +912,7 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
     """Render smooth flat-plate boundary-layer calculations."""
     st.title("平板境界層")
     st.caption("滑面・ゼロ圧力勾配・一定外縁条件の片面平板を計算します。")
+    render_documentation_link("models/flat_plate_boundary_layer.html")
     imported = pop_pending_configuration("boundary_layer")
     inputs, models, sweep = _configuration_defaults(imported)
     render_configuration_import("boundary_layer", "boundary")

@@ -47,7 +47,5 @@ is accurate for every roughness, pressure gradient, wall-temperature ratio,
 or three-dimensional protrusion.  In particular, protrusion ``C_D`` is an
 input rather than a correlation supplied by this package.
 
-Regenerate or check with::
-
-   python docs/scripts/generate_viscous_flow_validation.py
-   python docs/scripts/generate_viscous_flow_validation.py --check
+The commands that regenerate this record are listed in the repository's
+``DEVELOPMENT.md``.

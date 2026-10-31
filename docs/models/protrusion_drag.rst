@@ -11,6 +11,22 @@ Background on aircraft excrescence drag and engineering drag coefficients is
 provided by :ref:`Young and Paterson (1981) <ref-young-paterson-1981>` and
 :ref:`Hoerner (1965) <ref-hoerner-1965>`.
 
+Physical background
+-------------------
+
+Small objects on a surface, such as antennas, rivet heads, sensors, or
+fasteners, are called protrusions or excrescences. Their drag is often
+estimated with a drag coefficient :math:`C_D` measured in a uniform stream.
+A protrusion on a surface, however, sits inside the boundary layer, where the
+air near the wall moves slowly. It therefore "sees" a lower dynamic pressure
+than the outer flow, and its drag is smaller than the free-stream estimate.
+
+This model expresses that **shielding** effect. It averages the local dynamic
+pressure :math:`\tfrac12\rho U^2` over the frontal area of the protrusion and
+applies the free-stream :math:`C_D` to that average. A protrusion much
+shorter than the boundary-layer thickness is strongly shielded; one taller
+than the boundary layer approaches the free-stream drag.
+
 Model equations
 ---------------
 

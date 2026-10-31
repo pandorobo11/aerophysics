@@ -43,6 +43,7 @@ from aerophysics.gui.csv_inputs import (
     profile_csv_template,
     shape_csv_template,
 )
+from aerophysics.gui.documentation import render_documentation_link
 from aerophysics.gui.figures import (
     boundary_layer_profile_figures,
     protrusion_figures,
@@ -130,6 +131,7 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
     """Render compressible Spalding-Coles boundary-layer profiles."""
     st.title("圧縮性境界層プロファイル")
     st.caption("滑面・乱流ZPG境界層の平均速度と熱物性分布を予測します。")
+    render_documentation_link("models/compressible_velocity_transformations.html")
     imported = pop_pending_configuration("boundary_layer_profile")
     inputs, models, _ = _defaults(imported)
     render_configuration_import("boundary_layer_profile", "profile")
@@ -419,6 +421,7 @@ def render_protrusion_drag(preferences: UnitPreferences) -> None:
     """Render boundary-layer-immersed protrusion drag calculations."""
     st.title("突起抗力")
     st.caption("境界層内の実効動圧を投影面積で積分して直接抗力を推定します。")
+    render_documentation_link("models/protrusion_drag.html")
     imported = pop_pending_configuration("protrusion_drag")
     inputs, models, sweep = _defaults(imported)
     if imported is not None:
@@ -927,6 +930,7 @@ def render_thermochemistry(preferences: UnitPreferences) -> None:
     """Render frozen-composition dry-air thermochemistry."""
     st.title("熱化学")
     st.caption("NASA7／NASA9多項式による凍結組成乾燥空気の温度依存物性です。")
+    render_documentation_link("models/gas_models.html")
     imported = pop_pending_configuration("thermochemistry")
     inputs, models, sweep = _defaults(imported)
     render_configuration_import("thermochemistry", "thermo")
@@ -1120,6 +1124,7 @@ def render_viscosity(preferences: UnitPreferences) -> None:
     """Render dry-air dynamic-viscosity model calculations."""
     st.title("粘性係数")
     st.caption("Sutherland／Keyes／Blottner-Wilkeによる乾燥空気の動的粘性係数です。")
+    render_documentation_link("models/transport_properties.html")
     imported = pop_pending_configuration("viscosity")
     inputs, models, sweep = _defaults(imported)
     render_configuration_import("viscosity", "viscosity")
