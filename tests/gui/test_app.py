@@ -1,6 +1,7 @@
 """Headless Streamlit GUI tests."""
 
 import json
+import math
 from pathlib import Path
 from typing import Any, cast
 
@@ -1052,7 +1053,11 @@ render_heating(render_unit_sidebar())
     )
     app.selectbox(key="heating_geometry").set_value("swept_cylinder").run()
     assert app.selectbox(key="heating_model").value == "tauber"
-    assert app.selectbox(key="heating_model").options == ["Tauber"]
+    assert app.selectbox(key="heating_model").options == [
+        "Tauber\uff08層流\uff09",
+        "Poll\uff08完全乱流・付着線\uff09",
+        "Tauber 層流 / Poll 乱流 比較",
+    ]
     assert "heating_payload" not in app.session_state and not app.dataframe
     assert "heating_sweep_angle" in {x.key for x in app.number_input}
     assert "heating_prandtl" not in {x.key for x in app.number_input}
@@ -1131,3 +1136,196 @@ render_heating(render_unit_sidebar())
     assert len(app.metric) == 5
     assert saved["inputs_si"]["radius"] == pytest.approx(0.2)
     assert result.rows[0]["temperature"] == pytest.approx(250.0)
+
+
+@pytest.mark.parametrize("model", ["poll_turbulent", "comparison"])
+def test_heating_turbulent_single_and_replay(model: str) -> None:
+    from aerophysics.gui.config import load_configuration
+    from aerophysics.gui.figures import heating_trends
+    from aerophysics.gui.heating_adapter import heating_sweep
+
+    script = """
+from aerophysics.gui.heating_page import render_heating
+from aerophysics.gui.components import render_unit_sidebar
+render_heating(render_unit_sidebar())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="heating_geometry").set_value("swept_cylinder").run()
+    app.selectbox(key="heating_model").set_value(model).run()
+    assert "heating_prandtl" in {widget.key for widget in app.number_input}
+    app.number_input(key="heating_prandtl").set_value(0.8).run()
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert len(app.metric) == (4 if model == "poll_turbulent" else 5)
+    assert len(app.get("plotly_chart")) == 1
+    assert any("付着線 Reynolds" in metric.label for metric in app.metric) == (
+        model == "poll_turbulent"
+    )
+    result, configuration = app.session_state["heating_payload"]
+    row = result.rows[0]
+    expected_rows = heating_sweep(
+        field="sweep_angle",
+        start=0.0,
+        stop=math.pi / 2,
+        points=91,
+        upstream_mach=row["upstream_mach"],
+        temperature=row["temperature"],
+        pressure=row["pressure"],
+        geometric_altitude=None,
+        radius=row["radius"],
+        wall_temperature=row["wall_temperature"],
+        geometry="swept_cylinder",
+        model=model,
+        prandtl_number=0.8,
+    ).rows
+    expected = heating_trends(expected_rows, UnitPreferences(), field="sweep_angle")[
+        "熱流束"
+    ]
+    actual = json.loads(app.get("plotly_chart")[0].proto.spec)
+    assert actual["data"] == json.loads(expected.to_json())["data"]
+    # Editing the input after calculation must not change the saved result's plot.
+    app.number_input(key="heating_prandtl").set_value(0.9).run()
+    assert json.loads(app.get("plotly_chart")[0].proto.spec)["data"] == actual["data"]
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_aerodynamic_heating_configuration"] = (
+        load_configuration(dump_configuration(configuration))
+    )
+    replay.run()
+    assert replay.selectbox(key="heating_model").value == model
+    assert replay.number_input(key="heating_prandtl").value == 0.8
+    replay.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert replay.session_state["heating_payload"][0].rows == result.rows
+
+
+def test_heating_turbulent_error_and_sweep_warning() -> None:
+    script = """
+from aerophysics.gui.heating_page import render_heating
+from aerophysics.gui.units import UnitPreferences
+render_heating(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="heating_geometry").set_value("swept_cylinder").run()
+    app.selectbox(key="heating_model").set_value("poll_turbulent").run()
+    app.number_input(key="heating_sweep_angle").set_value(0.0).run()
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and app.error
+    assert "heating_payload" not in app.session_state
+    app.selectbox(key="heating_model").set_value("comparison").run()
+    app.radio(key="heating_mode").set_value("sweep").run()
+    app.radio(key="heating_sweep_field").set_value("sweep_angle").run()
+    app.number_input(key="heating_sweep_points").set_value(5).run()
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert any(
+        "2点は乱流付着線モデルの定義域" in warning.value and "欠損値" in warning.value
+        for warning in app.warning
+    )
+    rows = app.session_state["heating_payload"][0].rows
+    assert [row["status"] for row in rows] == [
+        "out_of_domain",
+        "ok",
+        "ok",
+        "ok",
+        "out_of_domain",
+    ]
+
+
+@pytest.mark.parametrize("model", ["poll_turbulent", "comparison"])
+def test_heating_turbulent_no_valid_plot_angles(model: str) -> None:
+    script = """
+from aerophysics.gui.heating_page import render_heating
+from aerophysics.gui.units import UnitPreferences
+render_heating(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="heating_geometry").set_value("swept_cylinder").run()
+    app.selectbox(key="heating_model").set_value(model).run()
+    app.number_input(key="heating_mach").set_value(1.0000001).run()
+    # This single angle is valid; the plot's first interior angle (1 deg) is not.
+    app.number_input(key="heating_sweep_angle").set_value(0.001).run()
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error and app.dataframe
+    if model == "poll_turbulent":
+        assert not app.get("plotly_chart")
+        assert not any("後退角グラフ" in warning.value for warning in app.warning)
+    else:
+        assert len(app.get("plotly_chart")) == 1
+        traces = json.loads(app.get("plotly_chart")[0].proto.spec)["data"]
+        assert [trace["name"] for trace in traces] == ["Tauber"]
+        assert any("後退角グラフの91点" in warning.value for warning in app.warning)
+
+
+@pytest.mark.parametrize("model", ["poll_turbulent", "comparison", "tauber"])
+@pytest.mark.parametrize("mach", [6.0, 10.0])
+def test_heating_single_cylinder_plot_warnings(model: str, mach: float) -> None:
+    from aerophysics.gui.heating_adapter import heating_condition
+    from aerophysics.gui.tables import display_rows
+
+    script = """
+from aerophysics.gui.heating_page import render_heating
+from aerophysics.gui.units import UnitPreferences
+render_heating(UnitPreferences())
+"""
+    inputs: dict[str, Any] = {
+        "upstream_mach": mach,
+        "temperature": 226.5,
+        "pressure": 1197.0,
+        "radius": 0.1,
+        "sweep_angle": math.pi / 6,
+        "wall_temperature": 300.0,
+        "prandtl_number": 0.72,
+        "geometric_altitude": None,
+    }
+    configuration = make_configuration(
+        calculator="aerodynamic_heating",
+        mode="single",
+        inputs_si=inputs,
+        models={"geometry": "swept_cylinder", "model": model, "freestream": "manual"},
+        units=UnitPreferences(),
+    )
+    expected = heating_condition(**inputs, geometry="swept_cylinder", model=model)
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_aerodynamic_heating_configuration"] = configuration
+    app.run()
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error
+    result, saved = app.session_state["heating_payload"]
+    assert result == expected
+    assert saved == configuration
+    assert result.rows[0]["status"] == "ok"
+    displayed = display_rows("aerodynamic_heating", expected.rows, UnitPreferences())
+    assert app.dataframe[0].value.to_dict("records") == displayed
+    assert len(app.metric) == {"poll_turbulent": 4, "comparison": 5, "tauber": 3}[model]
+    if model == "comparison":
+        tauber_metric = next(m for m in app.metric if m.label.startswith("Tauber q_w"))
+        assert tauber_metric.value == f"{result.rows[0]['tauber_heat_flux']:.5g}"
+
+    warnings = [warning.value for warning in app.warning]
+    for message in result.warnings:
+        assert warnings.count(message) == 1
+        assert sum(message in warning for warning in warnings) == 1
+    if model == "poll_turbulent" and mach == 6.0:
+        assert result.warnings == ()
+    if mach == 10.0 and model != "tauber":
+        assert any("2000 K total temperature" in message for message in result.warnings)
+    if model == "tauber":
+        assert warnings == list(result.warnings)
+    else:
+        edge_warnings = [
+            warning for warning in warnings if "edge Mach number" in warning
+        ]
+        assert len(edge_warnings) == 1
+        assert edge_warnings[0].startswith("後退角グラフ")
+        missing = 11 if mach == 6.0 else 7
+        assert sum(f"後退角グラフの{missing}点" in warning for warning in warnings) == 1
+        assert not any(
+            warning[0].isdigit() and "点は" in warning for warning in warnings
+        )
+
+    plot = app.get("plotly_chart")[0].proto.spec
+    app.number_input(key="heating_mach").set_value(mach + 1).run()
+    assert not app.exception and not app.error
+    assert [warning.value for warning in app.warning] == warnings
+    assert app.get("plotly_chart")[0].proto.spec == plot
+    assert app.session_state["heating_payload"] == (result, saved)

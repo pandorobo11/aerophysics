@@ -307,6 +307,16 @@ def test_heating_schema_validation() -> None:
             {**models, "freestream": "manual"},
             {"field": "geometric_altitude", "start": 1.0, "stop": 2.0, "points": 2},
         )
+    for model in ("tauber", "poll_turbulent", "comparison"):
+        config(inputs, {**models, "geometry": "swept_cylinder", "model": model})
+    for model in ("fay_riddell", "tauber", "comparison"):
+        config(inputs, {**models, "model": model})
+    with pytest.raises(
+        ConfigurationError, match="Poll turbulent model requires a swept cylinder"
+    ):
+        config(inputs, {**models, "model": "poll_turbulent"})
+    with pytest.raises(ConfigurationError, match="swept cylinder requires"):
+        config(inputs, {**models, "geometry": "swept_cylinder", "model": "fay_riddell"})
     cylinder = {**models, "geometry": "swept_cylinder", "model": "tauber"}
     config(
         inputs,

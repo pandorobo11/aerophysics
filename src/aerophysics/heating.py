@@ -1,4 +1,4 @@
-"""Laminar sphere stagnation-point and swept-cylinder heating in SI units.
+"""Laminar sphere and laminar/turbulent swept-cylinder heating in SI units.
 
 References
 ----------
@@ -10,6 +10,10 @@ Dissociated Air*, Journal of the Aeronautical Sciences, 25(2), 73--85, 1958.
 West, T. K., IV and Brandis, A. M., *Updated Stagnation Point Aeroheating
 Correlations for Mars Entry*, NASA NTRS document 20200002354.
 https://ntrs.nasa.gov/citations/20200002354
+Holden, M. S., Moselle, J. R., and Lee, J., *Studies of Aerothermal Loads
+Generated in Regions of Shock/Shock Interaction in Hypersonic Flow*, NASA
+CR-181893, 1991, equations (5.7)--(5.12).
+https://ntrs.nasa.gov/citations/19920002101
 """
 
 import warnings
@@ -34,6 +38,19 @@ class StagnationHeatingModel(StrEnum):
     TAUBER = "tauber"
 
 
+class AttachmentLineHeatingModel(StrEnum):
+    """Turbulent swept-cylinder attachment-line heating correlation."""
+
+    POLL = "poll"  # NASA CR-181893 equations (5.9)--(5.10)
+
+
+POLL_TURBULENT_COEFFICIENT: Final = 0.0689
+POLL_TURBULENT_EXPONENT: Final = 0.42
+DEFAULT_ATTACHMENT_LINE_RECOVERY_FACTOR: Final = 0.89
+BENARD_MINIMUM_EDGE_MACH: Final = 0.35
+BENARD_MAXIMUM_EDGE_MACH: Final = 6.89
+BENARD_MINIMUM_WALL_TOTAL_RATIO: Final = 0.14
+BENARD_MAXIMUM_WALL_TOTAL_RATIO: Final = 0.96
 FAY_RIDDELL_SPHERE_COEFFICIENT: Final = 0.763
 TAUBER_SPHERE_COEFFICIENT: Final = 1.83e-4
 TAUBER_CYLINDER_COEFFICIENT: Final = 1.29e-4
@@ -75,6 +92,33 @@ class SweptCylinderHeatingResult:
     freestream_velocity: FloatResult
     freestream_density: FloatResult
     recovery_enthalpy: FloatResult
+    wall_temperature: FloatResult
+
+
+@dataclass(frozen=True, slots=True)
+class AttachmentLineHeatingResult:
+    """Turbulent attachment-line heating and edge state in SI units.
+
+    Heat flux is in W/m², positive into the wall; sweep angle is in radians.
+    ``stanton_number`` is q_w / [rho* W_e c_p (T_aw - T_w)] with rho* the
+    density at the edge pressure and reference temperature.
+    """
+
+    model: AttachmentLineHeatingModel
+    heat_flux: FloatResult
+    sweep_angle: FloatResult
+    freestream_velocity: FloatResult
+    freestream_density: FloatResult
+    edge_temperature: FloatResult
+    edge_pressure: FloatResult
+    edge_density: FloatResult
+    edge_velocity: FloatResult
+    edge_mach: FloatResult
+    velocity_gradient: FloatResult
+    recovery_temperature: FloatResult
+    reference_temperature: FloatResult
+    reynolds_number: FloatResult
+    stanton_number: FloatResult
     wall_temperature: FloatResult
 
 
@@ -277,13 +321,207 @@ def swept_cylinder_heat_flux(
     )
 
 
+def _attachment_line_edge(
+    m: FloatArray,
+    t: FloatArray,
+    p: FloatArray,
+    r: FloatArray,
+    sweep: FloatArray,
+    gas: PerfectGas,
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
+    """Return T_e, p_e, rho_e, W_e and circumferential gradient A."""
+    _, velocity = _freestream(m, t, p, gas)
+    edge_velocity = velocity * np.sin(sweep)
+    normal_mach = m * np.cos(sweep)
+    gamma = gas.heat_capacity_ratio
+    factor = 1 + (gamma - 1) / 2 * normal_mach**2
+    edge_temperature = t * factor
+    edge_pressure = (
+        p
+        * factor ** (gamma / (gamma - 1))
+        * np.asarray(normal_shock(normal_mach, gas).total_pressure_ratio)
+    )
+    edge_density = edge_pressure / (gas.specific_gas_constant * edge_temperature)
+    gradient = np.sqrt(2 * (edge_pressure - p) / edge_density) / r
+    return edge_temperature, edge_pressure, edge_density, edge_velocity, gradient
+
+
+def _turbulent_attachment_line(
+    edge_temperature: FloatArray,
+    edge_pressure: FloatArray,
+    edge_velocity: FloatArray,
+    velocity_gradient: FloatArray,
+    wall_temperature: FloatArray,
+    *,
+    prandtl_number: float,
+    recovery_factor: float,
+    gas: PerfectGas,
+    viscosity_model: DynamicViscosityModel,
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
+    """Return q_w, T_aw, T*, Rbar*, St* and M_e from an edge state.
+
+    Implements the Poll reference-temperature correlation as reproduced in
+    NASA CR-181893 (5.9)--(5.10), using reference density at edge pressure.
+    """
+    recovery = edge_temperature + recovery_factor * edge_velocity**2 / (2 * gas.cp)
+    reference = (
+        edge_temperature
+        + 0.1 * (wall_temperature - edge_temperature)
+        + 0.6 * (recovery - edge_temperature)
+    )
+    density = edge_pressure / (gas.specific_gas_constant * reference)
+    viscosity = viscosity_model.dynamic_viscosity(reference)
+    kinematic_viscosity = viscosity / density
+    reynolds = edge_velocity / np.sqrt(kinematic_viscosity * velocity_gradient)
+    stanton = (
+        POLL_TURBULENT_COEFFICIENT
+        / (2 * prandtl_number ** (2 / 3))
+        * reynolds**-POLL_TURBULENT_EXPONENT
+    )
+    flux = stanton * density * edge_velocity * gas.cp * (recovery - wall_temperature)
+    edge_mach = edge_velocity / np.sqrt(
+        gas.heat_capacity_ratio * gas.specific_gas_constant * edge_temperature
+    )
+    return flux, recovery, reference, reynolds, stanton, edge_mach
+
+
+def swept_cylinder_turbulent_heat_flux(
+    mach: ArrayLike,
+    temperature: ArrayLike,
+    pressure: ArrayLike,
+    radius: ArrayLike,
+    sweep_angle: ArrayLike,
+    *,
+    wall_temperature: ArrayLike,
+    model: AttachmentLineHeatingModel = AttachmentLineHeatingModel.POLL,
+    prandtl_number: float = 0.72,
+    recovery_factor: float = DEFAULT_ATTACHMENT_LINE_RECOVERY_FACTOR,
+    gas: PerfectGas = AIR,
+    viscosity_model: DynamicViscosityModel = AIR_VISCOSITY,
+) -> AttachmentLineHeatingResult:
+    """Estimate fully turbulent heating at a long swept-cylinder attachment line.
+
+    The user explicitly selects a smooth-wall, fully turbulent assumption;
+    no transition or intermittency model is applied. Inputs use SI units,
+    ``radius`` is the cylinder radius in m and ``sweep_angle`` is in radians
+    (zero means the axis is perpendicular to the freestream). Require
+    0 < sweep < pi/2 and mach*cos(sweep) > 1. Heat flux is positive into the
+    wall and remains negative for a wall hotter than the recovery temperature.
+
+    Modified-Newtonian edge properties stop only the normal velocity component.
+    ``gas`` converts freestream and edge states, but the correlation is based
+    on air data and has not been validated for arbitrary gases. This is the
+    Poll reference-temperature correlation as reproduced in NASA CR-181893,
+    not an independently checked transcription of Poll (1981).
+    See :doc:`../models/aerodynamic_heating` for applicability limits.
+    """
+    if not isinstance(model, AttachmentLineHeatingModel):
+        raise ValueError("model must be an AttachmentLineHeatingModel value")
+    for name, value in (
+        ("prandtl_number", prandtl_number),
+        ("recovery_factor", recovery_factor),
+    ):
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError(f"{name} must be finite and greater than zero")
+    (m, t, p, r, sweep, wall), scalar = _inputs(
+        ("mach", mach),
+        ("temperature", temperature),
+        ("pressure", pressure),
+        ("radius", radius),
+        ("sweep_angle", sweep_angle),
+        ("wall_temperature", wall_temperature),
+    )
+    if np.any((sweep <= 0) | (sweep >= np.pi / 2)):
+        raise ValueError(
+            "sweep_angle must be greater than zero and less than pi/2 "
+            "for the turbulent attachment line"
+        )
+    if np.any(m * np.cos(sweep) <= 1):
+        raise ValueError(
+            "normal Mach number mach*cos(sweep_angle) must be greater than one"
+        )
+    density, velocity = _freestream(m, t, p, gas)
+    te, pe, rho_e, we, gradient = _attachment_line_edge(m, t, p, r, sweep, gas)
+    flux, recovery, reference, reynolds, stanton, edge_mach = (
+        _turbulent_attachment_line(
+            te,
+            pe,
+            we,
+            gradient,
+            wall,
+            prandtl_number=prandtl_number,
+            recovery_factor=recovery_factor,
+            gas=gas,
+            viscosity_model=viscosity_model,
+        )
+    )
+    total_temperature = t * (1 + (gas.heat_capacity_ratio - 1) / 2 * m**2)
+    if np.any(total_temperature > PERFECT_GAS_STAGNATION_TEMPERATURE_LIMIT):
+        warnings.warn(
+            "Turbulent attachment-line edge properties use a perfect gas above "
+            "2000 K total temperature; dissociation is not modelled",
+            ApplicabilityWarning,
+            stacklevel=2,
+        )
+    if np.any(
+        (edge_mach < BENARD_MINIMUM_EDGE_MACH) | (edge_mach > BENARD_MAXIMUM_EDGE_MACH)
+    ):
+        warnings.warn(
+            "Turbulent attachment-line edge Mach number is outside "
+            "0.35 <= M_e <= 6.89, the turbulent heat-transfer database range "
+            "of Benard et al. (2006)",
+            ApplicabilityWarning,
+            stacklevel=2,
+        )
+    wall_ratio = wall / total_temperature
+    if np.any(
+        (wall_ratio < BENARD_MINIMUM_WALL_TOTAL_RATIO)
+        | (wall_ratio > BENARD_MAXIMUM_WALL_TOTAL_RATIO)
+    ):
+        warnings.warn(
+            "Turbulent attachment-line wall-to-total temperature ratio is outside "
+            "0.14 <= T_w/T_0 <= 0.96, the turbulent heat-transfer database range "
+            "of Benard et al. (2006)",
+            ApplicabilityWarning,
+            stacklevel=2,
+        )
+
+    def output(value: FloatArray) -> FloatResult:
+        return return_float(value, scalar=scalar)
+
+    return AttachmentLineHeatingResult(
+        model=model,
+        heat_flux=output(flux),
+        sweep_angle=output(sweep),
+        freestream_velocity=output(velocity),
+        freestream_density=output(density),
+        edge_temperature=output(te),
+        edge_pressure=output(pe),
+        edge_density=output(rho_e),
+        edge_velocity=output(we),
+        edge_mach=output(edge_mach),
+        velocity_gradient=output(gradient),
+        recovery_temperature=output(recovery),
+        reference_temperature=output(reference),
+        reynolds_number=output(reynolds),
+        stanton_number=output(stanton),
+        wall_temperature=output(wall),
+    )
+
+
 __all__ = [
+    "DEFAULT_ATTACHMENT_LINE_RECOVERY_FACTOR",
+    "POLL_TURBULENT_COEFFICIENT",
+    "POLL_TURBULENT_EXPONENT",
     "TAUBER_CYLINDER_COEFFICIENT",
     "TAUBER_SPHERE_COEFFICIENT",
     "TAUBER_SWEEP_FACTOR",
+    "AttachmentLineHeatingModel",
+    "AttachmentLineHeatingResult",
     "StagnationHeatingModel",
     "StagnationHeatingResult",
     "SweptCylinderHeatingResult",
     "sphere_stagnation_heat_flux",
     "swept_cylinder_heat_flux",
+    "swept_cylinder_turbulent_heat_flux",
 ]

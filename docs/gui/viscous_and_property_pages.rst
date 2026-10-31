@@ -13,12 +13,26 @@ Aerodynamic heating
 The **空力加熱** (aerodynamic heating) page takes either the standard
 atmosphere at a given altitude or manually entered free-stream conditions,
 together with the geometry, wall temperature, and radius. For a sphere,
-choose Fay--Riddell, Tauber, or a comparison of both. For a swept cylinder,
-the Tauber correlation is used. Sweeps over Mach number, altitude, or the
-cylinder sweep angle are available. Changing the geometry selects a model
-that suits it and clears the previous result. Heat flux is calculated in W/m²
-and can be displayed in kW/m² or MW/m². See :ref:`aerodynamic-heating-model`
-for the assumptions and ranges.
+choose Fay--Riddell, Tauber, or a comparison of both; these are laminar. For
+a swept cylinder, choose **Tauber（層流）** (laminar), **Poll（完全乱流・付着線）**
+(fully turbulent attachment line), or **Tauber 層流 / Poll 乱流 比較**, which
+shows both and their ratio. Sweeps over Mach number, altitude, or the cylinder
+sweep angle are available. Changing the geometry selects a model that suits it
+and clears the previous result. Heat flux is calculated in W/m² and can be
+displayed in kW/m² or MW/m².
+
+A fully turbulent boundary layer is an assumption you make by choosing Poll.
+The page does not test for transition and never switches between laminar and
+turbulent models on its own. The Poll model needs a sweep angle strictly
+between 0 and 90° and :math:`M_\infty\cos\Lambda>1`, so that the flow normal
+to the cylinder is supersonic. Points outside this range have no turbulent
+value; the table shows them as missing and the page reports how many were
+skipped. In a comparison, the laminar Tauber values at those points are still
+shown. Tauber itself accepts sweep angles of 0 and 90°.
+
+See :ref:`aerodynamic-heating-model` for the assumptions and ranges, and
+:ref:`aerodynamic-heating-turbulent-attachment-line` for the Poll equations,
+the Stanton-number definition, and its validity limits.
 
 Protrusion CSV inputs
 ---------------------

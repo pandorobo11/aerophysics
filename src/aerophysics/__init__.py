@@ -35,11 +35,14 @@ from aerophysics.expansion import prandtl_meyer_expansion
 from aerophysics.flight import FlightCondition
 from aerophysics.gas import AIR, PerfectGas
 from aerophysics.heating import (
+    AttachmentLineHeatingModel,
+    AttachmentLineHeatingResult,
     StagnationHeatingModel,
     StagnationHeatingResult,
     SweptCylinderHeatingResult,
     sphere_stagnation_heat_flux,
     swept_cylinder_heat_flux,
+    swept_cylinder_turbulent_heat_flux,
 )
 from aerophysics.protrusion import (
     ProtrusionDragResult,
@@ -86,6 +89,8 @@ __all__ = [
     "AIR_NASA7",
     "AIR_NASA9",
     "AtmosphereState",
+    "AttachmentLineHeatingModel",
+    "AttachmentLineHeatingResult",
     "BeattieBridgemanGas",
     "BilligShockShapeResult",
     "BoundaryLayerRegime",
@@ -130,5 +135,6 @@ __all__ = [
     "sphere_stagnation_heat_flux",
     "standard_atmosphere",
     "swept_cylinder_heat_flux",
+    "swept_cylinder_turbulent_heat_flux",
     "transform_compressible_velocity_profile",
 ]
