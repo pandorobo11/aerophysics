@@ -74,18 +74,29 @@ def render_heating(preferences: UnitPreferences) -> None:
         on_change=_on_geometry_change,
     )
     choices = (
-        ("fay_riddell", "tauber", "comparison") if geometry == "sphere" else ("tauber",)
+        ("fay_riddell", "tauber", "comparison")
+        if geometry == "sphere"
+        else ("tauber", "poll_turbulent", "comparison")
+    )
+    labels = (
+        {
+            "fay_riddell": "Fay–Riddell",
+            "tauber": "Tauber",
+            "comparison": "Fay–Riddell / Tauber 比較",
+        }
+        if geometry == "sphere"
+        else {
+            "tauber": "Tauber（層流）",
+            "poll_turbulent": "Poll（完全乱流・付着線）",
+            "comparison": "Tauber 層流 / Poll 乱流 比較",
+        }
     )
     default_model = models.get("model", choices[0])
     model = st.selectbox(
         "モデル",
         choices,
         index=choices.index(default_model) if default_model in choices else 0,
-        format_func=lambda x: {
-            "fay_riddell": "Fay–Riddell",
-            "tauber": "Tauber",
-            "comparison": "Fay–Riddell / Tauber 比較",
-        }[x],
+        format_func=lambda x: labels[x],
         key="heating_model",
         on_change=clear_widget_state,
         args=(("heating_payload",),),
@@ -213,7 +224,7 @@ def render_heating(preferences: UnitPreferences) -> None:
         preferences.temperature,
     )
     prandtl = _number(inputs, "prandtl_number", 0.72)
-    if model in {"fay_riddell", "comparison"}:
+    if model in {"fay_riddell", "comparison", "poll_turbulent"}:
         prandtl = finite_number(
             "Prandtl 数 Pr", prandtl, key="heating_prandtl", min_value=1e-12
         )
@@ -336,12 +347,22 @@ def render_heating(preferences: UnitPreferences) -> None:
             st.session_state["heating_payload"] = (result, configuration)
     with st.expander("モデルの前提・適用範囲"):
         st.write(
-            "層流、完全気体の空気、超音速一様流を仮定します。"
+            "完全気体の空気、超音速一様流を仮定します。"
+            "Fay–Riddell と Tauber は層流です。"
             "熱流束は壁に入る向きを正とし、高温壁では負になります。"
             "Tauber は 14 km/s、壁温 4000 K、h∞/(V²/2) > 0.1 で警告し、"
             "Fay–Riddell は T₀ > 2000 K で警告します。"
-            "円柱は無限円柱のよどみ線で、アタッチメントライン遷移や"
+            "円柱 Tauber は無限円柱のよどみ線で、"
             "翼前縁の合成（TP-2914 式49）は含みません。"
+            "Poll は利用者が明示選択する完全乱流仮定で、"
+            "遷移判定や自動切替はありません。"
+            "滑面の長い円柱の付着線における局所値を、Poll の基準温度相関"
+            "（NASA CR-181893 再録形）、修正 Newtonian 外縁状態、"
+            "回復係数 0.89 で計算します。"
+            "定義域は 0 < Λ < 90°、M∞ cos Λ > 1 です。"
+            "Bénard らのデータベース範囲（0.35 ≤ M_e ≤ 6.89、"
+            "0.14 ≤ T_w/T_0 ≤ 0.96）外と"
+            "T₀ > 2000 K で警告します。"
         )
     payload = _payload("heating_payload")
     if payload is None:
@@ -353,17 +374,33 @@ def render_heating(preferences: UnitPreferences) -> None:
     selected_geometry = config_models["geometry"]
 
     def metrics(row: Mapping[str, object]) -> None:
-        names = (
-            ["Fay–Riddell q_w", "Tauber q_w", "FR/Tauber 比"]
-            if selected_model == "comparison"
-            else ["熱流束 q_w"]
-        )
-        names += [
-            "よどみ点温度 T₀"
-            if selected_geometry == "sphere"
-            else "回復エンタルピー h_aw",
-            "速度 V∞",
-        ]
+        if selected_geometry == "swept_cylinder" and selected_model == "poll_turbulent":
+            names = [
+                "熱流束 q_w",
+                "付着線外縁 Mach M_e",
+                "付着線 Reynolds R̄*",
+                "速度 V∞",
+            ]
+        elif selected_geometry == "swept_cylinder" and selected_model == "comparison":
+            names = [
+                "Tauber q_w",
+                "乱流 Poll q_w",
+                "乱流/層流 比",
+                "回復エンタルピー h_aw",
+                "速度 V∞",
+            ]
+        else:
+            names = (
+                ["Fay–Riddell q_w", "Tauber q_w", "FR/Tauber 比"]
+                if selected_model == "comparison"
+                else ["熱流束 q_w"]
+            )
+            names += [
+                "よどみ点温度 T₀"
+                if selected_geometry == "sphere"
+                else "回復エンタルピー h_aw",
+                "速度 V∞",
+            ]
         columns = st.columns(len(names))
         for column, name in zip(columns, names, strict=True):
             heading = next(
@@ -377,6 +414,7 @@ def render_heating(preferences: UnitPreferences) -> None:
                 )
 
     figures = {}
+    angle_result = None
     if configuration["mode"] == "sweep":
         saved_sweep = configuration["sweep_si"]
         assert isinstance(saved_sweep, dict)
@@ -385,21 +423,34 @@ def render_heating(preferences: UnitPreferences) -> None:
         )
     elif selected_geometry == "swept_cylinder":
         row = result.rows[0]
-        angle_rows = heating_sweep(
-            field="sweep_angle",
-            start=0.0,
-            stop=np.pi / 2,
-            points=91,
-            upstream_mach=cast(float, row["upstream_mach"]),
-            temperature=cast(float, row["temperature"]),
-            pressure=cast(float, row["pressure"]),
-            geometric_altitude=None,
-            radius=cast(float, row["radius"]),
-            wall_temperature=cast(float, row["wall_temperature"]),
-            geometry="swept_cylinder",
-            model="tauber",
-        ).rows
-        figures = heating_trends(angle_rows, preferences, field="sweep_angle")
+        saved_inputs = configuration["inputs_si"]
+        assert isinstance(saved_inputs, dict)
+        # A comparison can succeed even when no angle admits turbulent crossflow.
+        angles = np.linspace(0.0, np.pi / 2, 91)
+        valid_angles = (
+            (angles > 0)
+            & (angles < np.pi / 2)
+            & (cast(float, row["upstream_mach"]) * np.cos(angles) > 1)
+        )
+        if selected_model != "poll_turbulent" or np.any(valid_angles):
+            angle_result = heating_sweep(
+                field="sweep_angle",
+                start=0.0,
+                stop=np.pi / 2,
+                points=91,
+                upstream_mach=cast(float, row["upstream_mach"]),
+                temperature=cast(float, row["temperature"]),
+                pressure=cast(float, row["pressure"]),
+                geometric_altitude=None,
+                radius=cast(float, row["radius"]),
+                wall_temperature=cast(float, row["wall_temperature"]),
+                geometry="swept_cylinder",
+                model=str(selected_model),
+                prandtl_number=cast(float, saved_inputs["prandtl_number"]),
+            )
+            figures = heating_trends(
+                angle_result.rows, preferences, field="sweep_angle"
+            )
     render_result_bundle(
         calculator="aerodynamic_heating",
         result=result,
@@ -409,3 +460,19 @@ def render_heating(preferences: UnitPreferences) -> None:
         filename_prefix="aerophysics-heating",
         metrics=metrics,
     )
+    n = sum(row["status"] != "ok" for row in result.rows)
+    if n:
+        st.warning(
+            f"{n}点は乱流付着線モデルの定義域（0 < Λ < 90°, M∞ cos Λ > 1）"
+            "外のため乱流の値を欠損値としました。"
+        )
+    if angle_result is not None:
+        for message in angle_result.warnings:
+            if message not in result.warnings:
+                st.warning(f"後退角グラフ（0〜90°）: {message}", icon="⚠️")
+        missing_angles = sum(row["status"] != "ok" for row in angle_result.rows)
+        if missing_angles:
+            st.warning(
+                f"後退角グラフの{missing_angles}点は乱流付着線モデルの定義域"
+                "（0 < Λ < 90°, M∞ cos Λ > 1）外のため乱流の線を欠損としています。"
+            )

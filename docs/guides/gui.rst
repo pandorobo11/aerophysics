@@ -54,6 +54,11 @@ the swept-cylinder sweep angle. Changing the geometry selects a model valid
 for it and clears the previous result. The calculation core uses W/m²; the
 display unit is selectable. See :ref:`aerodynamic-heating-model` for
 assumptions and applicability.
+For swept cylinders, choose Tauber (laminar), Poll (fully turbulent
+attachment line), or their comparison. Turbulence is an explicit user
+assumption, with no transition test or automatic switching; points outside
+``0 < sweep angle < 90 deg`` and ``M cos(sweep angle) > 1`` have missing
+turbulent values, while comparison retains the laminar values.
 
 Flow schematics
 ---------------
