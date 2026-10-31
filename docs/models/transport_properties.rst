@@ -6,6 +6,29 @@ temperature-dependent dynamic-viscosity models. All models accept temperature
 in kelvin and return dynamic viscosity in Pa s. Scalar input returns a Python
 ``float`` and array-like input returns a float64 NumPy array.
 
+Physical background
+-------------------
+
+**Viscosity** measures a fluid's resistance to shearing: it sets the friction
+between neighbouring layers of fluid moving at different speeds, and so
+controls skin friction and the Reynolds number. **Thermal conductivity**
+plays the same role for heat flow. In a gas, both come from molecules moving
+between layers and carrying momentum or energy with them.
+
+Unlike liquids, gases become **more** viscous as they get hotter, because
+the molecules move faster. At low density, gas viscosity depends on
+temperature but hardly on pressure. All models on this page are therefore
+functions of temperature only. They describe dilute (low-density) air and do
+not include high-pressure corrections.
+
+The models differ in how the temperature dependence is fitted:
+
+* **Sutherland** uses a simple molecular-attraction model with one
+  constant. It is the standard choice for air at ordinary temperatures.
+* **Keyes** is an empirical fit to measured air data from about 79 to 1845 K.
+* **Blottner/Wilke** fits each species at high temperature and combines
+  them with a mixing rule. It is intended for temperatures above 1000 K.
+
 Dynamic-viscosity interface
 ---------------------------
 
@@ -147,14 +170,8 @@ from 0.353% below Sutherland at 1000 K to 5.835% above it at 1845 K. This
 shared interval permits a direct three-model comparison without evaluating a
 fitted model outside its stated range.
 
-The checked-in SVG and table fragment are generated from the public model API
-with NumPy and the standard library only. Regenerate them, or verify that they
-are current, with:
-
-.. code-block:: console
-
-   $ python docs/scripts/generate_viscosity_comparison.py
-   $ python docs/scripts/generate_viscosity_comparison.py --check
+The figure and table are generated from the public model API. The
+regeneration procedure is described in the repository's ``DEVELOPMENT.md``.
 
 Thermal conductivity
 --------------------

@@ -101,15 +101,5 @@ byte.  Documentation and release builds regenerate the record from the
 checkout before running Sphinx, so recorded maximum differences correspond to
 the code being documented.
 
-Regenerate the committed report fragment and SVGs with::
-
-   python docs/scripts/generate_standard_atmosphere_validation.py
-
-The deterministic SVGs can be checked without writing files with::
-
-   python docs/scripts/generate_standard_atmosphere_validation.py --check
-
-All verification artifacts can be regenerated or checked together with::
-
-   python docs/scripts/generate_verification.py
-   python docs/scripts/generate_verification.py --check
+The commands that regenerate this record are listed in the repository's
+``DEVELOPMENT.md``.

@@ -18,7 +18,13 @@ prediction also requires an incompressible wall law or wall model, a
 temperature--velocity closure, property models, outer matching data, and a
 method for determining wall shear stress.
 
-The four transformations themselves are primarily inner-layer models.  The
+This page describes four transformations so that they can be compared.
+**Only the Van Driest and Volpiani transformations are implemented** (see
+:ref:`implemented-velocity-transformations`). The Trettel--Larsson and
+Griffin--Fu--Moin sections are background for choosing a method and are not
+available in the API.
+
+The four transformations are primarily inner-layer models.  The
 library additionally provides one explicit engineering construction for a
 smooth zero-pressure-gradient (ZPG) boundary layer: a Spalding inner profile
 plus a Coles wake, coupled to the inverse Van Driest or Volpiani mapping.  It
@@ -28,6 +34,18 @@ thermochemical nonequilibrium.
 
 For a task-oriented path from a flat-plate estimate to a mean profile and
 protrusion-drag calculation, see :doc:`../guides/boundary_layers`.
+
+Why a transformation is needed
+------------------------------
+
+Close to a wall, incompressible turbulent boundary layers share one universal
+velocity profile, the law of the wall, when velocity and distance are scaled
+with wall quantities. In a compressible boundary layer, friction heating makes
+density and viscosity vary strongly across the layer, so the measured profile
+no longer matches that law. A velocity transformation rescales the profile to
+remove the effect of these property variations. If the transformation works,
+the rescaled compressible profile falls on the incompressible law, and
+incompressible knowledge can be reused.
 
 Common notation
 ---------------
@@ -255,13 +273,13 @@ Comparison and selection
      - Validation evidence
      - Advantages
      - Limitations
-   * - Van Driest
+   * - Van Driest (implemented)
      - Adiabatic or nearly adiabatic, approximately ZPG boundary layers
      - :math:`\widetilde U`, :math:`\overline\rho`, :math:`\tau_w`
      - Long experimental and DNS history for adiabatic boundary layers
      - Simplest method; no viscosity profile or property derivatives
      - Density-only scaling; unreliable with strong wall heat transfer
-   * - Trettel--Larsson
+   * - Trettel--Larsson (not implemented)
      - Variable-property channel flows and viscous-sublayer scaling
      - :math:`\widetilde U`, :math:`\overline\rho`,
        :math:`\overline\mu`, :math:`\tau_w`
@@ -269,7 +287,7 @@ Comparison and selection
      - Physics-based semi-local coordinate; correct near-wall asymptote
      - Property derivatives amplify noise; boundary-layer log intercept can
        shift
-   * - Volpiani et al.
+   * - Volpiani et al. (implemented)
      - Heated or cooled ZPG boundary layers when full property profiles exist
      - :math:`\widetilde U`, :math:`\overline\rho`,
        :math:`\overline\mu`, :math:`\tau_w`
@@ -277,7 +295,7 @@ Comparison and selection
      - No profile derivatives; good original high-Mach thermal-wall results
      - DNS-fitted powers; limited original :math:`Re_\tau`; weaker in some
        internal and non-canonical flows
-   * - GFM
+   * - GFM (not implemented)
      - Canonical flows spanning adiabatic and diabatic walls when gradient or
        stress information is available
      - Other methods' inputs plus velocity gradients; exact form also needs
@@ -330,11 +348,15 @@ as :math:`r_\rho` and :math:`r_\mu` must be evaluated at the same local
 position as each velocity or wall-distance increment.  Substituting one edge
 or wall value throughout generally changes the transformation.
 
+.. _implemented-velocity-transformations:
+
 Implemented forward transformations
 -----------------------------------
 
 :func:`~aerophysics.boundary_layer_profile.transform_compressible_velocity_profile`
-implements the Van Driest and Volpiani path integrals.  It requires resolved
+implements the Van Driest and Volpiani path integrals, selected with
+:class:`~aerophysics.boundary_layer_profile.CompressibleVelocityTransformation`.
+It requires resolved
 wall values and uses cumulative trapezoidal integration on the supplied grid.
 For example:
 
@@ -448,6 +470,8 @@ or the generalized Reynolds analogy (GRA),
        + s\,Pr\,(T_r-T_w)q(1-q)
        + (T_e-T_w)q^2.
 
+Select the relation with
+:class:`~aerophysics.boundary_layer_profile.TemperatureVelocityRelation`.
 The defaults are GRA and :math:`s=1.14`.  The turbulent recovery temperature
 is
 

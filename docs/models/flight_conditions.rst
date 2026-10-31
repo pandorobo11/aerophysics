@@ -8,6 +8,25 @@ is needed. Atmospheric properties follow :ref:`U.S. Standard Atmosphere 1976
 <ref-us-standard-atmosphere-1976>`, and the calorically perfect total-state
 relations follow :ref:`NACA Report 1135 <ref-naca-report-1135>`.
 
+Physical background
+-------------------
+
+Three dimensionless or derived quantities summarize a flight condition:
+
+* **Mach number** :math:`M=V/a` compares flight speed with the local speed of
+  sound. It decides whether compressibility, shocks, and aerodynamic heating
+  matter.
+* **Dynamic pressure** :math:`q=\tfrac12\rho V^2` is the kinetic energy of the
+  flow per unit volume. Aerodynamic forces scale with it, which is why force
+  coefficients are defined as force divided by :math:`qS`.
+* **Reynolds number** :math:`Re=\rho VL/\mu` compares inertial forces with
+  viscous forces over a length :math:`L`. It decides whether a boundary layer
+  is likely to be laminar or turbulent, and how thick it is.
+
+The **total (stagnation) state** is the state the air would reach if brought
+to rest without losses, for example at the nose of a pitot probe in subsonic
+flow. See :doc:`isentropic_flow` for its derivation.
+
 Relations
 ---------
 
@@ -41,7 +60,7 @@ Define :math:`F(M)=1+(\gamma-1)M^2/2`. The isentropic total conditions are
    \rho_0=\rho F(M)^{1/(\gamma-1)}.
 
 The atmosphere supplies :math:`T`, :math:`p`, :math:`\rho`, :math:`a`, and
-:math:`\mu`; see :doc:`gas_and_atmosphere`. The total-state convention and
+:math:`\mu`; see :doc:`standard_atmosphere`. The total-state convention and
 factor are described in :doc:`isentropic_flow`.
 
 .. list-table:: Flight-condition symbols
@@ -84,9 +103,10 @@ factor are described in :doc:`isentropic_flow`.
 Inputs and applicability
 ------------------------
 
-Use :meth:`~aerophysics.flight.FlightCondition.from_mach` or
-:meth:`~aerophysics.flight.FlightCondition.from_velocity`; do not supply two
-independent speed definitions. The altitude must lie within the standard
+Use :meth:`~aerophysics.flight.FlightCondition.from_mach` when Mach number is
+known, or :meth:`~aerophysics.flight.FlightCondition.from_velocity` when speed
+is known; the other quantity is then calculated. The altitude must lie within
+the standard
 atmosphere range. ``reynolds_number`` is ``None`` unless a positive
 ``characteristic_length`` is supplied, while ``reynolds_number_per_length``
 is always available.

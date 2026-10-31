@@ -1,21 +1,7 @@
-References
-==========
+Appendix: references
+====================
 
-.. _ref-noyes-1950:
-
-Noyes, R. N. *Prandtl--Meyer Flow for a Diatomic Gas of Variable Specific Heat*.
-NACA Technical Note 2125, 1950.
-
-https://ntrs.nasa.gov/citations/19930082823
-
-.. _ref-tatum-1996:
-
-Tatum, K. E. *Computation of Thermally Perfect Properties of Oblique Shock
-Waves*. NASA Contractor Report 4749, August 1996. Derives the frozen ideal-gas
-mass, momentum, energy, deflection, and entropy relations for variable heat
-capacity, including weak and strong shocks.
-
-https://ntrs.nasa.gov/citations/19960050025
+Sources are grouped by subject, in the same order as the model pages.
 
 Atmosphere
 ----------
@@ -26,6 +12,83 @@ NOAA, NASA, and USAF. *U.S. Standard Atmosphere, 1976*. NOAA-S/T 76-1562,
 NASA-TM-X-74335, 1976.
 
 https://ntrs.nasa.gov/citations/19770009539
+
+Gas models
+----------
+
+.. _ref-mcbride-gordon-reno-1993:
+
+McBride, B. J., Gordon, S., and Reno, M. A. *Coefficients for Calculating
+Thermodynamic and Transport Properties of Individual Species*. NASA TM-4513,
+1993. This is the source of the NASA seven-coefficient data.
+
+https://ntrs.nasa.gov/citations/19940013151
+
+.. _ref-mcbride-zehe-gordon-2002:
+
+McBride, B. J., Zehe, M. J., and Gordon, S. *NASA Glenn Coefficients for
+Calculating Thermodynamic Properties of Individual Species*.
+NASA/TP-2002-211556, 2002. This documents the NASA nine-coefficient form and
+database.
+
+https://ntrs.nasa.gov/citations/20020085330
+
+.. _ref-nasa-cea-data:
+
+NASA Glenn Research Center. *Chemical Equilibrium with Applications (CEA)*,
+``data/thermo.inp``, commit
+``2c33ae8ab74635beb85b580c37caccd61778554d``.
+
+https://github.com/nasa/cea
+
+.. _ref-cantera-nasa-gas-data:
+
+Cantera Developers. ``data/nasa_gas.yaml``, commit
+``39cfc1436347cfe515cfe499c131ea1220743f16``. The file distributes the
+NASA TM-4513 species coefficients used by ``AIR_NASA7``.
+
+https://github.com/Cantera/cantera
+
+.. _ref-kennard-1938:
+
+Kennard, E. H. *Kinetic Theory of Gases: With an Introduction to Statistical
+Mechanics*. McGraw-Hill, 1938. This is the theoretical source used for the
+harmonic-vibrational heat-capacity model.
+
+.. _ref-beattie-bridgeman-1928:
+
+Beattie, J. A. and Bridgeman, O. C. *A New Equation of State for Fluids*.
+Proceedings of the American Academy of Arts and Sciences, 63, 229--306, 1928.
+
+https://doi.org/10.2307/20026205
+
+.. _ref-randall-1957-air:
+
+Randall, R. E. *Thermodynamic Properties of Air: Tables and Graphs Derived
+from the Beattie--Bridgeman Equation of State Assuming Variable Specific
+Heats*. AEDC-TR-57-8, AD 135331, 1957.
+
+.. _ref-randall-1957-gases:
+
+Randall, R. E. *Thermodynamic Properties of Gases: Equations Derived from the
+Beattie--Bridgeman Equation of State Assuming Variable Specific Heats*.
+AEDC-TR-57-10, AD 135332, 1957.
+
+.. _ref-watari-2007-report:
+
+Watari, M. *Air Models Used in Flow Calculations for the JAXA Hypersonic Wind
+Tunnel*. JAXA-RR-06-011, 2007. This is an implementation and wind-tunnel
+application source, not the origin of either physical model.
+
+https://jaxa.repo.nii.ac.jp/records/2224
+
+.. _ref-watari-2007-proceedings:
+
+Watari, M. *Air Models Used in the JAXA Hypersonic Wind Tunnels*. Proceedings
+of the Wind Tunnel Technology Association 76th Meeting, JAXA-SP-06-020,
+23--26, 2007.
+
+https://jaxa.repo.nii.ac.jp/records/5839
 
 Transport properties
 --------------------
@@ -87,42 +150,6 @@ https://doi.org/10.1023/B:IJOT.0000022327.04529.F3
 
 https://trc.nist.gov/refprop/FAQ/NAO.PDF
 
-Thermochemistry
----------------
-
-.. _ref-mcbride-gordon-reno-1993:
-
-McBride, B. J., Gordon, S., and Reno, M. A. *Coefficients for Calculating
-Thermodynamic and Transport Properties of Individual Species*. NASA TM-4513,
-1993. This is the source of the NASA seven-coefficient data.
-
-https://ntrs.nasa.gov/citations/19940013151
-
-.. _ref-mcbride-zehe-gordon-2002:
-
-McBride, B. J., Zehe, M. J., and Gordon, S. *NASA Glenn Coefficients for
-Calculating Thermodynamic Properties of Individual Species*.
-NASA/TP-2002-211556, 2002. This documents the NASA nine-coefficient form and
-database.
-
-https://ntrs.nasa.gov/citations/20020085330
-
-.. _ref-nasa-cea-data:
-
-NASA Glenn Research Center. *Chemical Equilibrium with Applications (CEA)*,
-``data/thermo.inp``, commit
-``2c33ae8ab74635beb85b580c37caccd61778554d``.
-
-https://github.com/nasa/cea
-
-.. _ref-cantera-nasa-gas-data:
-
-Cantera Developers. ``data/nasa_gas.yaml``, commit
-``39cfc1436347cfe515cfe499c131ea1220743f16``. The file distributes the
-NASA TM-4513 species coefficients used by ``AIR_NASA7``.
-
-https://github.com/Cantera/cantera
-
 Compressible flow
 -----------------
 
@@ -133,47 +160,6 @@ NACA Report 1135, 1953.
 
 https://www.nasa.gov/wp-content/uploads/2023/03/equations-tables-charts-compressibleflow-report-1135.pdf
 
-.. _ref-kennard-1938:
-
-Kennard, E. H. *Kinetic Theory of Gases: With an Introduction to Statistical
-Mechanics*. McGraw-Hill, 1938. This is the theoretical source used for the
-harmonic-vibrational heat-capacity model.
-
-.. _ref-beattie-bridgeman-1928:
-
-Beattie, J. A. and Bridgeman, O. C. *A New Equation of State for Fluids*.
-Proceedings of the American Academy of Arts and Sciences, 63, 229--306, 1928.
-
-https://doi.org/10.2307/20026205
-
-.. _ref-randall-1957-air:
-
-Randall, R. E. *Thermodynamic Properties of Air: Tables and Graphs Derived
-from the Beattie--Bridgeman Equation of State Assuming Variable Specific
-Heats*. AEDC-TR-57-8, AD 135331, 1957.
-
-.. _ref-randall-1957-gases:
-
-Randall, R. E. *Thermodynamic Properties of Gases: Equations Derived from the
-Beattie--Bridgeman Equation of State Assuming Variable Specific Heats*.
-AEDC-TR-57-10, AD 135332, 1957.
-
-.. _ref-watari-2007-report:
-
-Watari, M. *Air Models Used in Flow Calculations for the JAXA Hypersonic Wind
-Tunnel*. JAXA-RR-06-011, 2007. This is an implementation and wind-tunnel
-application source, not the origin of either physical model.
-
-https://jaxa.repo.nii.ac.jp/records/2224
-
-.. _ref-watari-2007-proceedings:
-
-Watari, M. *Air Models Used in the JAXA Hypersonic Wind Tunnels*. Proceedings
-of the Wind Tunnel Technology Association 76th Meeting, JAXA-SP-06-020,
-23--26, 2007.
-
-https://jaxa.repo.nii.ac.jp/records/5839
-
 .. _ref-witte-tatum-1994:
 
 Witte, D. W. and Tatum, K. E. *Computer Code for Determination of Thermally
@@ -182,6 +168,15 @@ thermally-perfect-flow verification source, not the harmonic-oscillator
 model's origin.
 
 https://ntrs.nasa.gov/citations/19950005582
+
+.. _ref-tatum-1996:
+
+Tatum, K. E. *Computation of Thermally Perfect Properties of Oblique Shock
+Waves*. NASA Contractor Report 4749, August 1996. Derives the frozen ideal-gas
+mass, momentum, energy, deflection, and entropy relations for variable heat
+capacity, including weak and strong shocks.
+
+https://ntrs.nasa.gov/citations/19960050025
 
 .. _ref-sims-1964:
 
@@ -223,6 +218,13 @@ Table I, printed page 10 (PDF page 12): :math:`M_\infty=8.949`,
 :math:`\rho_\infty/\rho_2=0.1253`, and :math:`\Delta/R_b=0.0994`.
 
 https://ntrs.nasa.gov/citations/19650012766
+
+.. _ref-noyes-1950:
+
+Noyes, R. N. *Prandtl--Meyer Flow for a Diatomic Gas of Variable Specific Heat*.
+NACA Technical Note 2125, 1950.
+
+https://ntrs.nasa.gov/citations/19930082823
 
 Boundary layers
 ---------------
@@ -284,6 +286,38 @@ and Space Sciences (EUCASS), 2013. Equation (7) gives the local implicit
 skin-friction relation used here.
 
 https://elib.dlr.de/89126/
+
+Aerodynamic heating
+-------------------
+
+.. _ref-tauber-1989:
+
+Tauber, M. E., *A Review of High-Speed, Convective, Heat-Transfer Computation
+Methods*, NASA TP-2914, 1989.
+
+https://ntrs.nasa.gov/citations/19890017745
+
+.. _ref-fay-riddell-1958:
+
+Fay, J. A. and Riddell, F. R., *Theory of Stagnation Point Heat Transfer in
+Dissociated Air*, Journal of the Aeronautical Sciences, 25(2), 73--85, 1958.
+
+.. _ref-tfaws-2012-aerothermodynamics:
+
+NASA Thermal and Fluids Analysis Workshop (TFAWS) 2012. *Aerothermodynamics
+Course*, Lecture 1, "Stagnation Point Heating", slide 16 (Fay--Riddell
+method).
+
+https://tfaws.nasa.gov/TFAWS12/Proceedings/Aerothermodynamics%20Course.pdf
+
+.. _ref-west-brandis-ntrs:
+
+West, T. K., IV and Brandis, A. M. *Updated Stagnation Point Aeroheating
+Correlations for Mars Entry*. NASA NTRS document 20200002354. Equation (1)
+reproduces the Fay and Riddell (1958) stagnation-point correlation (the outer
+square root on the velocity gradient is omitted in print).
+
+https://ntrs.nasa.gov/citations/20200002354
 
 Compressible turbulent mean-velocity transformations
 -----------------------------------------------------
@@ -405,35 +439,3 @@ National Institute of Standards and Technology. *Guide for the Use of the
 International System of Units (SI)*, NIST Special Publication 811, Appendix B.
 
 https://www.nist.gov/pml/special-publication-811
-
-Aerodynamic heating
--------------------
-
-.. _ref-tauber-1989:
-
-Tauber, M. E., *A Review of High-Speed, Convective, Heat-Transfer Computation
-Methods*, NASA TP-2914, 1989.
-
-https://ntrs.nasa.gov/citations/19890017745
-
-.. _ref-fay-riddell-1958:
-
-Fay, J. A. and Riddell, F. R., *Theory of Stagnation Point Heat Transfer in
-Dissociated Air*, Journal of the Aeronautical Sciences, 25(2), 73--85, 1958.
-
-.. _ref-tfaws-2012-aerothermodynamics:
-
-NASA Thermal and Fluids Analysis Workshop (TFAWS) 2012. *Aerothermodynamics
-Course*, Lecture 1, "Stagnation Point Heating", slide 16 (Fay--Riddell
-method).
-
-https://tfaws.nasa.gov/TFAWS12/Proceedings/Aerothermodynamics%20Course.pdf
-
-.. _ref-west-brandis-ntrs:
-
-West, T. K., IV and Brandis, A. M. *Updated Stagnation Point Aeroheating
-Correlations for Mars Entry*. NASA NTRS document 20200002354. Equation (1)
-reproduces the Fay and Riddell (1958) stagnation-point correlation (the outer
-square root on the velocity gradient is omitted in print).
-
-https://ntrs.nasa.gov/citations/20200002354

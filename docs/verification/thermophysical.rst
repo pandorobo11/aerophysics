@@ -81,18 +81,5 @@ correctness.  The real-gas checks cover the documented 400--2000 K and
 1--10 MPa range; they do not claim equilibrium chemistry or comprehensive
 experimental validation.
 
-Regenerate with::
-
-   python docs/scripts/generate_thermophysical_validation.py
-
-Rebuild the transport source-equation fixture with::
-
-   python docs/scripts/build_transport_reference.py
-
-Regenerate the NIST evaluated-reference fixture with::
-
-   python docs/scripts/generate_nist_transport_reference.py
-
-Refresh external snapshots only in isolated environments::
-
-   uv run --isolated --with cantera==3.2.0 python docs/scripts/capture_cantera_reference.py
+The commands that regenerate this record are listed in the repository's
+``DEVELOPMENT.md``.

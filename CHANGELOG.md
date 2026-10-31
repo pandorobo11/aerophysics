@@ -28,6 +28,24 @@ uses Semantic Versioning, including during the pre-1.0 period.
   for Fay--Riddell when T_0 > 2000 K, and for Tauber when V > 14 km/s,
   T_w > 4000 K, or h_inf/(V^2/2) > 0.1 (approximately M < 7.07 for γ = 1.4).
 
+### Changed
+
+- Revise the user manual for readers opening it from the GUI help page. Each
+  model page now starts with a plain-language physical background, the
+  conventions page adds common notation and a table of which gas models each
+  calculation accepts, and the GUI guide uses the Japanese page names with a
+  page-to-documentation map. Solver tolerances, settings-file fields, and
+  other implementation details move to the new `devdocs/` directory.
+- Reorganize the manual: the GUI manual is now its own section; shock waves
+  are split into an overview and normal/oblique, conical, and detached pages;
+  all gas models (perfect, NASA polynomial, harmonic oscillator, and
+  Beattie--Bridgeman) are described on one gas-models page, with the standard
+  atmosphere on its own page; verification and references become appendices,
+  and regeneration commands move to `DEVELOPMENT.md`.
+- Add a theory-page button to each GUI calculator page, and update the GUI
+  documentation selector to the new page structure, including the
+  aerodynamic heating, sequential flow, and conventions pages.
+
 ### Fixed
 
 - Convert Eckert reference-temperature skin friction from the reference to the
