@@ -7,6 +7,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add GUI selection of Poll fully turbulent attachment-line heating and
+  swept-cylinder laminar/turbulent comparison, with diagnostic columns and
+  missing turbulent values outside the model domain. Existing saved
+  configurations remain compatible.
+
 - Add `swept_cylinder_turbulent_heat_flux` / `AttachmentLineHeatingModel.POLL`
   for explicitly selected fully turbulent smooth-wall attachment-line heating.
   Use the Poll reference-temperature equations reproduced in NASA CR-181893

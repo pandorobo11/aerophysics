@@ -285,7 +285,7 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
         },
         models={
             "geometry": _choice("sphere", "swept_cylinder"),
-            "model": _choice("fay_riddell", "tauber", "comparison"),
+            "model": _choice("fay_riddell", "tauber", "poll_turbulent", "comparison"),
             "freestream": _choice("atmosphere", "manual"),
         },
         sweep_variables=frozenset(
@@ -523,11 +523,18 @@ def validate_calculator_payload(
             raise _SchemaError("sweep mode requires sweep_si")
         normalized_sweep = _validate_sweep(sweep_si, schema)
     if calculator == "aerodynamic_heating":
+        if normalized_models["geometry"] == "swept_cylinder" and normalized_models[
+            "model"
+        ] not in {"tauber", "poll_turbulent", "comparison"}:
+            raise _SchemaError(
+                "swept cylinder requires the Tauber, Poll turbulent, "
+                "or comparison model"
+            )
         if (
-            normalized_models["geometry"] == "swept_cylinder"
-            and normalized_models["model"] != "tauber"
+            normalized_models["geometry"] == "sphere"
+            and normalized_models["model"] == "poll_turbulent"
         ):
-            raise _SchemaError("swept cylinder requires the Tauber model")
+            raise _SchemaError("Poll turbulent model requires a swept cylinder")
         if (
             normalized_sweep
             and normalized_sweep["field"] == "geometric_altitude"

@@ -8,11 +8,13 @@ import numpy as np
 
 from aerophysics.atmosphere import standard_atmosphere
 from aerophysics.exceptions import ApplicabilityWarning
+from aerophysics.gas import AIR
 from aerophysics.gui.adapters import CalculationResult, Row, sweep_values
 from aerophysics.heating import (
     StagnationHeatingModel,
     sphere_stagnation_heat_flux,
     swept_cylinder_heat_flux,
+    swept_cylinder_turbulent_heat_flux,
 )
 
 
@@ -30,12 +32,26 @@ def heating_condition(
     geometric_altitude: float | np.ndarray | None = None,
 ) -> CalculationResult:
     """Calculate one or broadcast many heating conditions."""
-    if (
-        geometry not in {"sphere", "swept_cylinder"}
-        or model not in {"fay_riddell", "tauber", "comparison"}
-        or (geometry == "swept_cylinder" and model != "tauber")
-    ):
+    choices = {
+        "sphere": {"fay_riddell", "tauber", "comparison"},
+        "swept_cylinder": {"tauber", "poll_turbulent", "comparison"},
+    }
+    if model not in choices.get(geometry, set()):
         raise ValueError("invalid heating geometry and model combination")
+    mach, temp, press, sweep, _ = np.broadcast_arrays(
+        np.asarray(upstream_mach),
+        np.asarray(temperature),
+        np.asarray(pressure),
+        np.asarray(sweep_angle),
+        np.asarray(geometric_altitude if geometric_altitude is not None else 0.0),
+    )
+    shape = mach.shape
+    turbulent = geometry == "swept_cylinder" and model in {
+        "poll_turbulent",
+        "comparison",
+    }
+    valid = (sweep > 0) & (sweep < np.pi / 2) & (mach * np.cos(sweep) > 1)
+    poll_values: dict[str, np.ndarray] = {}
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always", ApplicabilityWarning)
         fr = tauber = cylinder = None
@@ -59,7 +75,7 @@ def heating_condition(
                     wall_temperature=wall_temperature,
                     model=StagnationHeatingModel.TAUBER,
                 )
-        else:
+        elif model in {"tauber", "comparison"}:
             cylinder = swept_cylinder_heat_flux(
                 upstream_mach,
                 temperature,
@@ -68,25 +84,64 @@ def heating_condition(
                 sweep_angle,
                 wall_temperature=wall_temperature,
             )
+        if turbulent:
+            if not np.any(valid) and model == "poll_turbulent":
+                # Preserve the core's error for an entirely invalid request.
+                swept_cylinder_turbulent_heat_flux(
+                    mach,
+                    temp,
+                    press,
+                    radius,
+                    sweep,
+                    wall_temperature=wall_temperature,
+                    prandtl_number=prandtl_number,
+                )
+            if np.any(valid):
+                poll = swept_cylinder_turbulent_heat_flux(
+                    mach[valid],
+                    temp[valid],
+                    press[valid],
+                    radius,
+                    sweep[valid],
+                    wall_temperature=wall_temperature,
+                    prandtl_number=prandtl_number,
+                )
+                for name in (
+                    "heat_flux",
+                    "edge_temperature",
+                    "edge_pressure",
+                    "edge_mach",
+                    "recovery_temperature",
+                    "reference_temperature",
+                    "reynolds_number",
+                    "stanton_number",
+                    "velocity_gradient",
+                ):
+                    values = np.full(shape, np.nan)
+                    values[valid] = getattr(poll, name)
+                    poll_values[name] = values
     result = fr or tauber or cylinder
-    assert result is not None
-    arrays = np.broadcast_arrays(
-        np.asarray(upstream_mach),
-        np.asarray(temperature),
-        np.asarray(pressure),
-        np.asarray(result.heat_flux),
-        np.asarray(sweep_angle),
-        np.asarray(geometric_altitude if geometric_altitude is not None else 0.0),
+    density = (
+        result.freestream_density
+        if result
+        else press / (AIR.specific_gas_constant * temp)
     )
-    shape = arrays[0].shape
+    velocity = (
+        result.freestream_velocity
+        if result
+        else mach * np.sqrt(AIR.heat_capacity_ratio * AIR.specific_gas_constant * temp)
+    )
 
     def at(value: object, index: int) -> float | None:
         if value is None:
             return None
         return float(np.broadcast_to(np.asarray(value), shape).reshape(-1)[index])
 
+    def poll_at(name: str, index: int) -> float | None:
+        return at(poll_values[name], index) if valid.reshape(-1)[index] else None
+
     rows: list[Row] = []
-    for i in range(arrays[0].size):
+    for i in range(mach.size):
         f = at(fr.heat_flux, i) if fr else None
         t = (
             at(tauber.heat_flux, i)
@@ -96,40 +151,73 @@ def heating_condition(
             else None
         )
         sphere = fr or tauber
-        rows.append(
-            {
-                "geometric_altitude": at(geometric_altitude, i),
-                "upstream_mach": at(upstream_mach, i),
-                "temperature": at(temperature, i),
-                "pressure": at(pressure, i),
-                "freestream_density": at(result.freestream_density, i),
-                "freestream_velocity": at(result.freestream_velocity, i),
-                "radius": radius,
-                "sweep_angle": at(sweep_angle, i) if cylinder else None,
-                "wall_temperature": wall_temperature,
-                "geometry": geometry,
-                "model": model,
-                "heat_flux": None if model == "comparison" else f if fr else t,
-                "fay_riddell_heat_flux": f,
-                "tauber_heat_flux": t,
-                "heat_flux_ratio": f / t
-                if f is not None and t not in (None, 0.0) and model == "comparison"
+
+        row: Row = {
+            "geometric_altitude": at(geometric_altitude, i),
+            "upstream_mach": at(upstream_mach, i),
+            "temperature": at(temperature, i),
+            "pressure": at(pressure, i),
+            "freestream_density": at(density, i),
+            "freestream_velocity": at(velocity, i),
+            "radius": radius,
+            "sweep_angle": at(sweep_angle, i) if geometry == "swept_cylinder" else None,
+            "wall_temperature": wall_temperature,
+            "geometry": geometry,
+            "model": model,
+            "heat_flux": None
+            if model == "comparison"
+            else poll_at("heat_flux", i)
+            if turbulent
+            else f
+            if fr
+            else t,
+            "fay_riddell_heat_flux": f,
+            "tauber_heat_flux": t,
+            "heat_flux_ratio": f / t
+            if f is not None and t not in (None, 0.0) and model == "comparison"
+            else None,
+            "stagnation_temperature": at(sphere.stagnation_temperature, i)
+            if sphere
+            else None,
+            "stagnation_pressure": at(sphere.stagnation_pressure, i)
+            if sphere
+            else None,
+            "total_enthalpy": at(sphere.stagnation_enthalpy, i) if sphere else None,
+            "recovery_enthalpy": at(cylinder.recovery_enthalpy, i)
+            if cylinder
+            else None,
+            "velocity_gradient": at(fr.velocity_gradient, i) if fr else None,
+            "status": "ok",
+            "message": "",
+        }
+        if turbulent:
+            p = poll_at("heat_flux", i)
+            row.update(
+                poll_turbulent_heat_flux=p,
+                turbulent_laminar_ratio=p / t
+                if model == "comparison" and p is not None and t not in (None, 0.0)
                 else None,
-                "stagnation_temperature": at(sphere.stagnation_temperature, i)
-                if sphere
-                else None,
-                "stagnation_pressure": at(sphere.stagnation_pressure, i)
-                if sphere
-                else None,
-                "total_enthalpy": at(sphere.stagnation_enthalpy, i) if sphere else None,
-                "recovery_enthalpy": at(cylinder.recovery_enthalpy, i)
-                if cylinder
-                else None,
-                "velocity_gradient": at(fr.velocity_gradient, i) if fr else None,
-                "status": "ok",
-                "message": "",
-            }
-        )
+                attachment_line_reynolds_number=poll_at("reynolds_number", i),
+                **{
+                    name: poll_at(name, i)
+                    for name in (
+                        "edge_temperature",
+                        "edge_pressure",
+                        "edge_mach",
+                        "recovery_temperature",
+                        "reference_temperature",
+                        "stanton_number",
+                        "velocity_gradient",
+                    )
+                },
+            )
+            if not valid.reshape(-1)[i]:
+                row["status"] = "out_of_domain"
+                row["message"] = (
+                    "turbulent attachment line requires 0 < sweep angle < 90 deg "
+                    "and M cos(sweep) > 1"
+                )
+        rows.append(row)
     messages = tuple(
         dict.fromkeys(
             str(w.message)

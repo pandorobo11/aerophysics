@@ -1625,6 +1625,7 @@ def heating_trends(
     for key, label in (
         ("fay_riddell_heat_flux", "Fay–Riddell"),
         ("tauber_heat_flux", "Tauber"),
+        ("poll_turbulent_heat_flux", "Poll 乱流"),
     ):
         values = _numeric(rows, key)
         if np.any(np.isfinite(values)):
