@@ -106,9 +106,11 @@ freestream density and velocity:
    q_{w,c}=1.29\times10^{-4}\sqrt{\rho_\infty/r}\,
    (1-0.18\sin^2\Lambda)V_\infty^3(1-h_w/h_{aw})\cos\Lambda.
 
-The coefficients carry the units needed for SI inputs. The ``gas`` argument
-only converts the freestream Mach number, temperature, and pressure into
-velocity and density; ``prandtl_number`` and ``viscosity_model`` are not used
+The coefficients carry the units needed for SI inputs and are calibrated for
+air. The ``gas`` argument supplies perfect-gas properties for velocity,
+density, and enthalpy conversions, including the wall-enthalpy corrections.
+It does not change the fitted coefficients or establish validity for other
+gases. The ``prandtl_number`` and ``viscosity_model`` arguments are not used
 by the Tauber correlations.
 
 .. list-table:: Symbols and API mapping
@@ -119,6 +121,7 @@ by the Tauber correlations.
    * - :math:`M, T_\infty, p_\infty`
      - ``mach``, ``temperature`` [K], ``pressure`` [Pa]
    * - :math:`r_n, r, \Lambda`
+     - ``nose_radius``, ``radius``, ``sweep_angle``
      - ``nose_radius``, ``radius`` [m], ``sweep_angle`` [rad]
    * - :math:`T_w, Pr`
      - ``wall_temperature`` [K], ``prandtl_number`` (wall value, assumed constant)
