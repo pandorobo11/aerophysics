@@ -437,3 +437,26 @@ reproduces the Fay and Riddell (1958) stagnation-point correlation (the outer
 square root on the velocity gradient is omitted in print).
 
 https://ntrs.nasa.gov/citations/20200002354
+
+.. _ref-nasa-cr-181893:
+
+Holden, M. S., Moselle, J. R., and Lee, J., *Studies of Aerothermal Loads
+Generated in Regions of Shock/Shock Interaction in Hypersonic Flow*, NASA
+CR-181893, Calspan-UB Research Center, October 1991. Equations (5.7)--(5.12).
+
+https://ntrs.nasa.gov/citations/19920002101
+
+.. _ref-poll-1981:
+
+Poll, D. I. A., *Skin Friction and Heat Transfer at an Infinite Swept Attachment
+Line*, Aeronautical Quarterly, 32(4), 299--318, 1981.
+
+https://doi.org/10.1017/S0001925900009215
+
+.. _ref-benard-2006:
+
+Bénard, E., Cooper, R. K., and Sidorenko, A., *Transitional and turbulent heat
+transfer of swept cylinder attachment line in hypersonic flow*, International
+Journal of Heat and Mass Transfer, 49, 836--843, 2006.
+
+https://doi.org/10.1016/j.ijheatmasstransfer.2005.10.006

@@ -7,6 +7,14 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add `swept_cylinder_turbulent_heat_flux` / `AttachmentLineHeatingModel.POLL`
+  for explicitly selected fully turbulent smooth-wall attachment-line heating.
+  Use the Poll reference-temperature equations reproduced in NASA CR-181893
+  with modified-Newtonian edge properties; require M cos Λ > 1 and
+  0 < Λ < π/2. Warn above T_0 = 2000 K and outside Bénard et al.'s turbulent
+  database ranges for M_e and T_w/T_0. Existing laminar APIs remain unchanged;
+  the separate Bénard correlation is not implemented.
+
 - Add an aerodynamic heating GUI page for sphere stagnation-point heating
   using Fay--Riddell, Tauber equation 40, or a comparison of both, and swept
   cylinder stagnation-line heating using Tauber equation 41. Set freestream

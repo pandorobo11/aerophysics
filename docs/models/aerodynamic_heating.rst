@@ -3,7 +3,7 @@
 Aerodynamic heating
 ===================
 
-These laminar engineering estimates use SI units. Heat flux :math:`q_w` is
+These engineering estimates use SI units. Heat flux :math:`q_w` is
 in W/m² and is positive into the wall; a sufficiently hot wall produces a
 negative value. All enthalpies are in J/kg, and angles are in radians.
 
@@ -110,6 +110,173 @@ as :math:`\Lambda\to\pi/2`, the cosine drives heat flux to zero. Only the
 laminar stagnation line is represented: attachment-line transition and
 flat-plate-like heating on highly swept real wing leading edges (TP-2914
 equation 49) are not included. All models require a supersonic freestream.
+
+Turbulent swept-cylinder attachment line
+----------------------------------------
+
+:func:`aerophysics.heating.swept_cylinder_turbulent_heat_flux` with
+:class:`aerophysics.heating.AttachmentLineHeatingModel` ``POLL`` estimates
+local convective heat flux at the front attachment line of a long circular
+swept cylinder, with negligible end effects. The user explicitly selects a
+smooth-wall, **fully turbulent** assumption. There is no Reynolds-number
+transition test, automatic switching, or intermittency correction.
+Circumferential distributions, area averages, finite-length ends, shock
+interactions, separation, dissociation, recombination, catalysis, radiation,
+ablation, and turbulent sphere heating are outside this model's scope.
+
+.. list-table:: Attachment-line symbols and API mapping
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Symbol
+     - Meaning, API name and SI unit
+   * - :math:`W_e=V_A=V_e`
+     - Axial boundary-layer edge velocity along the attachment line;
+       ``edge_velocity`` [m/s]. The normal component alone is stopped.
+   * - :math:`A=(du_e/ds)_{AL}`
+     - Circumferential edge-velocity gradient, not a wall-normal gradient;
+       ``velocity_gradient`` [1/s].
+   * - :math:`R_{cyl}, D=2R_{cyl}`
+     - Cylinder radius ``radius`` [m]; literature diameter :math:`D` [m].
+   * - :math:`\Lambda`
+     - ``sweep_angle`` [rad], zero when the cylinder axis is perpendicular
+       to the freestream; require :math:`0<\Lambda<\pi/2`.
+   * - :math:`T_e,p_e,\rho_e,M_e`
+     - ``edge_temperature`` [K], ``edge_pressure`` [Pa], ``edge_density``
+       [kg/m³], ``edge_mach``.
+   * - :math:`T_{aw},T^*,T_w`
+     - ``recovery_temperature``, ``reference_temperature``,
+       ``wall_temperature`` [K].
+   * - :math:`\overline R^*=W_e/\sqrt{\nu^*A}`
+     - ``reynolds_number``; distinct from diameter-based :math:`Re_D`
+       and flat-plate :math:`Re_x`.
+   * - :math:`St^*=q_w/[\rho^*W_ec_p(T_{aw}-T_w)]`
+     - ``stanton_number``; :math:`\rho^*=p_e/(RT^*)` uses the reference
+       temperature and attachment-line edge pressure.
+   * - :math:`q_w`
+     - ``heat_flux`` [W/m²], positive from fluid into wall.
+
+The external edge state uses a modified-Newtonian engineering approximation:
+a normal shock and isentropic deceleration stop only the crossflow component,
+while conserving the axial component. With :math:`\Pi_0(M_\perp)` the
+normal-shock total-pressure ratio,
+
+.. math::
+
+   V_\infty=M\sqrt{\gamma RT_\infty},\qquad
+   W_e=V_\infty\sin\Lambda,\qquad M_\perp=M\cos\Lambda,
+
+   F=1+\frac{\gamma-1}{2}M_\perp^2,\qquad T_e=T_\infty F,
+
+   p_e=p_\infty F^{\gamma/(\gamma-1)}\Pi_0(M_\perp),\qquad
+   \rho_e=\frac{p_e}{RT_e},\qquad
+   A=\frac{1}{R_{cyl}}\sqrt{\frac{2(p_e-p_\infty)}{\rho_e}}.
+
+This requires :math:`M\cos\Lambda>1`; satisfying that inequality alone does
+not ensure an accurate external-flow approximation. The full freestream
+Mach number is not used in the normal shock, and :math:`W_e` is not stopped.
+The edge state conserves :math:`c_pT_e+W_e^2/2=c_pT_\infty+V_\infty^2/2`.
+``gas`` supplies perfect-gas properties for these conversions, but the
+correlation is based on air data and has no validation for arbitrary gases.
+
+The implemented **Poll reference-temperature correlation as reproduced in
+NASA CR-181893** uses equations (5.7a,b), (5.9), and (5.10a,b) of
+:ref:`the report <ref-nasa-cr-181893>`:
+
+.. math::
+
+   T_{aw}=T_e+\frac{rW_e^2}{2c_p},\qquad
+   T^*=T_e+0.1(T_w-T_e)+0.6(T_{aw}-T_e),
+
+   \rho^*=\frac{p_e}{RT^*},\qquad
+   \mu^*=\mu(T^*),\qquad \nu^*=\frac{\mu^*}{\rho^*},\qquad
+   \overline R^*=\frac{W_e}{\sqrt{\nu^*A}},
+
+   St^*=\frac{0.0689}{2Pr^{2/3}}(\overline R^*)^{-0.42},\qquad
+   q_w=St^*\rho^*W_ec_p(T_{aw}-T_w),\qquad
+   M_e=\frac{W_e}{\sqrt{\gamma RT_e}}.
+
+The default ``recovery_factor`` :math:`r=0.89` comes from the description
+of Poll's method in :ref:`Bénard et al. (2006) <ref-benard-2006>`, equation
+(8); CR-181893 does not specify this value. ``prandtl_number`` defaults to
+0.72. Neither an additional factor 1.24 nor any further Prandtl correction
+is applied.
+
+The reference-density normalization follows algebraically from equivalence
+with CR-181893 (5.12), the freestream-normalized form. Set
+:math:`U_{1,0}=AD/(V_\infty\cos\Lambda)` and
+:math:`Re_D=\rho_\infty V_\infty D/\mu_\infty`. Then
+
+.. math::
+
+   St_\infty=\frac{q_w}{\rho_\infty V_\infty c_p(T_{aw}-T_w)}
+   =\frac{0.0689}{2Pr^{2/3}}
+   \left(\frac{\rho_eT_e}{\rho_\infty T^*}\right)^{0.79}
+   \left(\frac{\mu^*U_{1,0}}{\mu_\infty Re_D}\right)^{0.21}
+   \sin^{0.58}\Lambda\cos^{0.21}\Lambda.
+
+Here :math:`\rho^*=\rho_eT_e/T^*` follows from constant attachment-line
+pressure; the density exponent is :math:`1-0.21=0.79` and the sine exponent
+is :math:`1-0.42=0.58`. The cosine factor appears when the actual gradient
+coefficient :math:`AD/V_\infty` is written as :math:`U_{1,0}\cos\Lambda`.
+The factor :math:`1/2` is supported by CR-181893 (5.11): its laminar
+coefficient :math:`1.141=2\times0.5705` matches the axial wall gradient of
+swept Hiemenz flow. With :math:`C_f=\tau_w/(\rho W_e^2/2)`, the turbulent
+analogy is :math:`St^*/(C_f^*/2)=Pr^{-2/3}`, with
+:math:`C_f^*/2\simeq0.0345(\overline R^*)^{-0.42}`. At :math:`Pr=0.72`
+the ratio is about 1.245, consistent with Poll's 1.24 ratio reported by
+Bénard et al.
+
+``ApplicabilityWarning`` is emitted once per call for each exceeded range
+(including array calls). The literature-based checks use Bénard et al.'s
+272-point turbulent heat-transfer evaluation database:
+:math:`0.35\le M_e\le6.89` and :math:`0.14\le T_w/T_0\le0.96`, where
+:math:`T_0=T_\infty[1+(\gamma-1)M^2/2]=T_e+W_e^2/(2c_p)`.
+These are not confirmed derivation ranges of Poll's original correlation
+or of CR-181893. On this database, Bénard et al. report a standard deviation
+of 26.7% for Poll's reference-temperature method. Being within the ranges
+is not an accuracy guarantee.
+
+A separate warning above :math:`T_0=2000` K is an implementation-policy
+threshold, shared with the existing Fay--Riddell implementation, rather
+than a literature database limit. Perfect-gas properties omit dissociation;
+a numerical prediction at high Mach number is not validation of
+high-enthalpy reacting flow. All quantities use SI units and radians.
+A wall hotter than :math:`T_{aw}` returns negative heat flux without clipping
+or an additional hot-wall warning. Applicability in that cooling direction
+is not established by the literature; the database-range warnings still apply.
+
+Comparison with :ref:`Poll (1981) <ref-poll-1981>` itself remains incomplete;
+identity with the original paper is not assumed. Bénard et al.'s separate
+correlation, equations (11)--(12), is **not implemented**: the ``e0`` subscript
+in its Stanton density :math:`\rho_{e0}` is undefined in the nomenclature,
+and the high-Reynolds-number Stanton plateau in figure 2, titled "Typical
+transition case", reads approximately :math:`St=2.0\times10^{-3}` at
+:math:`\overline R^*\approx330`--380. The figure conditions are
+:math:`\Lambda=60^\circ`, :math:`M_\infty=7.14`,
+:math:`T_w/T_0\approx0.38`, and :math:`M_e\approx3.28`.
+Evaluating equation (11) at :math:`\overline R^*=350`, assuming
+:math:`T_0=750` K within the paper's 650--800 K wind-tunnel range, and using
+this library's air viscosity model to convert from the :math:`T^*` to the
+:math:`\overline T` Reynolds-number basis, gives
+:math:`St\approx4.6\times10^{-3}` (about 2.3 times
+the figure reading). This is inconsistent with the reported 11.7% standard
+deviation. No inferred coefficient correction is used.
+
+Tests verify analytical relations, algebraic equivalence with CR-181893
+(5.12), direct edge-state calculations, and numerical regression values.
+Independent comparison against experimental data has not yet been performed.
+The existing laminar APIs and their angle conventions are unchanged.
+The following example has :math:`T_0=1857.3` K and lies inside both database
+ranges, so it emits no applicability warning:
+
+.. doctest::
+
+   >>> from math import pi
+   >>> from aerophysics import swept_cylinder_turbulent_heat_flux
+   >>> result = swept_cylinder_turbulent_heat_flux(6, 226.5, 1197, 0.1, pi/6, wall_temperature=300)
+   >>> round(result.heat_flux)
+   450252
 
 API and verification
 --------------------
