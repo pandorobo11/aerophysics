@@ -121,7 +121,6 @@ by the Tauber correlations.
    * - :math:`M, T_\infty, p_\infty`
      - ``mach``, ``temperature`` [K], ``pressure`` [Pa]
    * - :math:`r_n, r, \Lambda`
-     - ``nose_radius``, ``radius``, ``sweep_angle``
      - ``nose_radius``, ``radius`` [m], ``sweep_angle`` [rad]
    * - :math:`T_w, Pr`
      - ``wall_temperature`` [K], ``prandtl_number`` (wall value, assumed constant)
