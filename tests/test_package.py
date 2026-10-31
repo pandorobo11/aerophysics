@@ -216,11 +216,14 @@ def test_public_models_are_exported_from_their_owning_modules() -> None:
             "compressible_turbulent_boundary_layer_profile",
         ),
         "heating": (
+            "AttachmentLineHeatingModel",
+            "AttachmentLineHeatingResult",
             "StagnationHeatingModel",
             "StagnationHeatingResult",
             "SweptCylinderHeatingResult",
             "sphere_stagnation_heat_flux",
             "swept_cylinder_heat_flux",
+            "swept_cylinder_turbulent_heat_flux",
         ),
         "protrusion": ("protrusion_drag",),
     }
