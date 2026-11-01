@@ -12,4 +12,3 @@ relevant workflow, inputs, outputs, warnings, and next model page.
    flow_sequence
    boundary_layers
    vectorization_errors
-   gui

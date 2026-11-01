@@ -37,6 +37,7 @@ from aerophysics.gui.components import (
     render_result_bundle,
 )
 from aerophysics.gui.config import make_configuration
+from aerophysics.gui.documentation import render_documentation_link
 from aerophysics.gui.figures import (
     detached_shock_geometry,
     detached_shock_trends,
@@ -112,6 +113,7 @@ def render_isentropic(preferences: UnitPreferences) -> None:
     """Render isentropic forward/inverse and mass-flow calculations."""
     st.title("等エントロピー流れ")
     st.caption("状態量比、面積-Mach関係、逆計算、質量流束を計算します。")
+    render_documentation_link("models/isentropic_flow.html")
     imported = pop_pending_configuration("isentropic")
     inputs, models, sweep = _defaults(imported)
     render_configuration_import("isentropic", "isentropic")
@@ -385,6 +387,7 @@ def render_normal_shock(preferences: UnitPreferences) -> None:
     """Render normal-shock and supersonic-pitot calculations."""
     st.title("垂直衝撃波")
     st.caption("衝撃波前後の状態量比、全圧損失、超音速ピトー圧力比を計算します。")
+    render_documentation_link("models/normal_oblique_shocks.html")
     imported = pop_pending_configuration("normal_shock")
     inputs, models, sweep = _defaults(imported)
     render_configuration_import("normal_shock", "normal")
@@ -589,6 +592,7 @@ def render_expansion(preferences: UnitPreferences) -> None:
     """Render centered Prandtl-Meyer expansion calculations."""
     st.title("Prandtl–Meyer膨張")
     st.caption("超音速流の中心膨張におけるMach数、角度、静的状態量比を計算します。")
+    render_documentation_link("models/expansion_waves.html")
     imported = pop_pending_configuration("expansion")
     inputs, models, sweep = _defaults(imported)
     render_configuration_import("expansion", "expansion")
@@ -827,6 +831,7 @@ def render_detached_shock(preferences: UnitPreferences) -> None:
     """Render detached-shock standoff and Billig-shape calculations."""
     st.title("離脱衝撃波")
     st.caption("鈍頭物体の離脱距離を推算し、Billigの双曲線衝撃波形状を表示します。")
+    render_documentation_link("models/detached_shocks.html")
     imported = pop_pending_configuration("detached_shock")
     inputs, models, sweep = _defaults(imported)
     render_configuration_import("detached_shock", "detached_shock")

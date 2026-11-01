@@ -1,5 +1,6 @@
 """Tests for the GUI documentation browser and local server."""
 
+import re
 from pathlib import Path
 from unittest.mock import patch
 from urllib.request import urlopen
@@ -9,6 +10,7 @@ from streamlit.testing.v1 import AppTest
 
 from aerophysics.gui.documentation import (
     DOCS_URL_ENV,
+    DOCUMENTATION_TOPICS,
     documentation_base_url,
     documentation_topic_url,
 )
@@ -50,6 +52,37 @@ render_documentation()
     assert app.warning
     assert app.code
     assert len(app.get("link_button")) == 1
+
+
+def test_page_documentation_link(monkeypatch: pytest.MonkeyPatch) -> None:
+    script = """
+from aerophysics.gui.documentation import render_documentation_link
+render_documentation_link("models/conical_shocks.html")
+"""
+    monkeypatch.delenv(DOCS_URL_ENV, raising=False)
+    app = AppTest.from_string(script, default_timeout=15).run()
+    assert not app.exception
+    assert len(app.get("link_button")) == 0
+
+    monkeypatch.setenv(DOCS_URL_ENV, "http://127.0.0.1:8123")
+    app = AppTest.from_string(script, default_timeout=15).run()
+    assert not app.exception
+    buttons = app.get("link_button")
+    assert len(buttons) == 1
+    assert buttons[0].proto.url == "http://127.0.0.1:8123/models/conical_shocks.html"
+
+
+def test_every_page_documentation_link_is_a_topic() -> None:
+    package = Path(__file__).resolve().parents[2] / "src/aerophysics/gui"
+    links = {
+        match.group(1)
+        for path in package.glob("*.py")
+        for match in re.finditer(
+            r'render_documentation_link\("([^"]+)"\)', path.read_text("utf-8")
+        )
+    }
+    assert len(links) >= 12
+    assert links <= set(DOCUMENTATION_TOPICS.values())
 
 
 def test_local_documentation_server(tmp_path: Path) -> None:

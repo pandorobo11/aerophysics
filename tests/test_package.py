@@ -168,7 +168,7 @@ def test_release_install_instructions_follow_package_version() -> None:
         "README.md",
         "README.ja.md",
         "docs/getting_started/installation.rst",
-        "docs/guides/gui.rst",
+        "docs/gui/index.rst",
     )
     for relative_path in documented_paths:
         content = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")

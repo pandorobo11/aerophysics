@@ -67,5 +67,5 @@ True
 
 An oblique-shock request with no attached solution instead raises
 :class:`~aerophysics.exceptions.NoAttachedShockError`; it never silently
-switches to a normal shock. See :doc:`../models/shock_waves` and
+switches to a normal shock. See :doc:`../models/normal_oblique_shocks` and
 :doc:`../api/errors` for the complete error types.

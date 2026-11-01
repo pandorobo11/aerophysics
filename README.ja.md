@@ -52,7 +52,7 @@ print(condition.reynolds_number)
 
 - [英語マニュアルのソースと目次](docs/index.rst)
 - [Python クイックスタート](docs/getting_started/quickstart.rst)
-- [ローカル GUI ガイド](docs/guides/gui.rst)
+- [ローカル GUI ガイド](docs/gui/index.rst)
 - [検証記録](docs/verification/index.rst)
 - [API リファレンス](docs/api/index.rst)
 - [HTML マニュアルとリリース配布物](https://github.com/pandorobo11/aerophysics/releases/latest)

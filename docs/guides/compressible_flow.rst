@@ -22,12 +22,12 @@ Choose a workflow
        reservoir pressure for Beattie--Bridgeman
      - Steady, adiabatic flow without entropy production
    * - Cross a normal, oblique, or attached conical shock
-     - :doc:`../models/shock_waves`
+     - :doc:`../models/normal_oblique_shocks`, :doc:`../models/conical_shocks`
      - Upstream Mach number; deflection or cone angle where applicable;
        upstream static temperature for a thermally perfect gas
      - Frozen ideal gas; attached, axisymmetric flow at zero incidence for cones
    * - Estimate blunt-body shock standoff or shape
-     - :ref:`detached-shocks` in :doc:`../models/shock_waves`
+     - :doc:`../models/detached_shocks`
      - Mach number, nose radius, and explicit geometry
      - Engineering correlation, not a shock-layer solution
    * - Turn a supersonic stream through a centered expansion
@@ -87,7 +87,7 @@ Next steps
 
 - Read :doc:`../models/isentropic_flow` for perfect-gas, NASA-polynomial,
   harmonic-oscillator, and Beattie--Bridgeman state relations.
-- Read :doc:`../models/shock_waves` for normal, oblique, conical, and
+- Read :doc:`../models/shock_waves` and its subpages for normal, oblique, conical, and
   detached-shock models.
 - Read :doc:`../models/expansion_waves` for the Prandtl--Meyer equations and
   downstream state ratios.

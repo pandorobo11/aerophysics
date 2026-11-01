@@ -19,6 +19,7 @@ from aerophysics.gui.components import (
     render_result_bundle,
 )
 from aerophysics.gui.config import make_configuration
+from aerophysics.gui.documentation import render_documentation_link
 from aerophysics.gui.figures import heating_trends
 from aerophysics.gui.flow_pages import _defaults, _display, _number, _payload, _si
 from aerophysics.gui.heating_adapter import heating_condition, heating_sweep
@@ -50,6 +51,7 @@ def _on_freestream_change() -> None:
 def render_heating(preferences: UnitPreferences) -> None:
     """Render sphere and swept-cylinder aerodynamic heating."""
     st.title("空力加熱")
+    render_documentation_link("models/aerodynamic_heating.html")
     imported = pop_pending_configuration("aerodynamic_heating")
     inputs, models, sweep = _defaults(imported)
     render_configuration_import("aerodynamic_heating", "heating")

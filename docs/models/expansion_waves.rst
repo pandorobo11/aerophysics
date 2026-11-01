@@ -8,6 +8,31 @@ radians. Convert explicitly with
 :func:`aerophysics.units.degrees_to_radians` and
 :func:`aerophysics.units.radians_to_degrees`.
 
+Physical background
+-------------------
+
+When a supersonic stream flows around a convex corner (a wall that turns
+away from the flow), it does not turn suddenly. It turns gradually through a
+fan of very weak waves called Mach waves, centred on the corner. Each Mach
+wave is inclined to the local flow at the Mach angle
+
+.. math::
+
+   \mu=\sin^{-1}\frac{1}{M}.
+
+Across each wave the flow turns slightly and speeds up, while pressure,
+temperature, and density fall. Unlike a shock, this process is smooth and
+loss-free, so total pressure and total temperature stay constant.
+
+The **Prandtl--Meyer function** :math:`\nu(M)` is the angle through which a
+sonic stream (:math:`M=1`) must turn to reach Mach number :math:`M`. For any
+centred expansion, the turn angle is simply the difference between the
+downstream and upstream values of :math:`\nu`. There is a largest possible
+turn, :math:`\nu_\max`, at which the gas would expand to zero pressure.
+
+Compression around a concave corner instead produces a shock; see
+:doc:`shock_waves`.
+
 Calorically perfect gas
 -----------------------
 
@@ -22,12 +47,14 @@ For :math:`M\ge1`, the Prandtl--Meyer function is
     \right]
     -\tan^{-1}\left(\sqrt{M^2-1}\right).
 
-Its finite limiting value is
+Its finite limiting value, reached as :math:`M\to\infty`, is
 
 .. math::
 
    \nu_\max=\frac{\pi}{2}
-   \left(\sqrt{\frac{\gamma+1}{\gamma-1}}-1\right).
+   \left(\sqrt{\frac{\gamma+1}{\gamma-1}}-1\right),
+
+about 130.45 degrees for :math:`\gamma=1.4`.
 
 For a centered expansion through turn angle :math:`\delta`,
 
@@ -88,11 +115,13 @@ Pass ``AIR_NASA7``, ``AIR_NASA9``, ``AIR_HARMONIC_OSCILLATOR``, or a custom
 :class:`~aerophysics.thermochemistry.ThermallyPerfectGas` or
 :class:`~aerophysics.real_gas.HarmonicOscillatorGas`, together with
 ``upstream_temperature`` in K. Mach, positive expansion turn in radians, and
-temperature broadcast together. The constant-gamma default is unchanged.
-These models include variable heat capacity; they do not include chemistry,
-relaxation, dissociation, or real-gas pressure effects.
+temperature broadcast together. Without a gas argument, the constant-gamma
+``AIR`` model is used. These models include variable heat capacity; they do
+not include chemistry, relaxation, dissociation, or real-gas pressure effects.
 
-The characteristic turning relation and energy conservation give
+When :math:`\gamma` varies with temperature, :math:`\nu` is no longer a
+function of Mach number alone, so the turn must be integrated through the
+fan. Along a Mach wave, the flow-turning relation and energy conservation give
 
 .. math::
 
@@ -106,11 +135,11 @@ The characteristic turning relation and energy conservation give
    \delta=\int_{T_2}^{T_1}
      \frac{c_p(T)}{u^2(T)}\sqrt{M^2(T)-1}\,dT.
 
-The solver integrates the last expression and solves for :math:`T_2` directly
-inside the model range. It uses :math:`x=\sqrt{T/T_1}` for quadrature and splits
-at NASA polynomial boundaries. No substitution of a fixed
-:math:`\gamma(T_1)` is made. Pressure follows constant entropy, with
-:math:`s^\circ(T)` the entropy at a fixed reference pressure:
+The solver evaluates this integral numerically and finds the downstream
+temperature :math:`T_2` that gives the requested turn :math:`\delta`. It does
+not replace the variable :math:`\gamma(T)` by a fixed upstream value.
+Pressure follows from constant entropy, with :math:`s^\circ(T)` the entropy at
+a fixed reference pressure:
 
 .. math::
 
@@ -130,17 +159,18 @@ requires a downstream temperature below the lower bound raises
 convergence failures raise
 :class:`~aerophysics.exceptions.ExpansionConvergenceError` instead.
 
-``available_turn_angle`` is the largest turn from this upstream state down to
-the model's minimum temperature, including that boundary. It is a database
-limit, not the physical vacuum limit. For calorically perfect gas or a custom
-unbounded harmonic-oscillator gas it is the exclusive vacuum limit.
+``available_turn_angle`` is the largest turn from this upstream state before
+the gas reaches the model's minimum temperature. It is a limit of the gas
+data, not the physical expansion-to-vacuum limit. For a calorically perfect
+gas, or a custom harmonic-oscillator gas without a temperature range, it is
+the vacuum limit (which itself cannot be reached).
 
-Absolute angles :math:`\nu_1,\nu_2` are measured from the sonic state at the
-same :math:`h_0`; thus they depend on the upstream thermodynamic condition as
-well as Mach. If that sonic state is above the temperature upper bound, valid
-fan states are still returned, but both absolute angles are ``None`` for a
-scalar, or ``NaN`` at the affected array entries. Other state fields stay
-finite. The Mach-only helpers ``prandtl_meyer_angle``,
+The absolute angles :math:`\nu_1,\nu_2` are measured from the sonic state with
+the same total enthalpy :math:`h_0`, so they depend on the upstream
+temperature as well as on Mach number. That sonic state is hotter than the
+upstream flow. If it lies above the gas's temperature range, the expansion
+itself is still returned, but both absolute angles are ``None`` for a scalar,
+or ``NaN`` at the affected array entries. The Mach-only helpers ``prandtl_meyer_angle``,
 ``mach_from_prandtl_meyer``, and ``maximum_prandtl_meyer_angle`` remain limited
 to :class:`~aerophysics.gas.PerfectGas`.
 
@@ -156,8 +186,7 @@ to :class:`~aerophysics.gas.PerfectGas`.
 >>> thermal.upstream_prandtl_meyer_angle is None
 True
 
-Verification includes the constant-cp analytical limit for three heat-capacity
-ratios, independent angle-coordinate ODE integration of a manufactured linear
-heat-capacity gas, energy and entropy conservation across NASA region
-boundaries, inclusive temperature endpoints, and partial sonic-reference
-availability in broadcast arrays.
+The tests check the constant-heat-capacity limit for three values of
+:math:`\gamma`, compare with an independent numerical solution for a test gas
+whose heat capacity varies linearly with temperature, and confirm that energy
+and entropy are conserved across NASA polynomial boundaries.

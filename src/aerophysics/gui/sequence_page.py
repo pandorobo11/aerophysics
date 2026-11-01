@@ -16,6 +16,7 @@ from aerophysics.gui.config import (
     dump_configuration,
     make_configuration,
 )
+from aerophysics.gui.documentation import render_documentation_link
 from aerophysics.gui.sequence_adapter import (
     BASES,
     INITIAL_FIELDS,
@@ -187,6 +188,7 @@ def render_sequence(preferences: UnitPreferences) -> None:
     st.caption(
         "各段は局所状態の変換です。円錐段は円錐表面状態を引き継ぎます。流路形状・波の干渉・始動性は計算しません。"
     )
+    render_documentation_link("guides/flow_sequence.html")
     st.session_state.setdefault("sequence_steps", [])
     st.session_state.setdefault("sequence_epoch", 0)
     imported = pop_pending_configuration("flow_sequence")

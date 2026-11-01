@@ -4,20 +4,21 @@ Warnings and exceptions
 .. automodule:: aerophysics.exceptions
    :members:
 
-Use :class:`~aerophysics.exceptions.ModelRangeError` when a model cannot
-evaluate the requested state. Treat
-:class:`~aerophysics.exceptions.ApplicabilityWarning` as an explicit notice
-that a correlation was evaluated beyond its documented evidence. An oblique
-shock with no attached solution raises
-:class:`~aerophysics.exceptions.NoAttachedShockError` rather than silently
-changing the requested physics.
+The package separates three kinds of problems:
 
-Thermally perfect conical numerical integration, maximization, or root
-resolution failures raise :class:`~aerophysics.exceptions.ShockConvergenceError`,
-a subclass of ``RuntimeError``. This does not imply temperature-range failure
-or physical detachment. If the requested state itself fails, the conical GUI
-displays this failure for a single calculation; a sweep retains that point with
-``status="error"`` and continues to the remaining points. If only the auxiliary
-attached-limit calculation fails after a valid state was found, the result is
-kept and the maximum angle is left blank. Unrelated runtime errors are not
-suppressed.
+* :class:`~aerophysics.exceptions.ModelRangeError`: the model cannot evaluate
+  the requested state, for example because a temperature lies outside the
+  gas data.
+* :class:`~aerophysics.exceptions.ApplicabilityWarning`: a correlation was
+  evaluated, but outside the range supported by its source. Check the result
+  against independent evidence.
+* :class:`~aerophysics.exceptions.NoAttachedShockError`: the requested wedge
+  or cone angle is larger than the attached-shock limit. The request is not
+  silently changed into a normal shock or another model.
+
+Numerical failures of the iterative solvers raise
+:class:`~aerophysics.exceptions.ShockConvergenceError` or
+:class:`~aerophysics.exceptions.ExpansionConvergenceError`. Both are
+subclasses of ``RuntimeError``. They mean that the solver could not reach a
+reliable answer; they do not mean that the state is out of range or that the
+shock has detached. See :doc:`../guides/vectorization_errors` for examples.
