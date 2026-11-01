@@ -571,6 +571,23 @@ are model minus reference, divided by reference:
 * Over the same cases, :math:`C_f` differs by **−1.3 to +2.0%** mean and
   :math:`\theta` by **−1.3 to +3.5%** mean (RMS at most **2.2%** and
   **3.8%**), up to :math:`Re_{x,e}=10^9` and down to M0.3.
+* Against incompressible zero-pressure-gradient measurements and DNS
+  (:ref:`Österlund et al. (2000) <ref-osterlund-2000>`,
+  :ref:`Schlatter and Örlü (2010) <ref-schlatter-orlu-2010>`,
+  :ref:`Vallikivi, Hultmark and Smits (2015) <ref-vallikivi-hultmark-smits-2015>`;
+  :math:`Re_\theta=2\times10^3`--:math:`2.3\times10^5`, about
+  :math:`Re_x=10^6`--:math:`2.7\times10^8`), :math:`\delta_{99}` is too thick
+  by about **+19%** at :math:`Re_x=10^6`, **+15%** at :math:`10^7`, **+10%**
+  at :math:`10^8`, and **+9%** at :math:`1.5\times10^8`. SU2 standard SA is
+  **+7 to +9%** thick over the same range, so most of the SA-relative drift
+  above comes from the correlation approaching the measurements as
+  :math:`Re_x` rises. The difference comes mainly from the incompressible
+  Schlichting friction pair: at a given :math:`Re_\theta` its :math:`C_f` is
+  **6--6.5%** above the measurements, which makes :math:`\theta` about
+  **5.5%** thick and lowers the solved wake parameter (0.33--0.45 against
+  about 0.6 measured). Given the measured :math:`\theta` and :math:`C_f`, the
+  profile closure reproduces :math:`\delta_{99}` within **−6 to +2%** on
+  average. The widely used friction pair is kept unchanged.
 * The solved wake parameter rises with Reynolds number on cold hypersonic
   walls: at M10 with :math:`T_w/T_{aw}=0.07` it reaches :math:`\Pi=0.976` at
   :math:`Re_{x,e}=10^9`. Extrapolating that trend, the wake bound

@@ -374,6 +374,30 @@ Mechanics, 739, 392--420, 2014.
 
 https://doi.org/10.1017/jfm.2013.620
 
+.. _ref-osterlund-2000:
+
+Österlund, J. M., Johansson, A. V., Nagib, H. M., and Hites, M. H. *A Note
+on the Overlap Region in Turbulent Boundary Layers*. Physics of Fluids, 12(1),
+1--4, 2000.
+
+https://doi.org/10.1063/1.870250
+
+.. _ref-schlatter-orlu-2010:
+
+Schlatter, P., and Örlü, R. *Assessment of Direct Numerical Simulation Data
+of Turbulent Boundary Layers*. Journal of Fluid Mechanics, 659, 116--126,
+2010.
+
+https://doi.org/10.1017/S0022112010003113
+
+.. _ref-vallikivi-hultmark-smits-2015:
+
+Vallikivi, M., Hultmark, M., and Smits, A. J. *Turbulent Boundary Layer
+Statistics at Very High Reynolds Number*. Journal of Fluid Mechanics, 779,
+371--389, 2015.
+
+https://doi.org/10.1017/jfm.2015.273
+
 .. _ref-zhang-duan-choudhari-2018:
 
 Zhang, C., Duan, L., and Choudhari, M. M. *Direct Numerical Simulation
