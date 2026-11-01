@@ -563,8 +563,10 @@ def flat_plate_boundary_layer(
     through delta99, matching profile momentum thickness to 0.978 times the
     returned, full-edge momentum thickness. An inadmissible closure raises
     ModelRangeError with the broadcast array index and wake-bound direction.
-    External validation covers smooth perfect-gas ZPG flow, Me=2--13.3,
-    Tw/Taw=0.07--1, freestream T=47--271 K, Re_x,e about 1e6--1.7e8.
+    External validation covers smooth perfect-gas ZPG flow, Me=0.3--13.3,
+    Tw/Taw=0.07--1, freestream T=47--271 K, Re_x,e about 1e6--1e9 (Me<2 only
+    to 1.6e8). Against SU2 SA, the delta99 difference falls by 5--6 points per
+    decade of Re_x,e (about -9 to -12% at 1e9 on cold supersonic walls).
     Supply local edge states; extrapolation beyond that envelope is unverified.
 
     Skin-friction coefficients use edge dynamic pressure for every mode.

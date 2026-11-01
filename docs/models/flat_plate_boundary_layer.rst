@@ -519,9 +519,10 @@ reports the affected broadcast array index and which wake bound is exceeded.
 Applicability and external comparisons
 ++++++++++++++++++++++++++++++++++++++
 
-The tested envelope is :math:`M_e=2`--13.3, :math:`T_w/T_{aw}=0.07`--1,
-:math:`T_\infty=47`--271 K, and :math:`Re_{x,e}\approx10^6`--
-:math:`1.7\times10^8`, for a smooth zero-pressure-gradient plate and a
+The tested envelope is :math:`M_e=0.3`--13.3, :math:`T_w/T_{aw}=0.07`--1,
+:math:`T_\infty=47`--271 K, and :math:`Re_{x,e}\approx10^6`--:math:`10^9`
+(:math:`M_e<2` only up to :math:`1.6\times10^8`), for a smooth
+zero-pressure-gradient plate and a
 calorically perfect gas. Flow is turbulent from the leading edge, or uses
 the prescribed transition model. This envelope is evidence of comparison,
 not a guarantee for every combination of these parameters; the wake closure
@@ -552,10 +553,30 @@ are model minus reference, divided by reference:
   :math:`Re_{x,e}\le9\times10^7`. Casewise :math:`\delta_{99}` RMS differences
   are **1.8--4.0%** (range **−8.9 to +7.5%**); displacement-thickness RMS
   differences are **1.2--4.0%**.
-* As :math:`Re_{x,e}` rises from :math:`10^7` to :math:`1.7\times10^8`, the
-  :math:`\delta_{99}` difference trends negative by about **6 percentage
-  points per decade** (from **+0.4% to −7%** for cold-wall M2 and M6).
-  Reynolds numbers above :math:`1.7\times10^8` have not been checked.
+* The :math:`\delta_{99}` difference falls almost linearly with
+  :math:`\log_{10}Re_{x,e}`, by **5--6 percentage points per decade**, with no
+  levelling off up to :math:`10^9`. Seven further SU2 standard-SA cases
+  (M2, M6 and M10 at :math:`Re'=1.2\times10^8\ \mathrm{m}^{-1}` and
+  :math:`T_w/T_{aw}=0.07`--0.5; M1.5, M0.8 and M0.3 at
+  :math:`Re'=2\times10^7\ \mathrm{m}^{-1}` with the wall at recovery
+  temperature) give :math:`\delta_{99}` differences of **+0.2 to +1.1%** at
+  :math:`Re_{x,e}=10^7`, **−6.3 to −3.5%** at :math:`10^8`, and **−12.1 to
+  −8.6%** at :math:`10^9` for the supersonic cold walls. For the
+  recovery-temperature walls at :math:`M_e\le1.5`, the differences are
+  **+9 to +11%** at :math:`10^6`, **+4 to +6%** at :math:`10^7`, and **−0.5 to
+  +1.1%** at :math:`10^8`. The slope is the same at M0.3, so it comes from the
+  profile shape, not from the compressibility transformation. Whether the
+  correlation or the SA model is closer to measured :math:`\delta_{99}` at
+  high Reynolds number has not been established.
+* Over the same cases, :math:`C_f` differs by **−1.3 to +2.0%** mean and
+  :math:`\theta` by **−1.3 to +3.5%** mean (RMS at most **2.2%** and
+  **3.8%**), up to :math:`Re_{x,e}=10^9` and down to M0.3.
+* The solved wake parameter rises with Reynolds number on cold hypersonic
+  walls: at M10 with :math:`T_w/T_{aw}=0.07` it reaches :math:`\Pi=0.976` at
+  :math:`Re_{x,e}=10^9`. Extrapolating that trend, the wake bound
+  :math:`\Pi\le1` would be exceeded, and
+  :class:`~aerophysics.exceptions.ModelRangeError` raised, near
+  :math:`Re_{x,e}\approx1.5\times10^9` for that condition.
 * At matched :math:`Re_\theta`, comparison with the DNS of
   :ref:`Zhang, Duan and Choudhari (2018) <ref-zhang-duan-choudhari-2018>`
   gives :math:`C_f` differences **−0.3, −0.6, −3.8, −2.2%**, and
