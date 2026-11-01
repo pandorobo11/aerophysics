@@ -374,6 +374,14 @@ Mechanics, 739, 392--420, 2014.
 
 https://doi.org/10.1017/jfm.2013.620
 
+.. _ref-zhang-duan-choudhari-2018:
+
+Zhang, C., Duan, L., and Choudhari, M. M. *Direct Numerical Simulation
+Database for Supersonic and Hypersonic Turbulent Boundary Layers*.
+AIAA Journal, 56(11), 4297--4311, 2018.
+
+https://doi.org/10.2514/1.J057296
+
 .. _ref-trettel-larsson-2016:
 
 Trettel, A. and Larsson, J. *Mean Velocity Scaling for Compressible Wall

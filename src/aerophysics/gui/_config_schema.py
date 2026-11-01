@@ -173,7 +173,9 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
             "source": _choice("manual", "flight"),
             "regime": _choice("laminar", "turbulent", "transitional"),
             "turbulent_correlation": _choice("power_law", "schlichting"),
-            "compressibility_correction": _choice("none", "eckert", "van_driest_ii"),
+            "compressibility_correction": _choice(
+                "none", "eckert", "van_driest_ii", "van_driest_ii_wall_temperature"
+            ),
         },
         sweep_variables=frozenset({"distance"}),
         sweep_extras={"logarithmic": _BOOL},

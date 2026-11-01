@@ -174,3 +174,15 @@ Page notes
 
 The **大気・飛行条件** page and the **連続流れ計算** page are described in
 :doc:`../guides/atmosphere_flight` and :doc:`../guides/flow_sequence`.
+
+Compressible boundary-layer results
+-----------------------------------
+
+The flat-plate page offers **Van Driest II＋壁温補正** for wall-temperature
+corrected friction and profile-based thicknesses. **Eckert基準温度法** and
+**Van Driest II** return unavailable (NaN) turbulent thicknesses, including
+post-transition points. Metrics display **—**; tables, plots, and CSV exports
+retain missing thicknesses while friction and drag remain available.
+**現在の境界層ケースとして保存** warns instead of saving when delta99 or wall
+shear is not finite. See :doc:`../models/flat_plate_boundary_layer` for the
+model assumptions and comparison envelope.

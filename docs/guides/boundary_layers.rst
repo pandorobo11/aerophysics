@@ -75,15 +75,18 @@ transformation. GRA is the default temperature--velocity closure; Walz is
 selectable. The result includes velocity and thermodynamic arrays plus
 profile-integrated displacement and momentum thicknesses.
 
-This profile API is independent of ``flat_plate_boundary_layer``. The latter
-can estimate :math:`\delta_{99}` and wall shear, but the caller passes them
-explicitly. A typical sequence is therefore:
+The profile API accepts thickness and shear explicitly. For compressible
+thicknesses, select ``VAN_DRIEST_II_WALL_TEMPERATURE`` in the flat-plate API;
+``ECKERT`` and ``VAN_DRIEST_II`` do not supply turbulent thicknesses.
+A typical sequence is:
 
 #. Evaluate ``flat_plate_boundary_layer`` at the station of interest.
 #. Create a wall-normal grid from zero through the returned
    ``boundary_layer_thickness``.
 #. Pass that thickness and ``wall_shear_stress`` explicitly to
-   ``compressible_turbulent_boundary_layer_profile``.
+   ``compressible_turbulent_boundary_layer_profile``. To reproduce the new
+   flat-plate closure, select ``VAN_DRIEST`` and ``WALZ`` and use the same
+   wall temperature and thermophysical models.
 #. Use the returned velocity, density, temperature, and viscosity arrays for
    analysis or as provided profiles for ``protrusion_drag``.
 
@@ -131,3 +134,17 @@ construction assumes a smooth, fully turbulent, approximately ZPG boundary
 layer. The protrusion model integrates an undisturbed profile and does not
 resolve wall interference, vortices, shocks, or interactions among multiple
 elements.
+
+Compressible turbulent thicknesses
+----------------------------------
+
+Use ``CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE`` for the
+wall-temperature-corrected Schlichting/VD2 friction pair and Van Driest/Walz
+profile thicknesses. Momentum thickness follows the accumulated friction
+integral; displacement thickness is integrated only through delta99.
+Supply local edge conditions. See :doc:`../models/flat_plate_boundary_layer`
+for the external validation envelope and limitations.
+
+``ECKERT`` and ``VAN_DRIEST_II`` return ``NaN`` for all three turbulent
+thicknesses, also after a prescribed transition. Their friction and drag,
+laminar thicknesses, and ``NONE`` results are unchanged.
