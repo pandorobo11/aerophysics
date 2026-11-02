@@ -18,7 +18,7 @@ launcher:
 
 .. code-block:: console
 
-   $ python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.7.0/aerophysics-0.7.0-py3-none-any.whl"
+   $ python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.8.0/aerophysics-0.8.0-py3-none-any.whl"
    $ aerophysics-gui
 
 The launcher opens the GUI in your browser at a local address. It accepts

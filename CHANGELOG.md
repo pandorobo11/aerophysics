@@ -5,7 +5,20 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-02
+
 ### Added
+
+- Select geometric or geopotential altitude in the atmosphere/flight GUI,
+  including altitude sweeps, plot axes, and saved configuration replay.
+  Support the same choice for standard-atmosphere flow-sequence initialization.
+
+- Add scalar flow sequences with normal, oblique and conical shocks,
+  isentropic transformations and centered expansions, for perfect and frozen
+  thermally perfect gases. Support arbitrary static/total initial conditions
+  and standard-atmosphere initialization. Add a GUI stage editor, per-stage
+  properties and pressure recovery, plots, SI CSV export, configuration replay,
+  and explicit partial results when a stage fails.
 
 - Add `TurbulentModel.SCHLICHTING_LOG_WAKE` for `compressible=False` and its
   GUI option. It keeps the Schlichting friction and drag, sets
@@ -63,6 +76,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
   T_w > 4000 K, or h_inf/(V^2/2) > 0.1 (approximately M < 7.07 for γ = 1.4).
 
 ### Changed
+
+- Update the locked development and CI environment (certifi, filelock,
+  msgpack, Streamlit, and Pillow) to clear the release-time dependency audit.
+  The locked Streamlit no longer pulls in GitPython. Installed package
+  requirements are unchanged.
 
 - **Breaking:** After a prescribed transition, every turbulent model now
   continues the fully turbulent plate whose momentum thickness equals the
@@ -196,19 +214,6 @@ uses Semantic Versioning, including during the pre-1.0 period.
   excursions and out-of-range user inputs. Bracket stagnation temperature
   locally so custom harmonic-oscillator gases without an applicability range
   do not evaluate properties at the maximum floating-point temperature.
-
-### Added
-
-- Select geometric or geopotential altitude in the atmosphere/flight GUI,
-  including altitude sweeps, plot axes, and saved configuration replay.
-  Support the same choice for standard-atmosphere flow-sequence initialization.
-
-- Add scalar flow sequences with normal, oblique and conical shocks,
-  isentropic transformations and centered expansions, for perfect and frozen
-  thermally perfect gases. Support arbitrary static/total initial conditions
-  and standard-atmosphere initialization. Add a GUI stage editor, per-stage
-  properties and pressure recovery, plots, SI CSV export, configuration replay,
-  and explicit partial results when a stage fails.
 
 ## [0.7.0] - 2026-10-03
 
@@ -436,7 +441,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Typed public APIs, cross-platform CI, Sphinx documentation, and validated
   examples.
 
-[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/pandorobo11/aerophysics/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/pandorobo11/aerophysics/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pandorobo11/aerophysics/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pandorobo11/aerophysics/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pandorobo11/aerophysics/releases/tag/v0.5.0
