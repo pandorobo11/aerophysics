@@ -722,10 +722,13 @@ def flat_plate_boundary_layer(
     Cbar_f,t, the start Re_0 solves Re_0*Cbar_f,t(Re_0) = Re_tr*Cbar_f,l(Re_tr).
     Local friction and thicknesses use Re_eq = Re_0 + Re_x - Re_tr and
     x_eq = x*Re_eq/Re_x, and average friction is Re_eq*Cbar_f,t(Re_eq)/Re_x.
-    Accumulated drag, and theta where returned, are therefore continuous;
-    local friction, delta99 and delta* jump. ``SCHLICHTING`` theta exceeds
-    the laminar value at transition by its own power-law mismatch, 1.3--2.2%
-    for Re_tr=5e5--5e6. Transition Reynolds numbers too low for the
+    Accumulated drag is therefore continuous for every model; local
+    friction, delta99 and delta* jump. Returned theta is continuous for
+    ``SCHLICHTING_LOG_WAKE`` and ``VAN_DRIEST_II_WALL_TEMPERATURE``.
+    ``SCHLICHTING`` power-law theta exceeds the laminar value at transition
+    by 1.3--2.2% for Re_tr=5e5--5e6. Local friction is the exact derivative
+    of x*average_cf except for ``VAN_DRIEST_II``, whose Willems local and
+    average equations are separate fits. Transition Reynolds numbers too low for the
     turbulent correlation raise ModelRangeError.
 
     Skin-friction coefficients use edge dynamic pressure for every mode.

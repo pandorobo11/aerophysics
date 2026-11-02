@@ -74,10 +74,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
   of a layer 2.8 times as thick as the actual one at Re_tr = 5e5. With
   Schlichting friction, the local coefficient just after transition rises by
   26% (Re_tr = 5e5) to 42% (5e6), and average friction by 6--15% near
-  transition, falling below 1% beyond 100 Re_tr. Drag and momentum thickness
-  stay continuous and obey d(x * average_cf)/dx = cf. `SCHLICHTING`
-  one-fifth-power thicknesses use the same origin (theta is 1.3--2.2% above
-  Blasius at transition), and `SCHLICHTING_LOG_WAKE` no longer returns NaN
+  transition, falling below 1% beyond 100 Re_tr. Drag stays continuous for
+  every model. Returned theta is continuous for `SCHLICHTING_LOG_WAKE` and
+  `VAN_DRIEST_II_WALL_TEMPERATURE`; `SCHLICHTING` one-fifth-power thicknesses
+  use the same origin, so theta is 1.3--2.2% above Blasius at transition.
+  Local friction is the exact derivative d(x * average_cf)/dx except for
+  `VAN_DRIEST_II`, whose Willems local and average equations are separate
+  fits. `SCHLICHTING_LOG_WAKE` no longer returns NaN
   thicknesses just after a late transition. Transition Reynolds numbers too
   low for the turbulent correlation raise `ModelRangeError`. Fully turbulent
   and laminar results are unchanged.

@@ -457,12 +457,41 @@ points (:math:`k=1` for ``compressible=False``). :math:`Re_0` for
 :math:`Re_\mathrm{tr}=5\times10^5` is :math:`1.417\times10^5` with
 Schlichting friction.
 
-Accumulated drag, and :math:`\theta_m` where returned, are continuous at
-transition, and :math:`\mathrm{d}(x\bar C_f)/\mathrm{d}x=C_{f,x}` holds on both
-sides. Local friction, :math:`\delta_{99}`, and :math:`\delta^*` jump, because
-transition is instantaneous here. Turbulent friction just after transition is
-thus consistent with the actual momentum thickness, and post-transition
-thickness closures see a fully turbulent equilibrium state.
+Accumulated drag, and with it the drag-based momentum thickness
+:math:`x\bar C_f/2`, is continuous at transition for every model. Whether the
+returned quantities satisfy stronger relations depends on the model:
+
+.. list-table:: Exact and approximate relations after a specified transition
+   :header-rows: 1
+
+   * - Model
+     - Returned :math:`\theta_m` at transition
+     - :math:`\mathrm{d}(x\bar C_f)/\mathrm{d}x=C_{f,x}`
+   * - ``SCHLICHTING``
+     - Power law, 1.3--2.2% above the laminar value for
+       :math:`Re_\mathrm{tr}=5\times10^5`--:math:`5\times10^6`
+     - Exact
+   * - ``SCHLICHTING_LOG_WAKE``
+     - :math:`x\bar C_f/2`, continuous
+     - Exact
+   * - ``ECKERT``
+     - ``NaN``
+     - Exact
+   * - ``VAN_DRIEST_II``
+     - ``NaN``
+     - Approximate: the Willems local and average equations are separate
+       fits, 3.9% apart at :math:`R=10^6`
+   * - ``VAN_DRIEST_II_WALL_TEMPERATURE``
+     - :math:`x\bar C_f/2`, continuous
+     - Exact
+
+The ``SCHLICHTING`` and ``VAN_DRIEST_II`` departures belong to their fully
+turbulent correlations and are unchanged by the equivalent origin. Local
+friction, :math:`\delta_{99}`, and :math:`\delta^*` jump, because transition is
+instantaneous here. Turbulent friction just after transition is consistent
+with the drag-based momentum thickness, and the ``SCHLICHTING_LOG_WAKE`` and
+``VAN_DRIEST_II_WALL_TEMPERATURE`` closures see a fully turbulent equilibrium
+state.
 
 Earlier versions kept the leading-edge origin for turbulent friction and
 used the Prandtl-type mixed average
@@ -477,8 +506,8 @@ coefficient just after transition is now 26% higher for
 to 15% for :math:`5\times10^6`, and less than 1% higher beyond
 :math:`100Re_\mathrm{tr}`. Fully turbulent and laminar results are unchanged.
 
-The continuity, drag-derivative, and fully turbulent limits are verified
-analytically in the test suite. The equivalent plate has not been compared
+Drag continuity, the exact drag derivatives, the ``SCHLICHTING`` theta offset,
+and the fully turbulent limits are verified analytically in the test suite. The equivalent plate has not been compared
 with transitional measurements; a real transition region has finite length and
 non-equilibrium turbulence. If :math:`2Re_{\theta,\mathrm{tr}}` is below the
 smallest value the turbulent correlation can produce (about 4.5 for

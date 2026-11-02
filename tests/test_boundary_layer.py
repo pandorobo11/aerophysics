@@ -156,10 +156,15 @@ def test_power_law_thickness_uses_transition_virtual_origin() -> None:
     assert_allclose(result.boundary_layer_thickness, delta, rtol=1e-12)
     assert_allclose(result.displacement_thickness, delta / 8.0, rtol=1e-12)
     assert_allclose(result.momentum_thickness, delta * 7.0 / 72.0, rtol=1e-12)
-    # The power-law theta differs from the Blasius value only by the
-    # one-fifth-power law's own mismatch with Schlichting friction.
-    assert np.asarray(result.momentum_thickness)[0] == pytest.approx(
-        0.664 * x[0] / np.sqrt(transition), rel=0.02
+    # The drag-based theta is exactly continuous with Blasius. The returned
+    # power-law theta is not: it carries the one-fifth-power law's own
+    # mismatch with Schlichting friction, +1.268% at Re_tr = 5e5.
+    laminar_theta = 0.664 * x[0] / np.sqrt(transition)
+    assert x[0] * np.asarray(result.average_skin_friction_coefficient)[
+        0
+    ] / 2.0 == pytest.approx(laminar_theta, rel=1e-9)
+    assert np.asarray(result.momentum_thickness)[0] / laminar_theta - 1.0 == (
+        pytest.approx(0.012684, abs=1e-6)
     )
     turbulent = flat_plate_boundary_layer(
         x[-1], 10.0, 1.0, 1e-5, regime=BoundaryLayerRegime.TURBULENT

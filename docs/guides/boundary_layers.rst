@@ -61,8 +61,10 @@ edge conditions and returns the one-sided drag per unit width:
 Use ``LAMINAR`` or ``TURBULENT`` when the state is known. ``TRANSITIONAL``
 requires a caller-supplied transition Reynolds number; the API does not
 predict natural transition. Downstream of it, the turbulent part continues
-the fully turbulent plate with the same momentum thickness, so drag and
-momentum thickness are continuous while local friction jumps. Compressibility
+the fully turbulent plate with the same momentum thickness, so drag is
+continuous while local friction jumps. Returned momentum thickness is
+continuous for the log-wake and wall-temperature models; see the model page
+for the exceptions. Compressibility
 corrections are opt-in. See
 :doc:`../models/flat_plate_boundary_layer` for the available correlations,
 required thermodynamic inputs, and applicability ranges.
