@@ -452,6 +452,43 @@ Transformations*. Physics of Fluids, 36, 126119, 2024.
 
 https://doi.org/10.1063/5.0242189
 
+Laminar compressible boundary layers and viscous interaction
+------------------------------------------------------------
+
+.. _ref-chapman-rubesin-1949:
+
+Chapman, D. R. and Rubesin, M. W. *Temperature and Velocity Profiles in the
+Compressible Laminar Boundary Layer with Arbitrary Distribution of Surface
+Temperature*. Journal of the Aeronautical Sciences, 16(9), 547--565, 1949.
+
+https://doi.org/10.2514/8.11853
+
+.. _ref-howarth-1948:
+
+Howarth, L. *Concerning the Effect of Compressibility on Laminar Boundary
+Layers and Their Separation*. Proceedings of the Royal Society of London A,
+194, 16--42, 1948.
+
+https://doi.org/10.1098/rspa.1948.0064
+
+.. _ref-illingworth-1949:
+
+Illingworth, C. R. *Steady Flow in the Laminar Boundary Layer of a Gas*.
+Proceedings of the Royal Society of London A, 199, 533--558, 1949.
+
+https://doi.org/10.1098/rspa.1949.0153
+
+.. _ref-bush-1966:
+
+Bush, W. B. *Hypersonic Strong-Interaction Similarity Solutions for Flow
+Past a Flat Plate*. Journal of Fluid Mechanics, 25(1), 51--64, 1966.
+
+https://doi.org/10.1017/S0022112066000041
+
+.. _ref-hayes-probstein-1959:
+
+Hayes, W. D. and Probstein, R. F. *Hypersonic Flow Theory*, 1959.
+
 Boundary-layer protrusions
 --------------------------
 

@@ -11,7 +11,7 @@ Published-correlation comparison
      - Reynolds number
      - Result
    * - Blasius delta99
-     - 4.441e-15
+     - 2.998e-15
      - 2e+05
      - Pass
    * - Blasius displacement thickness

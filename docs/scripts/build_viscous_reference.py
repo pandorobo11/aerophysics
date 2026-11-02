@@ -21,7 +21,7 @@ def main() -> None:
         rows.append(
             {
                 "reynolds_number": f"{reynolds:.8g}",
-                "blasius_delta_over_x": f"{5.0 / math.sqrt(reynolds):.15g}",
+                "blasius_delta_over_x": f"{4.9100 / math.sqrt(reynolds):.15g}",
                 "blasius_displacement_over_x": f"{1.7208 / math.sqrt(reynolds):.15g}",
                 "blasius_momentum_over_x": f"{0.664 / math.sqrt(reynolds):.15g}",
                 "blasius_local_cf": f"{0.664 / math.sqrt(reynolds):.15g}",
@@ -44,6 +44,7 @@ def main() -> None:
             "one-fifth-power turbulent flat-plate correlation",
             "Schlichting smooth-plate average skin-friction correlation",
         ],
+        "blasius_delta99_coefficient": 4.9100,
         "role": "independent direct evaluation of published correlation equations",
         "command": "python docs/scripts/build_viscous_reference.py",
     }

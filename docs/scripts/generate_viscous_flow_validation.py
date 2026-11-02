@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from _verification_common import line_chart_svg, write_or_check
+from _verification_common import format_bounded_error, line_chart_svg, write_or_check
 
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "tests/reference_data/viscous_flow"
@@ -424,6 +424,84 @@ def _rst(
     return "\n".join(lines)
 
 
+def _laminar_similarity_accuracy(api: tuple[object, ...]) -> str:
+    regime_enum, correction_enum, _, _, flat_plate, _, _, viscosity_model, _ = api
+    with (REFERENCE / "laminar_compressible_similarity.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        rows = [
+            {key: float(value) for key, value in row.items()}
+            for row in csv.DictReader(stream)
+        ]
+    viscosity = float(viscosity_model.dynamic_viscosity(240.0))
+    errors = []
+    for row in rows:
+        result = flat_plate(
+            1.0,
+            1e8 * viscosity,
+            1.0,
+            viscosity,
+            regime=regime_enum.LAMINAR,
+            compressibility_correction=correction_enum.ECKERT,
+            mach=row["mach"],
+            edge_temperature=240.0,
+            wall_temperature=(
+                None
+                if row["wall_to_adiabatic_temperature_ratio"] == 1
+                else row["wall_temperature_K"]
+            ),
+        )
+        errors.append(
+            [
+                100.0 * (float(value) * 1e4 / row[key] - 1.0)
+                for value, key in (
+                    (result.local_skin_friction_coefficient, "cf_sqrt_re"),
+                    (result.momentum_thickness, "momentum_sqrt_re_over_x"),
+                    (result.boundary_layer_thickness, "delta99_sqrt_re_over_x"),
+                    (result.displacement_thickness, "displacement_sqrt_re_over_x"),
+                )
+            ]
+        )
+    differences = np.asarray(errors)
+    displacement = np.array([row["displacement_sqrt_re_over_x"] for row in rows])
+    relative = np.abs(displacement) >= 0.05
+    absolute_errors = differences[:, 3] / 100 * displacement
+    lines = [
+        ".. list-table:: Library versus independent laminar similarity",
+        "   :header-rows: 1",
+        "",
+        "   * - Quantity / subset",
+        "     - Points",
+        "     - Error unit",
+        "     - Maximum absolute",
+        "     - RMS",
+    ]
+    for label, values, unit in (
+        ("Skin friction", differences[:, 0], "%"),
+        ("Momentum thickness", differences[:, 1], "%"),
+        ("99-percent thickness", differences[:, 2], "%"),
+        ("Displacement, coefficient magnitude >= 0.05", differences[relative, 3], "%"),
+        (
+            "Displacement, coefficient magnitude < 0.05",
+            absolute_errors[~relative],
+            "coefficient",
+        ),
+    ):
+        limit = 1e-9 if unit == "coefficient" else 1e-7
+        maximum = format_bounded_error(float(np.max(np.abs(values))), limit, digits=3)
+        rms = format_bounded_error(float(np.sqrt(np.mean(values**2))), limit, digits=3)
+        lines.extend(
+            [
+                f"   * - {label}",
+                f"     - {len(values)}",
+                f"     - {unit}",
+                f"     - {maximum}",
+                f"     - {rms}",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def generate(*, check: bool) -> bool:
     api = _api()
     source = _source_comparison(api)
@@ -466,6 +544,11 @@ def generate(*, check: bool) -> bool:
         log_x=True,
     )
     current = True
+    current &= write_or_check(
+        ROOT / "docs/_generated/laminar_similarity_accuracy.rst",
+        _laminar_similarity_accuracy(api),
+        check=check,
+    )
     current &= write_or_check(TABLE_PATH, _rst(source, chart, invariants), check=check)
     current &= write_or_check(FRICTION_PATH, friction, check=check)
     current &= write_or_check(PROTRUSION_PATH, protrusion, check=check)

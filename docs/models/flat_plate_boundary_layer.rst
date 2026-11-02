@@ -99,11 +99,11 @@ Reynolds number and dynamic pressure
 Thickness correlations
 ^^^^^^^^^^^^^^^^^^^^^^
 
-The laminar Blasius relations are
+For ``NONE``, the laminar Blasius relations are
 
 .. math::
 
-   \frac{\delta_{99}}{x}=\frac{5}{\sqrt{Re_x}},
+   \frac{\delta_{99}}{x}=\frac{4.9100}{\sqrt{Re_x}},
    \qquad
    \frac{\delta^*}{x}=\frac{1.7208}{\sqrt{Re_x}},
    \qquad
@@ -259,12 +259,14 @@ expresses this:
 
    T_r=T_e\left[1+r\frac{\gamma-1}{2}M^2\right],
    \qquad
-   r_l=\sqrt{Pr},
-   \qquad
    r_t=Pr^{1/3}.
 
-If ``wall_temperature`` is omitted, the adiabatic value :math:`T_w=T_r` is
-used.
+This recovery-factor expression applies to turbulent points. For laminar points,
+the adiabatic wall temperature is solved directly with zero wall heat flux;
+:math:`r_l=\sqrt{Pr}` is only an initial estimate. If ``wall_temperature`` is
+omitted, the corresponding adiabatic wall is used. The mode names ``ECKERT``,
+``VAN_DRIEST_II``, and ``VAN_DRIEST_II_WALL_TEMPERATURE`` select the turbulent
+treatment; all three use the same laminar similarity solution.
 
 Eckert reference-temperature method
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -272,7 +274,7 @@ Eckert reference-temperature method
 Eckert's idea is to keep the incompressible formulas but evaluate density and
 viscosity at a single **reference temperature** :math:`T^*` that represents
 conditions inside the boundary layer, somewhere between the edge and the wall.
-For ``CompressibilityCorrection.ECKERT``,
+For turbulent portions of ``CompressibilityCorrection.ECKERT``,
 
 .. math::
 
@@ -302,21 +304,143 @@ The average coefficient is converted in the same way, because :math:`T^*` is
 constant along a plate with constant edge and wall conditions. The returned
 coefficients, ``wall_shear_stress``, and ``drag_per_unit_width`` therefore use
 the edge dynamic-pressure definitions given above
-(:ref:`White, 2006 <ref-white-2006>`). For laminar flow this is the familiar
-Chapman--Rubesin form :math:`C_{f,x}=0.664\sqrt{C^*/Re_x}` with
-:math:`C^*=\rho^*\mu^*/(\rho_e\mu_e)`. At :math:`M\to0` with
-:math:`T_w=T_e` and a supplied edge viscosity :math:`\mu_e=\mu(T_e)`,
-:math:`T^*=T_e` and the friction and laminar thicknesses reduce to ``NONE``. Turbulent
-thicknesses remain unavailable. If the supplied edge
-viscosity differs from the selected model, the effective Reynolds number need
-not equal :math:`Re_x`.
+(:ref:`White, 2006 <ref-white-2006>`). Laminar portions instead use the
+similarity solution described below and return the edge Reynolds number.
 
-Laminar thickness correlations are evaluated at :math:`Re_x^*` without a
-density conversion. For laminar Blasius flow,
-:math:`2\,\mathrm{d}\theta_m/\mathrm{d}x=C_f^*` rather than :math:`C_{f,x}`.
 For turbulent portions, all three thicknesses are ``NaN``: the former
 reference-property estimates were inaccurate in compressible flow. This
 also applies after the prescribed transition. Friction and drag are unchanged.
+
+Compressible laminar similarity solution
+++++++++++++++++++++++++++++++++++++++++
+
+All three compressible modes solve the Illingworth/Levy--Lees equations
+(:ref:`Illingworth, 1949 <ref-illingworth-1949>`) for laminar friction and
+thicknesses, including points before and at transition:
+
+.. math::
+
+   (Cf'')'+ff''=0,\qquad
+   (Cg'/Pr)'+fg'+(\gamma-1)M_e^2C(f'')^2=0,
+   \qquad g=T/T_e,\quad C=\frac{\mu(gT_e)}{\mu_{\mathrm{model}}(T_e)g}.
+
+The coordinate is :math:`z=\eta/\sqrt{2}` in the constant-property limit.
+No slip, no penetration, and unit edge speed and temperature give
+:math:`f(0)=f'(0)=0`, :math:`f'(\infty)=g(\infty)=1`.
+An omitted wall temperature imposes the **true adiabatic** boundary condition
+:math:`g'(0)=0`, with :math:`T_{aw}=g(0)T_e`. A specified wall imposes
+:math:`g(0)=T_w/T_e`; a separate adiabatic solve supplies
+``recovery_temperature`` even in this case. No square-root-Prandtl recovery
+approximation is imposed as a boundary condition.
+
+With :math:`u/U_e=f'`, physical lengths follow from
+:math:`\mathrm{d}y=\sqrt{2}g x/\sqrt{Re_x}\,\mathrm{d}z`:
+
+.. math::
+
+   c_f\sqrt{Re_x}=\sqrt{2}C_w f''(0),\qquad
+   \frac{\delta_{99}\sqrt{Re_x}}{x}=\sqrt{2}\int_0^{z_{99}}g\,\mathrm{d}z,
+
+   \frac{\delta^*\sqrt{Re_x}}{x}=\sqrt{2}\int_0^\infty(g-f')\,\mathrm{d}z,
+   \qquad
+   \frac{\theta_m\sqrt{Re_x}}{x}=\sqrt{2}\int_0^\infty f'(1-f')\,\mathrm{d}z.
+
+Here :math:`f'(z_{99})=0.99`. Friction and Reynolds number use the edge
+state. These expressions initially use :math:`\mu_{\mathrm{model}}(T_e)`;
+when supplied :math:`\mu_e` differs, all four coefficients multiply
+:math:`\sqrt{\mu_{\mathrm{model}}(T_e)/\mu_e}`. The momentum integral is
+checked independently against friction before enforcing the exact ZPG
+identity :math:`\theta_m=xc_f`. The average coefficient is exactly
+:math:`\bar C_f=2c_f`. The transitional mixed average uses this same laminar
+coefficient at :math:`Re_{\mathrm{tr}}`. Thus post-transition average drag
+changes; for the wall-temperature mode its momentum-integral and profile
+thicknesses also respond to this changed accumulated drag.
+
+``effective_reynolds_number`` returns the external :math:`Re_x` at laminar
+points. At zero Mach and :math:`T_w=T_e`, the numerical coefficients approach
+Blasius: 0.6641147, 4.90999, and 1.720788 for friction/momentum, delta99,
+and displacement. ``NONE`` retains its rounded 0.664, 4.9100, and 1.7208.
+Displacement thickness is signed: strong wall cooling can make its integral
+zero or negative, and the result is never clipped.
+
+The calculation groups exactly equal states (Mach, edge temperature, wall
+condition, Pr, gamma) within each call, without rounding or a persistent
+state cache. Conservative second-order finite differences and damped Newton
+iteration operate in batches of at most 256 states. A stretched, fixed
+161/321-node pair and Richardson extrapolation are followed by 321/641
+nodes only for uncertain states. The solver checks residuals, boundaries,
+positive temperatures and viscosities, grid differences, far-field decay,
+and the independent momentum integral. Remaining states use
+``scipy.integrate.solve_bvp(tol=1e-8)`` with an enlarged-domain check.
+Unresolved states raise ``ModelRangeError`` with their original input indices
+and state. Blasius and Walz profiles supply initial guesses only; they are
+not the returned physical approximation. There are no interpolation tables.
+
+Distance :math:`x` starts at the leading edge and :math:`y` points outward
+from the wall. Thicknesses are in m and temperatures in K. Assumptions are a
+perfect gas, constant cp and Pr, zero pressure gradient, and no induced
+pressure. For :math:`T_{aw}\gtrsim2000\ \mathrm{K}`, changing specific heats
+and dissociation make results indicative only; this is not a universal
+chemical threshold or a real-gas validity claim.
+
+Independent similarity comparison
++++++++++++++++++++++++++++++++++
+
+The unchanged independent ``solve_bvp`` reference generator
+``docs/scripts/build_laminar_similarity_reference.py`` produces the CSV and
+provenance JSON under
+``tests/reference_data/viscous_flow/laminar_compressible_similarity``.
+It uses Sutherland air, :math:`T_e=240\ \mathrm{K}`, :math:`Pr=0.72`,
+:math:`\gamma=1.4`, :math:`M_e=0.3,2,4,6,10,15`, and
+:math:`T_w/T_{aw}=0.1,0.3,0.5,1` (24 points). Isothermal API inputs use the
+reference's solved :math:`T_{aw}` times the prescribed ratio; the last wall
+condition is truly adiabatic. Errors below compare the library solution with
+this independent reference, with equal weight for each point.
+
+.. include:: ../_generated/laminar_similarity_accuracy.rst
+
+The acceptance bound is 0.1% relative for friction, momentum and delta99.
+For displacement coefficients of magnitude at least 0.05 it is also 0.1%;
+closer to zero the absolute coefficient error must be at most 5e-5.
+The table separates these error measures and suppresses absolute errors below
+5e-10 to avoid reporting insignificant CPU differences. These are numerical
+checks of constant-cp perfect-gas equations, not physical validation.
+The generated-assets suite also checks 200 seeded random states over
+Mach 0--20, Te 30--2000 K, and Tw/Taw 0.05--1.5, with selected independent
+collocation comparisons; timing is not a CI requirement.
+
+Independent adiabatic examples are recovered within 0.5%: at M2,
+:math:`c_f\sqrt{Re_x}=0.6356105`, :math:`\delta_{99}\sqrt{Re_x}/x=6.414710`,
+:math:`\delta^*\sqrt{Re_x}/x=3.303259`, :math:`T_{aw}/T_e=1.676431`;
+at M10 the corresponding values are 0.4258457, 29.674188, 27.668758, and
+17.628489. Tests also check the Blasius limit and reference convergence
+with domain enlargement (14 to 20) and tolerance tightening (1e-8 to 1e-10).
+
+Viscous interaction warning
++++++++++++++++++++++++++++
+
+In compressible modes the laminar points are checked using
+
+.. math::
+
+   \bar\chi=M_e^3\sqrt{\frac{C_w}{Re_{x,e}}},\qquad
+   C_w=\frac{T_e}{T_w}\frac{\mu(T_w)}{\mu_e}.
+
+Wall viscosity uses the selected transport model and the laminar wall
+temperature (the solved adiabatic temperature when omitted). If any laminar
+point has :math:`\bar\chi>1`, one
+:class:`~aerophysics.exceptions.ApplicabilityWarning` reports the maximum
+laminar value and the count of points exceeding one. The pressure induced
+near the leading edge invalidates the assumed ZPG flat-plate estimate.
+Turbulent points and ``NONE`` are excluded. This diagnostic does not correct
+the edge pressure or solve the interaction.
+
+As order-of-magnitude guidance from :ref:`Hayes and Probstein (1959)
+<ref-hayes-probstein-1959>`, at :math:`\bar\chi\approx1` the weak-interaction
+pressure rise is about 10% for a cold wall and 30% for an adiabatic wall;
+weak and strong interaction meet around :math:`\bar\chi\approx3`.
+These are not universal pressure corrections. For the strong-interaction
+similarity problem see :ref:`Bush (1966) <ref-bush-1966>`.
 
 Van Driest II method
 ~~~~~~~~~~~~~~~~~~~~
@@ -393,8 +517,8 @@ Both equations are solved numerically. If no solution can be found, the call
 raises :class:`~aerophysics.exceptions.ModelRangeError`. At the
 incompressible adiabatic limit :math:`M\to0`, all factors equal one.
 
-Laminar portions of a VD2 calculation still use Eckert, including the
-:math:`T_e/T^*` conversion to the edge basis and the laminar thicknesses.
+Laminar portions of a VD2 calculation use the same similarity solution as
+all other compressible modes, with friction on the edge basis.
 Turbulent :math:`\delta_{99}`, :math:`\delta^*`, and :math:`\theta_m` are
 ``NaN``, including post-transition points. The former thickness estimates
 at :math:`F_\theta Re_x` were inaccurate in compressible flow.
@@ -467,8 +591,8 @@ Thus :math:`w=1` for an adiabatic wall. This mode ignores
 ``turbulent_correlation`` and uses the Schlichting pair, rather than the
 Willems pair used by the original VD2 mode. At constant edge and wall
 conditions, :math:`c_f=\mathrm{d}(x\bar C_F)/\mathrm{d}x`.
-For ``TRANSITIONAL``, the laminar part uses Eckert and the average uses the
-specified-transition mixing equation above with this new turbulent average.
+For ``TRANSITIONAL``, the laminar part uses the similarity solution and the
+average uses the specified-transition mixing equation above with this new turbulent average.
 
 The zero-pressure-gradient momentum integral gives the full-edge momentum
 thickness and wall shear stress:
@@ -621,8 +745,8 @@ and :math:`\theta=7\delta/72` missed displacement thickness by factors of
 2--5 (underprediction) and momentum thickness by factors of 2--10
 (overprediction). Consequently ``ECKERT`` and ``VAN_DRIEST_II`` now return
 ``NaN`` for all three turbulent thicknesses, including post-transition
-points. Friction, drag, laminar portions, and all ``NONE`` outputs retain
-their existing definitions.
+points. Friction and drag retain their existing definitions. Laminar thicknesses
+use the closure above; ``NONE`` uses the Blasius constants stated earlier.
 
 Worked friction example
 ^^^^^^^^^^^^^^^^^^^^^^^
