@@ -330,7 +330,7 @@ def _warn_power_law_thickness_range(
     ):
         warnings.warn(
             "one-fifth-power turbulent thicknesses are nominally valid only for "
-            "Reynolds number <= 1e7; delta99 is underestimated at higher Reynolds "
+            "Reynolds number <= 1e7; delta99 can be biased at higher Reynolds "
             "number (use TurbulentModel.SCHLICHTING_LOG_WAKE)",
             ApplicabilityWarning,
             stacklevel=3,
