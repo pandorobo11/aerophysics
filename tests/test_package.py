@@ -205,8 +205,7 @@ def test_public_models_are_exported_from_their_owning_modules() -> None:
         ),
         "boundary_layer": (
             "BoundaryLayerRegime",
-            "TurbulentCorrelation",
-            "CompressibilityCorrection",
+            "TurbulentModel",
             "flat_plate_boundary_layer",
         ),
         "boundary_layer_profile": (
@@ -356,3 +355,22 @@ def test_sdist_installs_into_separate_clean_environment(
         cwd=outside_checkout,
         environment=_clean_environment(),
     )
+
+
+def test_boundary_model_public_api_replaces_legacy_selections() -> None:
+    import inspect
+
+    import aerophysics
+    from aerophysics import boundary_layer
+
+    assert aerophysics.TurbulentModel is boundary_layer.TurbulentModel
+    assert "TurbulentModel" in aerophysics.__all__
+    for name in ("CompressibilityCorrection", "TurbulentCorrelation"):
+        assert not hasattr(aerophysics, name)
+        assert not hasattr(boundary_layer, name)
+        assert name not in aerophysics.__all__
+    parameters = inspect.signature(boundary_layer.flat_plate_boundary_layer).parameters
+    assert "compressibility_correction" not in parameters
+    assert "turbulent_correlation" not in parameters
+    assert parameters["compressible"].default is False
+    assert parameters["turbulent_model"].default is None

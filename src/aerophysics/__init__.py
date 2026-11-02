@@ -7,8 +7,7 @@ from pathlib import Path
 from aerophysics.atmosphere import AtmosphereState, standard_atmosphere
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
-    CompressibilityCorrection,
-    TurbulentCorrelation,
+    TurbulentModel,
     flat_plate_boundary_layer,
 )
 from aerophysics.boundary_layer_profile import (
@@ -94,7 +93,6 @@ __all__ = [
     "BeattieBridgemanGas",
     "BilligShockShapeResult",
     "BoundaryLayerRegime",
-    "CompressibilityCorrection",
     "CompressibleBoundaryLayerProfileResult",
     "CompressibleVelocityTransformation",
     "DetachedShockComparisonResult",
@@ -117,7 +115,7 @@ __all__ = [
     "ThermallyPerfectGas",
     "ThermodynamicState",
     "TransformedVelocityProfileResult",
-    "TurbulentCorrelation",
+    "TurbulentModel",
     "VibrationalMode",
     "__version__",
     "billig_shock_shape",

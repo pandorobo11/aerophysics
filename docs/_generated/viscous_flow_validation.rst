@@ -30,17 +30,9 @@ Published-correlation comparison
      - 6.661e-16
      - 1e+05
      - Pass
-   * - power-law delta99
+   * - one-fifth-power thickness delta99
      - 1.998e-15
      - 1e+06
-     - Pass
-   * - power-law local Cf
-     - 1.554e-15
-     - 1e+07
-     - Pass
-   * - power-law average Cf
-     - 3.109e-15
-     - 1e+09
      - Pass
    * - Schlichting average Cf
      - 1.332e-15

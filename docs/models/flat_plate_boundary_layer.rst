@@ -54,6 +54,54 @@ The caller selects
 ``TURBULENT``, or ``TRANSITIONAL``. A transitional calculation requires a
 ``transition_reynolds`` value; the API does not infer natural transition.
 
+Set ``compressible`` independently of the turbulent model. It accepts Python
+``bool`` and NumPy ``bool_`` values. Thermal inputs (``mach``,
+``edge_temperature``, and ``wall_temperature``) require ``compressible=True``;
+Mach and edge temperature are mandatory in that case. Temperatures use K.
+
+.. list-table:: Valid model selections
+   :header-rows: 1
+   :widths: 22 16 62
+
+   * - Regime
+     - ``compressible``
+     - ``turbulent_model``
+   * - ``LAMINAR``
+     - False or True
+     - Must be None: Blasius for False, compressible similarity for True
+   * - ``TURBULENT`` / ``TRANSITIONAL``
+     - False
+     - None defaults to SCHLICHTING; only SCHLICHTING accepted
+   * - ``TURBULENT`` / ``TRANSITIONAL``
+     - True
+     - Required: ECKERT, VAN_DRIEST_II,
+       or VAN_DRIEST_II_WALL_TEMPERATURE
+
+Other combinations raise ``ValueError``; an irrelevant selection is never
+silently ignored. Each member of
+:class:`~aerophysics.boundary_layer.TurbulentModel` has a ``compressible``
+property indicating which setting it requires.
+
+.. list-table:: TurbulentModel friction and thickness treatment
+   :header-rows: 1
+   :widths: 28 38 34
+
+   * - Member
+     - Skin friction (equations below)
+     - Thicknesses
+   * - ``SCHLICHTING``
+     - Logarithmic mean friction and accumulated-drag derivative
+     - One-fifth-power delta99, one-seventh-power profile integrals
+   * - ``ECKERT``
+     - Schlichting at Eckert reference state, converted to edge basis
+     - All three NaN at turbulent points
+   * - ``VAN_DRIEST_II``
+     - Transformed implicit Willems equations
+     - All three NaN at turbulent points
+   * - ``VAN_DRIEST_II_WALL_TEMPERATURE``
+     - Transformed Schlichting pair multiplied by (Tw/Tr)**0.064
+     - Momentum-integral theta, Van Driest/Walz delta99 and displacement
+
 Reynolds number and dynamic pressure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -99,7 +147,7 @@ Reynolds number and dynamic pressure
 Thickness correlations
 ^^^^^^^^^^^^^^^^^^^^^^
 
-For ``NONE``, the laminar Blasius relations are
+For ``compressible=False``, the laminar Blasius relations are
 
 .. math::
 
@@ -109,7 +157,8 @@ For ``NONE``, the laminar Blasius relations are
    \qquad
    \frac{\theta_m}{x}=\frac{0.664}{\sqrt{Re_x}}.
 
-For a turbulent boundary layer with ``NONE``, the one-fifth-power thickness and
+For a turbulent boundary layer with ``compressible=False``, the one-fifth-power
+**thickness** correlation and
 one-seventh-power-profile estimates are
 
 .. math::
@@ -191,7 +240,7 @@ assume constant :math:`q_e` along the plate. They are flat-plate
      - Accumulated one-sided drag per unit width
      - N/m
 
-For ``BoundaryLayerRegime.LAMINAR``, the Blasius solution gives
+For ``BoundaryLayerRegime.LAMINAR`` with ``compressible=False``, the Blasius solution gives
 
 .. math::
 
@@ -199,15 +248,7 @@ For ``BoundaryLayerRegime.LAMINAR``, the Blasius solution gives
    \qquad
    \bar C_f=\frac{1.328}{\sqrt{Re_x}}.
 
-For ``TurbulentCorrelation.POWER_LAW``,
-
-.. math::
-
-   C_{f,x}=0.0592Re_x^{-1/5},
-   \qquad
-   \bar C_f=0.074Re_x^{-1/5}.
-
-The default ``TurbulentCorrelation.SCHLICHTING`` model uses
+The default ``TurbulentModel.SCHLICHTING`` model uses
 
 .. math::
 
@@ -264,9 +305,8 @@ expresses this:
 This recovery-factor expression applies to turbulent points. For laminar points,
 the adiabatic wall temperature is solved directly with zero wall heat flux;
 :math:`r_l=\sqrt{Pr}` is only an initial estimate. If ``wall_temperature`` is
-omitted, the corresponding adiabatic wall is used. The mode names ``ECKERT``,
-``VAN_DRIEST_II``, and ``VAN_DRIEST_II_WALL_TEMPERATURE`` select the turbulent
-treatment; all three use the same laminar similarity solution.
+omitted, the corresponding adiabatic wall is used. With ``compressible=True``,
+laminar points use the compressible similarity solution.
 
 Eckert reference-temperature method
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -274,7 +314,7 @@ Eckert reference-temperature method
 Eckert's idea is to keep the incompressible formulas but evaluate density and
 viscosity at a single **reference temperature** :math:`T^*` that represents
 conditions inside the boundary layer, somewhere between the edge and the wall.
-For turbulent portions of ``CompressibilityCorrection.ECKERT``,
+For turbulent portions of ``TurbulentModel.ECKERT``,
 
 .. math::
 
@@ -314,7 +354,7 @@ also applies after the prescribed transition. Friction and drag are unchanged.
 Compressible laminar similarity solution
 ++++++++++++++++++++++++++++++++++++++++
 
-All three compressible modes solve the Illingworth/Levy--Lees equations
+With ``compressible=True``, laminar points solve the Illingworth/Levy--Lees equations
 (:ref:`Illingworth, 1949 <ref-illingworth-1949>`) for laminar friction and
 thicknesses, including points before and at transition:
 
@@ -359,7 +399,7 @@ thicknesses also respond to this changed accumulated drag.
 ``effective_reynolds_number`` returns the external :math:`Re_x` at laminar
 points. At zero Mach and :math:`T_w=T_e`, the numerical coefficients approach
 Blasius: 0.6641147, 4.90999, and 1.720788 for friction/momentum, delta99,
-and displacement. ``NONE`` retains its rounded 0.664, 4.9100, and 1.7208.
+and displacement. ``compressible=False`` retains its rounded 0.664, 4.9100, and 1.7208.
 Displacement thickness is signed: strong wall cooling can make its integral
 zero or negative, and the result is never clipped.
 
@@ -432,7 +472,7 @@ point has :math:`\bar\chi>1`, one
 :class:`~aerophysics.exceptions.ApplicabilityWarning` reports the maximum
 laminar value and the count of points exceeding one. The pressure induced
 near the leading edge invalidates the assumed ZPG flat-plate estimate.
-Turbulent points and ``NONE`` are excluded. This diagnostic does not correct
+Turbulent points and ``compressible=False`` are excluded. This diagnostic does not correct
 the edge pressure or solve the interaction.
 
 As order-of-magnitude guidance from :ref:`Hayes and Probstein (1959)
@@ -449,7 +489,7 @@ Van Driest II maps the compressible turbulent boundary layer onto an
 equivalent incompressible one. It is derived from a mixing-length model with
 the density variation across the layer included, and it is generally more
 accurate than a reference-temperature method for turbulent flow at high Mach
-number. For turbulent ``CompressibilityCorrection.VAN_DRIEST_II``, the
+number. For turbulent ``TurbulentModel.VAN_DRIEST_II``, the
 Hopkins--Inouye form first defines
 
 .. math::
@@ -517,13 +557,12 @@ Both equations are solved numerically. If no solution can be found, the call
 raises :class:`~aerophysics.exceptions.ModelRangeError`. At the
 incompressible adiabatic limit :math:`M\to0`, all factors equal one.
 
-Laminar portions of a VD2 calculation use the same similarity solution as
-all other compressible modes, with friction on the edge basis.
+With ``compressible=True``, laminar portions use the similarity solution,
+with friction on the edge basis.
 Turbulent :math:`\delta_{99}`, :math:`\delta^*`, and :math:`\theta_m` are
 ``NaN``, including post-transition points. The former thickness estimates
 at :math:`F_\theta Re_x` were inaccurate in compressible flow.
-``turbulent_correlation`` is ignored for VD2 turbulent portions and remains
-active for ``NONE`` and ``ECKERT``. The Willems friction equations are unchanged.
+``TurbulentModel.VAN_DRIEST_II`` selects the Willems friction equations.
 
 .. list-table:: Compressibility symbols
    :header-rows: 1
@@ -561,7 +600,7 @@ active for ``NONE`` and ``ECKERT``. The Willems friction equations are unchanged
 Van Driest II with wall-temperature correction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Select ``CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE`` to obtain
+Select ``TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE`` to obtain
 friction and profile-based thicknesses for compressible turbulent flow.
 This empirical extension combines the VD2 factors above with a wall-temperature
 correction and a momentum-integral closure. The local edge state sets
@@ -587,9 +626,8 @@ accumulated-drag derivative, from
    c_f=\frac{w c_{f,i}}{F_C}, \qquad
    \bar C_F=\frac{w\bar C_{F,i}}{F_C}.
 
-Thus :math:`w=1` for an adiabatic wall. This mode ignores
-``turbulent_correlation`` and uses the Schlichting pair, rather than the
-Willems pair used by the original VD2 mode. At constant edge and wall
+Thus :math:`w=1` for an adiabatic wall. This model uses the Schlichting pair;
+``TurbulentModel.VAN_DRIEST_II`` uses the Willems pair. At constant edge and wall
 conditions, :math:`c_f=\mathrm{d}(x\bar C_F)/\mathrm{d}x`.
 For ``TRANSITIONAL``, the laminar part uses the similarity solution and the
 average uses the specified-transition mixing equation above with this new turbulent average.
@@ -746,7 +784,7 @@ and :math:`\theta=7\delta/72` missed displacement thickness by factors of
 (overprediction). Consequently ``ECKERT`` and ``VAN_DRIEST_II`` now return
 ``NaN`` for all three turbulent thicknesses, including post-transition
 points. Friction and drag retain their existing definitions. Laminar thicknesses
-use the closure above; ``NONE`` uses the Blasius constants stated earlier.
+use the closure above; ``compressible=False`` uses the Blasius constants stated earlier.
 
 Worked friction example
 ^^^^^^^^^^^^^^^^^^^^^^^

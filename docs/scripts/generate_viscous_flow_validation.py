@@ -21,8 +21,7 @@ def _api() -> tuple[object, ...]:
     sys.path.insert(0, str(ROOT / "src"))
     from aerophysics.boundary_layer import (
         BoundaryLayerRegime,
-        CompressibilityCorrection,
-        TurbulentCorrelation,
+        TurbulentModel,
         flat_plate_boundary_layer,
     )
     from aerophysics.boundary_layer_profile import (
@@ -35,8 +34,7 @@ def _api() -> tuple[object, ...]:
 
     return (
         BoundaryLayerRegime,
-        CompressibilityCorrection,
-        TurbulentCorrelation,
+        TurbulentModel,
         CompressibleVelocityTransformation,
         flat_plate_boundary_layer,
         transform_compressible_velocity_profile,
@@ -54,7 +52,7 @@ def _rows() -> list[dict[str, str]]:
 
 
 def _source_comparison(api: tuple[object, ...]) -> dict[str, tuple[float, float]]:
-    regime_enum, _, correlation_enum, _, flat_plate, _, _, _, _ = api
+    regime_enum, model_enum, _, flat_plate, _, _, _, _ = api
     maxima = {
         name: (0.0, 0.0)
         for name in (
@@ -63,9 +61,7 @@ def _source_comparison(api: tuple[object, ...]) -> dict[str, tuple[float, float]
             "Blasius momentum thickness",
             "Blasius local Cf",
             "Blasius average Cf",
-            "power-law delta99",
-            "power-law local Cf",
-            "power-law average Cf",
+            "one-fifth-power thickness delta99",
             "Schlichting average Cf",
         )
     }
@@ -78,21 +74,13 @@ def _source_comparison(api: tuple[object, ...]) -> dict[str, tuple[float, float]
             1.0,
             regime=regime_enum.LAMINAR,
         )
-        power = flat_plate(
-            1.0,
-            reynolds,
-            1.0,
-            1.0,
-            regime=regime_enum.TURBULENT,
-            turbulent_correlation=correlation_enum.POWER_LAW,
-        )
         schlichting = flat_plate(
             1.0,
             reynolds,
             1.0,
             1.0,
             regime=regime_enum.TURBULENT,
-            turbulent_correlation=correlation_enum.SCHLICHTING,
+            turbulent_model=model_enum.SCHLICHTING,
         )
         comparisons = {
             "Blasius delta99": (
@@ -115,14 +103,9 @@ def _source_comparison(api: tuple[object, ...]) -> dict[str, tuple[float, float]
                 laminar.average_skin_friction_coefficient,
                 "blasius_average_cf",
             ),
-            "power-law delta99": (power.boundary_layer_thickness, "power_delta_over_x"),
-            "power-law local Cf": (
-                power.local_skin_friction_coefficient,
-                "power_local_cf",
-            ),
-            "power-law average Cf": (
-                power.average_skin_friction_coefficient,
-                "power_average_cf",
+            "one-fifth-power thickness delta99": (
+                schlichting.boundary_layer_thickness,
+                "power_delta_over_x",
             ),
             "Schlichting average Cf": (
                 schlichting.average_skin_friction_coefficient,
@@ -138,7 +121,7 @@ def _source_comparison(api: tuple[object, ...]) -> dict[str, tuple[float, float]
 
 
 def _chart_comparison(api: tuple[object, ...]) -> tuple[float, float]:
-    regime_enum, correction_enum, _, _, flat_plate, _, _, viscosity_model, gas = api
+    regime_enum, model_enum, _, flat_plate, _, _, viscosity_model, gas = api
     maximum = (0.0, 0.0)
     with (REFERENCE / "van_driest_ii_chart.csv").open(
         newline="", encoding="utf-8"
@@ -157,7 +140,8 @@ def _chart_comparison(api: tuple[object, ...]) -> tuple[float, float]:
                 1.0,
                 edge_viscosity,
                 regime=regime_enum.TURBULENT,
-                compressibility_correction=correction_enum.VAN_DRIEST_II,
+                compressible=True,
+                turbulent_model=model_enum.VAN_DRIEST_II,
                 mach=mach,
                 edge_temperature=temperature,
                 wall_temperature=(
@@ -175,8 +159,7 @@ def _chart_comparison(api: tuple[object, ...]) -> tuple[float, float]:
 def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
     (
         regime_enum,
-        correction_enum,
-        _,
+        model_enum,
         transformation_enum,
         flat_plate,
         transform_profile,
@@ -209,7 +192,8 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
         1.0,
         edge_viscosity,
         regime=regime_enum.TURBULENT,
-        compressibility_correction=correction_enum.VAN_DRIEST_II,
+        compressible=True,
+        turbulent_model=model_enum.VAN_DRIEST_II,
         mach=0.0,
         edge_temperature=300.0,
     )
@@ -219,7 +203,8 @@ def _invariants(api: tuple[object, ...]) -> list[tuple[str, str, float, bool]]:
         1.0,
         edge_viscosity,
         regime=regime_enum.TURBULENT,
-        compressibility_correction=correction_enum.VAN_DRIEST_II,
+        compressible=True,
+        turbulent_model=model_enum.VAN_DRIEST_II,
         mach=1.0e-6,
         edge_temperature=300.0,
     )
@@ -425,7 +410,7 @@ def _rst(
 
 
 def _laminar_similarity_accuracy(api: tuple[object, ...]) -> str:
-    regime_enum, correction_enum, _, _, flat_plate, _, _, viscosity_model, _ = api
+    regime_enum, _, _, flat_plate, _, _, viscosity_model, _ = api
     with (REFERENCE / "laminar_compressible_similarity.csv").open(
         newline="", encoding="utf-8"
     ) as stream:
@@ -442,7 +427,7 @@ def _laminar_similarity_accuracy(api: tuple[object, ...]) -> str:
             1.0,
             viscosity,
             regime=regime_enum.LAMINAR,
-            compressibility_correction=correction_enum.ECKERT,
+            compressible=True,
             mach=row["mach"],
             edge_temperature=240.0,
             wall_temperature=(
@@ -509,13 +494,12 @@ def generate(*, check: bool) -> bool:
     invariants = _invariants(api)
     reynolds = np.geomspace(1.0e5, 1.0e9, 400)
     laminar = 0.664 / np.sqrt(reynolds)
-    power = 0.0592 * reynolds**-0.2
     schlichting_average = 0.455 / np.log10(reynolds) ** 2.58
     schlichting = schlichting_average * (1.0 - 2.58 / np.log(reynolds))
     friction = line_chart_svg(
         title="Smooth flat-plate local skin friction",
         description=(
-            "Blasius, one-fifth-power, and Schlichting local skin-friction "
+            "Blasius and Schlichting local skin-friction "
             "correlations over Reynolds number."
         ),
         x_label="Reynolds number [-]",
@@ -523,7 +507,6 @@ def generate(*, check: bool) -> bool:
         x=reynolds,
         series=(
             ("Blasius", "#0072B2", laminar),
-            ("Power law", "#D55E00", power),
             ("Schlichting", "#009E73", schlichting),
         ),
         log_x=True,

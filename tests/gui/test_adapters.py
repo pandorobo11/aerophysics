@@ -6,8 +6,7 @@ import pytest
 from aerophysics import FlightCondition
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
-    CompressibilityCorrection,
-    TurbulentCorrelation,
+    TurbulentModel,
 )
 from aerophysics.detached_shock import DetachedShockGeometry
 from aerophysics.gui.adapters import (
@@ -541,9 +540,9 @@ def test_flat_plate_adapter_and_warning_capture() -> None:
         edge_density=1.0,
         edge_dynamic_viscosity=1e-5,
         regime=BoundaryLayerRegime.LAMINAR,
-        turbulent_correlation=TurbulentCorrelation.SCHLICHTING,
+        turbulent_model=None,
         transition_reynolds=None,
-        compressibility_correction=CompressibilityCorrection.NONE,
+        compressible=False,
         mach=None,
         edge_temperature=None,
         wall_temperature=None,
@@ -556,9 +555,9 @@ def test_flat_plate_adapter_and_warning_capture() -> None:
         edge_density=1.0,
         edge_dynamic_viscosity=1e-5,
         regime=BoundaryLayerRegime.TURBULENT,
-        turbulent_correlation=TurbulentCorrelation.SCHLICHTING,
         transition_reynolds=None,
-        compressibility_correction=CompressibilityCorrection.NONE,
+        compressible=False,
+        turbulent_model=TurbulentModel.SCHLICHTING,
         mach=None,
         edge_temperature=None,
         wall_temperature=None,
@@ -576,9 +575,9 @@ def test_flat_plate_compressible_distance_sweep() -> None:
         edge_density=0.5,
         edge_dynamic_viscosity=1.6e-5,
         regime=BoundaryLayerRegime.TRANSITIONAL,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
         transition_reynolds=2e6,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
+        turbulent_model=TurbulentModel.ECKERT,
         mach=2.0,
         edge_temperature=250.0,
         wall_temperature=None,

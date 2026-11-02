@@ -336,7 +336,10 @@ render_boundary_layer(UnitPreferences())
         app.number_input(key="boundary_sweep_points").set_value(3).run()
         app.checkbox(key="boundary_sweep_log").uncheck().run()
     if mach is not None:
-        app.selectbox(key="boundary_correction").set_value("Eckert基準温度法").run()
+        app.checkbox(key="boundary_compressible").check().run()
+        app.selectbox(key="boundary_turbulent_model").set_value(
+            "Eckert基準温度法\uff08Schlichting\uff09"
+        ).run()
         assert app.number_input(key="boundary_mach").value == 0.3
         app.number_input(key="boundary_mach").set_value(mach).run()
     app.button(key="FormSubmitter:boundary_form-計算").click().run()
@@ -1337,7 +1340,13 @@ render_heating(UnitPreferences())
     assert app.session_state["heating_payload"] == (result, saved)
 
 
-@pytest.mark.parametrize("correction", ["Eckert基準温度法", "Van Driest II"])
+@pytest.mark.parametrize(
+    "correction",
+    [
+        "Eckert基準温度法\uff08Schlichting\uff09",
+        "Van Driest II\uff08Willems の式\uff09",
+    ],
+)
 def test_boundary_nan_metrics_exports_and_save_guard(correction: str) -> None:
     from aerophysics.gui.tables import display_rows, rows_to_csv
 
@@ -1347,7 +1356,8 @@ from aerophysics.gui.units import UnitPreferences
 render_boundary_layer(UnitPreferences())
 """
     app = AppTest.from_string(script, default_timeout=30).run()
-    app.selectbox(key="boundary_correction").set_value(correction).run()
+    app.checkbox(key="boundary_compressible").check().run()
+    app.selectbox(key="boundary_turbulent_model").set_value(correction).run()
     app.button(key="FormSubmitter:boundary_form-計算").click().run()
     assert not app.exception and not app.error
     thickness = next(metric for metric in app.metric if metric.label == "境界層厚さ")
@@ -1380,12 +1390,13 @@ from aerophysics.gui.units import UnitPreferences
 render_boundary_layer(UnitPreferences())
 """
     app = AppTest.from_string(script, default_timeout=30).run()
+    app.checkbox(key="boundary_compressible").check().run()
     assert (
-        "Van Driest II\uff0b壁温補正"
-        in app.selectbox(key="boundary_correction").options
+        "Van Driest II\uff0b壁温補正\uff08Schlichting\uff09"
+        in app.selectbox(key="boundary_turbulent_model").options
     )
-    app.selectbox(key="boundary_correction").set_value(
-        "Van Driest II\uff0b壁温補正"
+    app.selectbox(key="boundary_turbulent_model").set_value(
+        "Van Driest II\uff0b壁温補正\uff08Schlichting\uff09"
     ).run()
     app.number_input(key="boundary_velocity").set_value(620.0).run()
     app.number_input(key="boundary_mach").set_value(2.0).run()
@@ -1394,8 +1405,7 @@ render_boundary_layer(UnitPreferences())
     assert not app.exception and not app.error
     result, configuration = app.session_state["boundary_payload"]
     assert (
-        configuration["models"]["compressibility_correction"]
-        == "van_driest_ii_wall_temperature"
+        configuration["models"]["turbulent_model"] == "van_driest_ii_wall_temperature"
     )
     assert math.isfinite(result.rows[0]["boundary_layer_thickness"])
     app.button(key="boundary_save_case").click().run()
@@ -1448,3 +1458,93 @@ render_boundary_layer(UnitPreferences())
     assert not app.exception
     assert any("保存できません" in warning.value for warning in app.warning)
     assert "current_boundary_layer_case" not in app.session_state
+
+
+def test_boundary_model_options_and_laminar_caption() -> None:
+    script = """
+from aerophysics.gui.pages import render_boundary_layer
+from aerophysics.gui.units import UnitPreferences
+render_boundary_layer(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    assert app.selectbox(key="boundary_turbulent_model").options == [
+        "Schlichting",
+    ]
+    assert app.selectbox(key="boundary_turbulent_model").value == "schlichting"
+    app.checkbox(key="boundary_compressible").check().run()
+    assert app.selectbox(key="boundary_turbulent_model").options == [
+        "Van Driest II\uff0b壁温補正\uff08Schlichting\uff09",
+        "Van Driest II\uff08Willems の式\uff09",
+        "Eckert基準温度法\uff08Schlichting\uff09",
+    ]
+    assert (
+        app.selectbox(key="boundary_turbulent_model").value
+        == "van_driest_ii_wall_temperature"
+    )
+    app.checkbox(key="boundary_compressible").uncheck().run()
+    assert app.selectbox(key="boundary_turbulent_model").value == "schlichting"
+    app.selectbox(key="boundary_regime").set_value("層流").run()
+    assert not any(widget.key == "boundary_turbulent_model" for widget in app.selectbox)
+    assert any(caption.value == "層流\uff1aBlasius 解" for caption in app.caption)
+    app.checkbox(key="boundary_compressible").check().run()
+    assert not any(widget.key == "boundary_turbulent_model" for widget in app.selectbox)
+    assert any(caption.value == "層流\uff1a圧縮性相似解" for caption in app.caption)
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert app.session_state["boundary_payload"][1]["models"]["turbulent_model"] is None
+    app.selectbox(key="boundary_regime").set_value("指定遷移").run()
+    assert app.selectbox(key="boundary_turbulent_model")
+    assert any(caption.value == "層流\uff1a圧縮性相似解" for caption in app.caption)
+
+
+@pytest.mark.parametrize("regime", ["laminar", "turbulent", "transitional"])
+def test_boundary_legacy_settings_calculate_and_replay(regime: str) -> None:
+    import json
+
+    from aerophysics.gui.config import load_configuration
+    from aerophysics.gui.units import UnitPreferences
+
+    script = """
+from aerophysics.gui.pages import render_boundary_layer
+from aerophysics.gui.units import UnitPreferences
+render_boundary_layer(UnitPreferences())
+"""
+    legacy = {
+        "schema_version": 1,
+        "calculator": "boundary_layer",
+        "mode": "single",
+        "inputs_si": {
+            "distance": 1.0,
+            "edge_velocity": 620.0,
+            "edge_density": 0.5,
+            "edge_dynamic_viscosity": 1.55e-5,
+            "transition_reynolds": 5e5 if regime == "transitional" else None,
+            "mach": 2.0,
+            "edge_temperature": 240.0,
+            "wall_temperature": None,
+        },
+        "models": {
+            "source": "manual",
+            "regime": regime,
+            "compressibility_correction": "van_driest_ii_wall_temperature",
+            "turbulent_correlation": "power_law",
+        },
+        "display_units": UnitPreferences().to_dict(),
+    }
+    app = AppTest.from_string(script, default_timeout=30)
+    app.session_state["pending_boundary_layer_configuration"] = load_configuration(
+        json.dumps(legacy)
+    )
+    app.run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception and not app.error
+    result, saved = app.session_state["boundary_payload"]
+    assert "compressibility_correction" not in saved["models"]
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_boundary_layer_configuration"] = load_configuration(
+        dump_configuration(saved)
+    )
+    replay.run()
+    replay.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert replay.session_state["boundary_payload"] == (result, saved)

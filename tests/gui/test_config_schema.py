@@ -334,3 +334,174 @@ def test_heating_schema_validation() -> None:
                 model_values,
                 {"field": "sweep_angle", "start": start, "stop": stop, "points": 2},
             )
+
+
+def _boundary_configuration(models: object) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "calculator": "boundary_layer",
+        "mode": "single",
+        "inputs_si": {
+            "distance": 1.0,
+            "edge_velocity": 620.0,
+            "edge_density": 0.5,
+            "edge_dynamic_viscosity": 1.55e-5,
+            "transition_reynolds": None,
+            "mach": 2.0,
+            "edge_temperature": 240.0,
+            "wall_temperature": None,
+        },
+        "models": models,
+        "display_units": UnitPreferences().to_dict(),
+    }
+
+
+@pytest.mark.parametrize("regime", ["laminar", "turbulent", "transitional"])
+@pytest.mark.parametrize(
+    "correction", ["none", "eckert", "van_driest_ii", "van_driest_ii_wall_temperature"]
+)
+@pytest.mark.parametrize("correlation", [None, "schlichting", "power_law"])
+def test_boundary_legacy_configuration_migration(
+    regime: str, correction: str, correlation: str | None
+) -> None:
+    import json
+
+    models = {
+        "source": "manual",
+        "regime": regime,
+        "compressibility_correction": correction,
+    }
+    if correlation is not None:
+        models["turbulent_correlation"] = correlation
+    original = _boundary_configuration(models)
+    if (
+        correlation == "power_law"
+        and regime in ("turbulent", "transitional")
+        and correction in ("none", "eckert")
+    ):
+        message = r"one-fifth-power.*power_law.*was removed; select schlichting"
+        with pytest.raises(ConfigurationError, match=message):
+            load_configuration(json.dumps(original))
+        with pytest.raises(ConfigurationError, match=message):
+            dump_configuration(original)
+        return
+    loaded = load_configuration(json.dumps(original))
+    base = correlation or "schlichting"
+    expected_model = (
+        None if regime == "laminar" else base if correction == "none" else correction
+    )
+    assert loaded["models"] == {
+        "source": "manual",
+        "regime": regime,
+        "compressible": correction != "none",
+        "turbulent_model": expected_model,
+    }
+    # Migration does not mutate the caller's object, and exports only the new keys.
+    assert "compressible" not in models
+    exported = dump_configuration(original)
+    assert "turbulent_correlation" not in exported
+    assert "compressibility_correction" not in exported
+    assert load_configuration(exported) == loaded
+    assert loaded["schema_version"] == 1
+
+
+@pytest.mark.parametrize(
+    "legacy", ["compressibility_correction", "turbulent_correlation"]
+)
+@pytest.mark.parametrize("new", ["compressible", "turbulent_model"])
+def test_boundary_rejects_mixed_setting_keys(legacy: str, new: str) -> None:
+    with pytest.raises(ConfigurationError, match="must not mix"):
+        validate_configuration(
+            _boundary_configuration(
+                {
+                    "source": "manual",
+                    "regime": "turbulent",
+                    legacy: "none",
+                    new: None,
+                }
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("regime", "compressible", "model"),
+    [
+        ("laminar", False, "schlichting"),
+        ("laminar", True, "van_driest_ii"),
+        ("turbulent", False, "eckert"),
+        ("transitional", True, "power_law"),
+        ("turbulent", True, None),
+        ("turbulent", 1, "schlichting"),
+        ("turbulent", False, "invalid"),
+    ],
+)
+def test_boundary_rejects_invalid_new_settings(
+    regime: str, compressible: object, model: object
+) -> None:
+    with pytest.raises(ConfigurationError):
+        validate_configuration(
+            _boundary_configuration(
+                {
+                    "source": "manual",
+                    "regime": regime,
+                    "compressible": compressible,
+                    "turbulent_model": model,
+                }
+            )
+        )
+
+
+def test_boundary_null_incompressible_model_defaults_to_schlichting() -> None:
+    loaded = validate_configuration(
+        _boundary_configuration(
+            {
+                "source": "manual",
+                "regime": "turbulent",
+                "compressible": False,
+                "turbulent_model": None,
+            }
+        )
+    )
+    models = loaded["models"]
+    assert isinstance(models, dict)
+    assert models["turbulent_model"] == "schlichting"
+
+
+@pytest.mark.parametrize(
+    "models",
+    [
+        None,
+        {
+            "source": "manual",
+            "regime": "turbulent",
+            "turbulent_correlation": "schlichting",
+        },
+        {
+            "source": "manual",
+            "regime": "turbulent",
+            "compressibility_correction": "invalid",
+        },
+    ],
+)
+def test_boundary_rejects_incomplete_or_invalid_legacy_settings(models: object) -> None:
+    with pytest.raises(ConfigurationError):
+        validate_configuration(_boundary_configuration(models))
+
+
+@pytest.mark.parametrize(
+    "model", ["power_law", "eckert_power_law", "eckert_schlichting"]
+)
+def test_boundary_rejects_removed_unreleased_models(model: str) -> None:
+    with pytest.raises(
+        ConfigurationError, match=r"models\.turbulent_model must be one of"
+    ):
+        validate_configuration(
+            _boundary_configuration(
+                {
+                    "source": "manual",
+                    "regime": "turbulent",
+                    "compressible": model != "power_law",
+                    "turbulent_model": model,
+                }
+            )
+        )
