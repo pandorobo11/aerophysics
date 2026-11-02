@@ -77,6 +77,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Update the locked development and CI environment (certifi, filelock,
+  msgpack, Streamlit, and Pillow) to clear the release-time dependency audit.
+  The locked Streamlit no longer pulls in GitPython. Installed package
+  requirements are unchanged.
+
 - **Breaking:** After a prescribed transition, every turbulent model now
   continues the fully turbulent plate whose momentum thickness equals the
   laminar value at transition. Local friction, average friction, drag,
@@ -165,11 +170,6 @@ uses Semantic Versioning, including during the pre-1.0 period.
   aerodynamic heating, sequential flow, and conventions pages.
 
 ### Fixed
-
-- Refresh the locked GUI and tooling dependencies to address the release-time
-  vulnerability audit: update certifi, filelock, msgpack, Streamlit, and Pillow.
-  The updated Streamlit dependency no longer requires GitPython.
-- Exclude local Claude worktrees and caches from source distributions.
 
 - Correct compressible laminar momentum thickness, previously too large by
   `T*/Te`, to `theta = x * cf_local` on the edge basis.
