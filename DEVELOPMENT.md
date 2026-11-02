@@ -53,8 +53,8 @@ Do not update the lock file as part of an ordinary environment sync.
 
 ## Dependency audit
 
-The lock uses a patched GitPython release. Run the dependency audit explicitly
-after dependency updates and before a release:
+Run the dependency audit explicitly after dependency updates and before a
+release:
 
 ```console
 scripts/check-dependencies.sh

@@ -13,7 +13,7 @@ from aerophysics.gui.advanced_adapters import BoundaryLayerCase
 from aerophysics.gui.config import dump_configuration, make_configuration
 from aerophysics.gui.units import UnitPreferences
 
-APP = Path("src/aerophysics/gui/app.py")
+APP = Path(__file__).resolve().parents[2] / "src/aerophysics/gui/app.py"
 
 
 def test_oblique_page_thermal_settings_replay_and_units() -> None:
