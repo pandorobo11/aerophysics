@@ -1468,7 +1468,8 @@ render_boundary_layer(UnitPreferences())
 """
     app = AppTest.from_string(script, default_timeout=30).run()
     assert app.selectbox(key="boundary_turbulent_model").options == [
-        "Schlichting",
+        "Schlichting\uff081/5乗則の厚さ\uff09",
+        "Schlichting\uff08対数則\uff0bウェイク則の厚さ\uff09",
     ]
     assert app.selectbox(key="boundary_turbulent_model").value == "schlichting"
     app.checkbox(key="boundary_compressible").check().run()
@@ -1495,6 +1496,38 @@ render_boundary_layer(UnitPreferences())
     app.selectbox(key="boundary_regime").set_value("指定遷移").run()
     assert app.selectbox(key="boundary_turbulent_model")
     assert any(caption.value == "層流\uff1a圧縮性相似解" for caption in app.caption)
+
+
+def test_boundary_log_wake_model_replay() -> None:
+    from aerophysics.gui.config import load_configuration
+
+    script = """
+from aerophysics.gui.pages import render_boundary_layer
+from aerophysics.gui.units import UnitPreferences
+render_boundary_layer(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="boundary_turbulent_model").set_value(
+        "schlichting_log_wake"
+    ).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception and not app.error
+    result, configuration = app.session_state["boundary_payload"]
+    assert configuration["models"]["turbulent_model"] == "schlichting_log_wake"
+    row = result.rows[0]
+    assert row["momentum_thickness"] == pytest.approx(
+        row["distance"] * row["average_skin_friction_coefficient"] / 2.0
+    )
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_boundary_layer_configuration"] = load_configuration(
+        dump_configuration(configuration)
+    )
+    replay.run()
+    assert (
+        replay.selectbox(key="boundary_turbulent_model").value == "schlichting_log_wake"
+    )
+    replay.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert replay.session_state["boundary_payload"][0] == result
 
 
 @pytest.mark.parametrize("regime", ["laminar", "turbulent", "transitional"])

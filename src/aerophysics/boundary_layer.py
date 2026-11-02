@@ -23,6 +23,9 @@ Hopkins, E. J., *Charts for Predicting Turbulent Skin Friction from the Van
 Driest Method (II)*, NASA TN D-6945, 1972.
 Willems, S. and Gülhan, A., *Experiments on Shock Induced Laminar-Turbulent
 Transition on a Flat Plate at Mach 6*, EUCASS 2013, equation (7).
+von Kármán, T., *Über laminare und turbulente Reibung*, ZAMM, 1(4), 1921.
+Coles, D., *The Law of the Wake in the Turbulent Boundary Layer*, Journal of
+Fluid Mechanics, 1(2), 1956.
 """
 
 import warnings
@@ -36,7 +39,9 @@ from scipy.optimize import brentq
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
 from aerophysics._laminar_similarity import similarity_coefficients
 from aerophysics.boundary_layer_profile import (
+    _incompressible_log_wake_profile,
     _van_driest_walz_profile,
+    _VanDriestWalzProfile,
 )
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import AIR, PerfectGas
@@ -46,6 +51,10 @@ _VD2_WALL_TEMPERATURE_EXPONENT = 0.064
 _DELTA99_MOMENTUM_FRACTION = 0.978
 # Blasius velocity reaches 99 percent at this similarity coordinate.
 _BLASIUS_DELTA99 = 4.9100
+# One-fifth-power thickness with one-seventh-power-profile integral ratios.
+_POWER_LAW_DELTA99 = 0.37
+_POWER_LAW_MOMENTUM_RATIO = 7.0 / 72.0
+_POWER_LAW_THICKNESS_MAX_REYNOLDS = 1e7
 _VISCOUS_INTERACTION_THRESHOLD = 1.0
 
 
@@ -61,7 +70,9 @@ class TurbulentModel(StrEnum):
     """Turbulent skin-friction and compressibility treatment.
 
     SCHLICHTING uses logarithmic friction and one-fifth-power thickness
-    with a one-seventh-power profile. ECKERT evaluates Schlichting friction
+    with a one-seventh-power profile. SCHLICHTING_LOG_WAKE uses the same
+    friction, momentum-integral theta, and constant-property Spalding--Coles
+    profile delta99 and displacement thickness. ECKERT evaluates Schlichting friction
     at the Eckert reference state and returns NaN thicknesses.
     VAN_DRIEST_II uses the transformed implicit Willems friction equations
     and returns NaN thicknesses. VAN_DRIEST_II_WALL_TEMPERATURE uses
@@ -70,6 +81,7 @@ class TurbulentModel(StrEnum):
     """
 
     SCHLICHTING = "schlichting"
+    SCHLICHTING_LOG_WAKE = "schlichting_log_wake"
     ECKERT = "eckert"
     VAN_DRIEST_II = "van_driest_ii"
     VAN_DRIEST_II_WALL_TEMPERATURE = "van_driest_ii_wall_temperature"
@@ -77,7 +89,10 @@ class TurbulentModel(StrEnum):
     @property
     def compressible(self) -> bool:
         """Whether this model requires compressible edge and wall states."""
-        return self is not TurbulentModel.SCHLICHTING
+        return self not in (
+            TurbulentModel.SCHLICHTING,
+            TurbulentModel.SCHLICHTING_LOG_WAKE,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,10 +211,30 @@ def _turbulent_thicknesses(
     distance: FloatArray,
     reynolds: FloatArray,
 ) -> tuple[FloatArray, FloatArray, FloatArray]:
-    thickness = 0.37 * distance * reynolds**-0.2
+    thickness = _POWER_LAW_DELTA99 * distance * reynolds**-0.2
     displacement = 0.125 * thickness
-    momentum = (7.0 / 72.0) * thickness
+    momentum = _POWER_LAW_MOMENTUM_RATIO * thickness
     return thickness, displacement, momentum
+
+
+def _virtual_origin_reynolds(
+    reynolds: FloatArray,
+    transition: float,
+    laminar_momentum_coefficient: FloatArray,
+) -> FloatArray:
+    """Return Re measured from the one-fifth-power turbulent virtual origin.
+
+    The origin is placed so that the power-law momentum thickness equals the
+    laminar momentum thickness at transition.
+    """
+    laminar_momentum_reynolds = laminar_momentum_coefficient * np.sqrt(transition)
+    turbulent_start = (
+        laminar_momentum_reynolds / (_POWER_LAW_MOMENTUM_RATIO * _POWER_LAW_DELTA99)
+    ) ** 1.25
+    return np.asarray(
+        np.maximum(reynolds, transition) - transition + turbulent_start,
+        dtype=np.float64,
+    )
 
 
 def _edge_basis_friction(
@@ -246,7 +281,7 @@ def _resolve_turbulent_model(
         return TurbulentModel.SCHLICHTING
     elif turbulent_model.compressible:
         raise ValueError(
-            "compressible=False requires SCHLICHTING; "
+            "compressible=False requires SCHLICHTING or SCHLICHTING_LOG_WAKE; "
             "use compressible=True for a compressible turbulent_model"
         )
     return turbulent_model
@@ -281,6 +316,22 @@ def _warn_outside_correlation_range(
         warnings.warn(
             "turbulent flat-plate correlations are nominally valid for "
             "5e5 <= Reynolds number <= 1e9",
+            ApplicabilityWarning,
+            stacklevel=3,
+        )
+
+
+def _warn_power_law_thickness_range(
+    thickness_reynolds: FloatArray,
+    turbulent_mask: np.ndarray,
+) -> None:
+    if np.any(
+        turbulent_mask & (thickness_reynolds > _POWER_LAW_THICKNESS_MAX_REYNOLDS)
+    ):
+        warnings.warn(
+            "one-fifth-power turbulent thicknesses are nominally valid only for "
+            "Reynolds number <= 1e7; delta99 is underestimated at higher Reynolds "
+            "number (use TurbulentModel.SCHLICHTING_LOG_WAKE)",
             ApplicabilityWarning,
             stacklevel=3,
         )
@@ -514,28 +565,10 @@ def _wall_temperature_friction(
     return _turbulent_friction(reynolds)
 
 
-def _wall_temperature_thickness(
-    theta: float,
-    velocity: float,
-    density: float,
-    temperature: float,
-    wall: float,
-    shear: float,
-    *,
-    prandtl_number: float,
-    gas: PerfectGas,
-    viscosity_model: DynamicViscosityModel,
+def _profile_closure_thickness(
+    theta: float, profile: _VanDriestWalzProfile
 ) -> tuple[float, float]:
-    profile = _van_driest_walz_profile(
-        velocity,
-        density,
-        temperature,
-        wall,
-        shear,
-        prandtl_number=prandtl_number,
-        gas=gas,
-        viscosity_model=viscosity_model,
-    )
+    """Return delta99 and delta* matching 0.978 times the full-edge theta."""
     # Pi decreases with thickness. Its two admissible endpoints give the
     # entire valid bracket, including roots arbitrarily close to Pi=0 or 1.
     lower = profile.thickness_at_wake(1.0)
@@ -591,7 +624,8 @@ def flat_plate_boundary_layer(
         Accepts ``bool`` and ``numpy.bool_``. Thermal inputs require True.
     turbulent_model:
         Omit for LAMINAR. For TURBULENT or TRANSITIONAL, False defaults to
-        SCHLICHTING and accepts only that model. True requires an explicit
+        SCHLICHTING and accepts SCHLICHTING or SCHLICHTING_LOG_WAKE. True
+        requires an explicit
         compressible TurbulentModel. Incompatible selections raise ValueError.
         Eckert models convert reference-state friction to the edge dynamic
         pressure using rho*/rho_e = T_e/T*.
@@ -614,8 +648,19 @@ def flat_plate_boundary_layer(
     Notes
     -----
     ``boundary_layer_thickness`` is the conventional 99-percent thickness.
-    With ``compressible=False``, turbulent thicknesses use the one-fifth-power
-    correlation and one-seventh-power profile approximation.
+    ``SCHLICHTING`` turbulent thicknesses use delta99=0.37*x*Re_x**-0.2 with
+    the one-seventh-power ratios delta*=delta99/8 and theta=7*delta99/72.
+    After a prescribed transition, x and Re_x are measured from a virtual
+    origin that makes theta continuous. Against incompressible measurements
+    delta99 is an estimated 40% thick at Re_x=1e6 and 8% thin at 1e8, and
+    turbulent points with Re above 1e7 emit ApplicabilityWarning.
+    ``SCHLICHTING_LOG_WAKE`` has the same friction and drag. It sets
+    theta=x*average_cf/2, consistent with the returned drag, and finds
+    delta99 and delta* with the constant-property limit of the profile
+    closure described below, using the supplied edge viscosity; delta99 is
+    about 19% thick at 1e6 and 10% at 1e8. Where no wake 0 <= Pi <= 1
+    matches, as just after a late transition, delta99 and delta* are NaN and
+    ApplicabilityWarning is emitted; theta is retained.
     ``ECKERT`` and ``VAN_DRIEST_II``
     return NaN for all three thicknesses at turbulent
     points, including post-transition points, because these approximations
@@ -734,6 +779,7 @@ def flat_plate_boundary_layer(
     turbulent_friction_reynolds = np.asarray(reynolds, dtype=np.float64)
     turbulent_thickness_reynolds = np.asarray(reynolds, dtype=np.float64)
     wall_corrected = turbulent_model is TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE
+    log_wake = turbulent_model is TurbulentModel.SCHLICHTING_LOG_WAKE
     vd2 = wall_corrected or (turbulent_model is TurbulentModel.VAN_DRIEST_II)
     vd2_friction = _wall_temperature_friction if wall_corrected else _willems_friction
     turbulent_friction_factor = np.ones_like(reynolds)
@@ -901,11 +947,21 @@ def flat_plate_boundary_layer(
         selected = turbulent
     else:
         assert transition is not None
-        turbulent_thickness_scale = turbulent_thickness_reynolds / reynolds
-        turbulent_thickness = _turbulent_thicknesses(
-            x,
-            turbulent_thickness_scale * np.maximum(reynolds, transition),
-        )
+        if compressible:
+            # Compressible turbulent thicknesses are replaced below.
+            turbulent_thickness_scale = turbulent_thickness_reynolds / reynolds
+            turbulent_thickness = _turbulent_thicknesses(
+                x,
+                turbulent_thickness_scale * np.maximum(reynolds, transition),
+            )
+        else:
+            turbulent_thickness_reynolds = _virtual_origin_reynolds(
+                reynolds, transition, laminar_coefficient
+            )
+            turbulent_thickness = _turbulent_thicknesses(
+                x * turbulent_thickness_reynolds / reynolds,
+                turbulent_thickness_reynolds,
+            )
         if vd2:
             friction_reynolds = turbulent_reynolds_factor * np.maximum(
                 reynolds, transition
@@ -948,6 +1004,8 @@ def flat_plate_boundary_layer(
         )
 
     _warn_outside_correlation_range(reynolds, turbulent_mask)
+    if turbulent_model is TurbulentModel.SCHLICHTING:
+        _warn_power_law_thickness_range(turbulent_thickness_reynolds, turbulent_mask)
     thickness, displacement, momentum, local_friction, average_friction = selected
     effective_reynolds = np.where(
         turbulent_mask, turbulent_friction_reynolds, laminar_reynolds
@@ -959,30 +1017,53 @@ def flat_plate_boundary_layer(
         thickness = np.where(turbulent_mask, np.nan, thickness)
         displacement = np.where(turbulent_mask, np.nan, displacement)
         momentum = np.where(turbulent_mask, np.nan, momentum)
-    elif wall_corrected:
+    elif wall_corrected or log_wake:
         thickness = np.array(thickness, copy=True)
         displacement = np.array(displacement, copy=True)
         momentum = np.where(turbulent_mask, x * average_friction / 2.0, momentum)
-        assert used_wall_temperature is not None
+        unresolved = 0
         for index in np.ndindex(reynolds.shape):
             if not turbulent_mask[index]:
                 continue
             try:
-                thickness[index], displacement[index] = _wall_temperature_thickness(
-                    float(momentum[index]),
-                    float(velocity[index]),
-                    float(density[index]),
-                    float(broadcast[5][index]),
-                    float(used_wall_temperature[index]),
-                    float(shear[index]),
-                    prandtl_number=prandtl_number,
-                    gas=gas,
-                    viscosity_model=viscosity_model,
+                if wall_corrected:
+                    assert used_wall_temperature is not None
+                    profile = _van_driest_walz_profile(
+                        float(velocity[index]),
+                        float(density[index]),
+                        float(broadcast[5][index]),
+                        float(used_wall_temperature[index]),
+                        float(shear[index]),
+                        prandtl_number=prandtl_number,
+                        gas=gas,
+                        viscosity_model=viscosity_model,
+                    )
+                else:
+                    profile = _incompressible_log_wake_profile(
+                        float(velocity[index]),
+                        float(density[index]),
+                        float(viscosity[index]),
+                        float(shear[index]),
+                    )
+                thickness[index], displacement[index] = _profile_closure_thickness(
+                    float(momentum[index]), profile
                 )
             except ModelRangeError as error:
+                if log_wake:
+                    thickness[index] = displacement[index] = np.nan
+                    unresolved += 1
+                    continue
                 raise ModelRangeError(
                     f"thickness at array index {index}: {error}"
                 ) from error
+        if unresolved:
+            warnings.warn(
+                "log-wake thickness closure has no admissible wake parameter "
+                f"(0 <= Pi <= 1) at {unresolved} turbulent point(s); delta99 and "
+                "displacement thickness are NaN there",
+                ApplicabilityWarning,
+                stacklevel=2,
+            )
 
     def output(values: FloatArray) -> FloatResult:
         return return_float(np.asarray(values, dtype=np.float64), scalar=scalar)

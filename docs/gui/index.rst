@@ -180,8 +180,12 @@ Compressible boundary-layer results
 
 The flat-plate page separates **圧縮性を考慮** from **乱流モデル**. The model
 selector appears only for turbulent or transitional flow and offers only
-models matching the checkbox. Incompressible flow shows **Schlichting** as its only selectable model;
-compressible flow defaults to **Van Driest II＋壁温補正（Schlichting）**, which
+models matching the checkbox. Incompressible flow offers
+**Schlichting（1/5乗則の厚さ）** (the default) and
+**Schlichting（対数則＋ウェイク則の厚さ）**. Both give the same friction and
+drag; the second returns momentum thickness consistent with that drag and
+log-wake profile thicknesses, which may be unavailable just after a late
+prescribed transition. Compressible flow defaults to **Van Driest II＋壁温補正（Schlichting）**, which
 provides wall-temperature-corrected friction and profile-based thicknesses.
 Changing compressibility resets an incompatible selection to that default.
 **Eckert基準温度法（Schlichting）** and

@@ -1040,7 +1040,7 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
                     TurbulentModel.ECKERT,
                 )
                 if compressible
-                else (TurbulentModel.SCHLICHTING,)
+                else (TurbulentModel.SCHLICHTING, TurbulentModel.SCHLICHTING_LOG_WAKE)
             )
             stored_model = models.get("turbulent_model")
             default_model = next(
@@ -1056,7 +1056,10 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
                 options,
                 index=options.index(default_model),
                 format_func=lambda value: {
-                    TurbulentModel.SCHLICHTING: "Schlichting",
+                    TurbulentModel.SCHLICHTING: "Schlichting（1/5乗則の厚さ）",
+                    TurbulentModel.SCHLICHTING_LOG_WAKE: (
+                        "Schlichting（対数則＋ウェイク則の厚さ）"
+                    ),
                     TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE: (
                         "Van Driest II＋壁温補正（Schlichting）"
                     ),

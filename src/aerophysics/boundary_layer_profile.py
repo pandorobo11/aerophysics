@@ -514,6 +514,31 @@ def _van_driest_walz_profile(
     )
 
 
+def _incompressible_log_wake_profile(
+    edge_velocity: float,
+    edge_density: float,
+    edge_viscosity: float,
+    wall_shear_stress: float,
+) -> _VanDriestWalzProfile:
+    """Prepare the constant-property limit of the Van Driest/Walz closure.
+
+    With uniform density and viscosity, a=b=0 and the transformed velocity is
+    the Spalding--Coles velocity itself.
+    """
+    if wall_shear_stress <= 0.0:
+        raise ModelRangeError("profile closure requires positive wall shear stress")
+    friction_velocity = np.sqrt(wall_shear_stress / edge_density)
+    velocity_scale = friction_velocity / edge_velocity
+    return _VanDriestWalzProfile(
+        float(edge_viscosity / (edge_density * friction_velocity)),
+        float(velocity_scale),
+        float(0.99 / velocity_scale),
+        1.0,
+        0.0,
+        0.0,
+    )
+
+
 def transform_compressible_velocity_profile(
     wall_distance: ArrayLike,
     velocity: ArrayLike,
