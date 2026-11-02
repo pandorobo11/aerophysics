@@ -7,6 +7,20 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add `TurbulentModel.SCHLICHTING_LOG_WAKE` for `compressible=False` and its
+  GUI option. It keeps the Schlichting friction and drag, sets
+  theta = x * average_cf / 2, and finds delta99 and displacement thickness
+  with the constant-property Spalding--Coles closure of
+  `VAN_DRIEST_II_WALL_TEMPERATURE`. Points without an admissible wake
+  parameter, such as just after a late transition, return NaN delta99 and
+  displacement thickness with an `ApplicabilityWarning`. `SCHLICHTING`
+  (one-fifth-power thickness) remains the default.
+
+- Warn when `SCHLICHTING` one-fifth-power turbulent thicknesses are used
+  above Re_x = 1e7, their nominal limit. Their delta99 is estimated at +40%
+  against measurements at Re_x = 1e6 and -8% at 1e8. The documentation now
+  gives the correlation's derivation and accuracy.
+
 - Warn once for compressible laminar points with viscous-interaction
   parameter `chi_bar > 1`, reporting the maximum and affected point count.
 
@@ -50,6 +64,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- `compressible=False` transitional one-fifth-power thicknesses are measured
+  from a turbulent virtual origin, so momentum thickness is continuous at
+  transition instead of jumping to the value for a plate turbulent from its
+  leading edge. Fully turbulent results, friction, and drag are unchanged.
+
 - **Breaking:** Replace `compressibility_correction` / `CompressibilityCorrection`
   and `turbulent_correlation` / `TurbulentCorrelation` with `compressible` and
   `turbulent_model: TurbulentModel | None`, with no compatibility aliases.
@@ -71,7 +90,7 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
   Laminar calls must omit the turbulent model. Compressible turbulent and
   transitional calls require an explicit compressible model; incompressible
-  calls accept only SCHLICHTING.
+  calls accept SCHLICHTING or SCHLICHTING_LOG_WAKE.
 
 - **Breaking:** Remove `TurbulentCorrelation.POWER_LAW` and its Eckert
   reference-state variant. The one-fifth-power local friction coefficient is
@@ -82,8 +101,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
   NONE/ECKERT flow now fail on loading and ask the user to select Schlichting;
   they are never silently converted. Laminar and VD2 legacy settings still
   load because that friction choice was unused. `TurbulentModel` now contains
-  only SCHLICHTING, ECKERT (Schlichting at the reference state), VAN_DRIEST_II,
-  and VAN_DRIEST_II_WALL_TEMPERATURE.
+  only SCHLICHTING, SCHLICHTING_LOG_WAKE, ECKERT (Schlichting at the reference
+  state), VAN_DRIEST_II, and VAN_DRIEST_II_WALL_TEMPERATURE.
 
 - **Breaking:** Replace laminar cf, average friction, wall shear, accumulated
   drag, theta, displacement and delta99 for `compressible=True` with

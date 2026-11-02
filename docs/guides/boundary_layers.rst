@@ -135,6 +135,37 @@ layer. The protrusion model integrates an undisturbed profile and does not
 resolve wall interference, vortices, shocks, or interactions among multiple
 elements.
 
+Incompressible turbulent thicknesses
+------------------------------------
+
+With ``compressible=False``, turbulent thicknesses default to the
+one-fifth-power correlation. Select ``TurbulentModel.SCHLICHTING_LOG_WAKE``
+for the same friction with a momentum thickness consistent with the returned
+drag and a log-wake profile delta99:
+
+>>> from aerophysics import TurbulentModel
+>>> layer = flat_plate_boundary_layer(
+...     1.0,
+...     edge_velocity=100.0,
+...     edge_density=1.0,
+...     edge_dynamic_viscosity=1e-5,
+...     regime=BoundaryLayerRegime.TURBULENT,
+...     turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
+... )
+>>> round(layer.boundary_layer_thickness, 6)
+0.014564
+>>> round(layer.momentum_thickness, 6)
+0.001502
+>>> round(layer.distance * layer.average_skin_friction_coefficient / 2, 6)
+0.001502
+
+The one-fifth-power delta99 is about 40% thick at :math:`Re_x=10^6` and
+becomes too thin above about :math:`5\times10^7`; it warns above
+:math:`10^7`. After a prescribed transition it is measured from a virtual
+origin that keeps momentum thickness continuous. See
+:ref:`flat-plate-log-wake-thickness` for the closure, its accuracy, and the
+points where it returns ``NaN``.
+
 Compressible turbulent thicknesses
 ----------------------------------
 

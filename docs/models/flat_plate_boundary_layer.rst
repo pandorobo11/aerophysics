@@ -71,7 +71,7 @@ Mach and edge temperature are mandatory in that case. Temperatures use K.
      - Must be None: Blasius for False, compressible similarity for True
    * - ``TURBULENT`` / ``TRANSITIONAL``
      - False
-     - None defaults to SCHLICHTING; only SCHLICHTING accepted
+     - None defaults to SCHLICHTING; SCHLICHTING or SCHLICHTING_LOG_WAKE
    * - ``TURBULENT`` / ``TRANSITIONAL``
      - True
      - Required: ECKERT, VAN_DRIEST_II,
@@ -92,6 +92,9 @@ property indicating which setting it requires.
    * - ``SCHLICHTING``
      - Logarithmic mean friction and accumulated-drag derivative
      - One-fifth-power delta99, one-seventh-power profile integrals
+   * - ``SCHLICHTING_LOG_WAKE``
+     - Same as ``SCHLICHTING``
+     - Momentum-integral theta, Spalding--Coles delta99 and displacement
    * - ``ECKERT``
      - Schlichting at Eckert reference state, converted to edge basis
      - All three NaN at turbulent points
@@ -157,9 +160,14 @@ For ``compressible=False``, the laminar Blasius relations are
    \qquad
    \frac{\theta_m}{x}=\frac{0.664}{\sqrt{Re_x}}.
 
-For a turbulent boundary layer with ``compressible=False``, the one-fifth-power
-**thickness** correlation and
-one-seventh-power-profile estimates are
+For a turbulent boundary layer with ``compressible=False``, the two
+incompressible models share the same friction and drag and differ only in
+their thicknesses. Both are for smooth, zero-pressure-gradient flow.
+
+.. _flat-plate-power-law-thickness:
+
+One-fifth-power thickness (``SCHLICHTING``, default)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. math::
 
@@ -168,6 +176,147 @@ one-seventh-power-profile estimates are
    \delta^*=\frac{\delta_{99}}{8},
    \qquad
    \theta_m=\frac{7}{72}\delta_{99}.
+
+This is the classical estimate of :ref:`von Kármán (1921)
+<ref-von-karman-1921>`, as given by :ref:`Schlichting and Gersten (2000)
+<ref-schlichting-gersten-2000>`. It assumes the one-seventh-power profile
+:math:`u/U_e=(y/\delta)^{1/7}`, which gives the two ratios above, and Blasius'
+pipe-friction law applied to the plate,
+:math:`\tau_w/(\rho_eU_e^2)=0.0225(\nu/U_e\delta)^{1/4}`. Integrating the
+momentum relation :math:`\mathrm{d}\theta_m/\mathrm{d}x=\tau_w/(\rho_eU_e^2)`
+from the leading edge gives the coefficient
+:math:`(0.0225\cdot\tfrac{72}{7}\cdot\tfrac{5}{4})^{4/5}=0.3707`.
+The pipe law holds only at low Reynolds number, and the fixed profile gives a
+constant shape factor :math:`H=9/7` and :math:`\delta_{99}/\theta_m=72/7`.
+Measured layers have :math:`H\approx1.4` and :math:`\delta_{99}/\theta_m\approx8`
+near :math:`Re_x=10^6`; equilibrium log-wake profiles give :math:`H` falling to
+about 1.2 and :math:`\delta_{99}/\theta_m` rising to about 11 by :math:`10^9`.
+The correlation is therefore nominally limited to
+:math:`5\times10^5\le Re_x\le10^7`. Turbulent points above
+:math:`Re_x=10^7` (measured from the virtual origin below) emit
+:class:`~aerophysics.exceptions.ApplicabilityWarning`.
+
+The Schlichting friction is not derived from these thicknesses:
+:math:`\theta_m` differs from :math:`x\bar C_f/2`, the value implied by the
+returned drag, by +2% at :math:`Re_x=10^6`, −15% at :math:`10^8`, and −27% at
+:math:`10^9`.
+
+For ``TRANSITIONAL``, :math:`x` and :math:`Re_x` in these equations are measured
+from a turbulent virtual origin :math:`x_0`. It is placed so that the turbulent
+momentum thickness equals the Blasius value at transition:
+
+.. math::
+
+   Re_x-Re_{x_0}=Re_x-Re_\mathrm{tr}
+   +\left(\frac{0.664\sqrt{Re_\mathrm{tr}}}{0.37\cdot7/72}\right)^{5/4},
+   \qquad
+   x-x_0=x\frac{Re_x-Re_{x_0}}{Re_x}.
+
+:math:`\theta_m` is then continuous at transition. :math:`\delta_{99}` still
+jumps there, because the assumed profile changes from Blasius to the
+one-seventh-power shape. Without the virtual origin, the thicknesses just
+after transition were those of a plate turbulent from its leading edge, with a
+momentum thickness 2.8 times the laminar value at
+:math:`Re_\mathrm{tr}=5\times10^5`. Fully turbulent results are unchanged.
+Friction and the mixed average keep the leading-edge origin described under
+:ref:`flat-plate-skin-friction-coefficients`.
+
+.. _flat-plate-log-wake-thickness:
+
+Log-wake profile thickness (``SCHLICHTING_LOG_WAKE``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``SCHLICHTING_LOG_WAKE`` uses the momentum integral and an equilibrium
+mean-velocity profile instead of fixed ratios:
+
+.. math::
+
+   \theta_m=\frac{x\bar C_f}{2},
+   \qquad
+   \tau_w=\tfrac{1}{2}\rho_eU_e^2C_{f,x}.
+
+:math:`\bar C_f` is the Schlichting average, or the specified-transition mixed
+average, so :math:`\theta_m` always agrees with ``drag_per_unit_width`` and is
+continuous at transition. :math:`\delta_{99}` is the value :math:`d` for which
+the Spalding inner law (:ref:`Spalding, 1961 <ref-spalding-1961>`) plus the
+Coles wake (:ref:`Coles, 1956 <ref-coles-1956>`), with :math:`\kappa=0.41`,
+:math:`B=5.2`, :math:`0\le\Pi\le1`, and :math:`u(d)=0.99U_e`, satisfies
+
+.. math::
+
+   \int_0^d\frac{u}{U_e}\left(1-\frac{u}{U_e}\right)\mathrm{d}y=0.978\,\theta_m.
+
+``displacement_thickness`` is :math:`\int_0^d(1-u/U_e)\,\mathrm{d}y`. The wall
+unit is :math:`\mu_e/(\rho_eu_\tau)` with
+:math:`u_\tau=\sqrt{\tau_w/\rho_e}`, using the supplied
+``edge_dynamic_viscosity``. This is the constant-property limit of the
+``VAN_DRIEST_II_WALL_TEMPERATURE`` closure described below, with the same
+factor 0.978. The two models agree within 0.1% at Mach 0.03.
+
+Where no wake parameter :math:`0\le\Pi\le1` matches, :math:`\delta_{99}` and
+:math:`\delta^*` are ``NaN`` and one
+:class:`~aerophysics.exceptions.ApplicabilityWarning` reports the number of
+such points; :math:`\theta_m`, friction, and drag are still returned. Fully
+turbulent plates are admissible for :math:`10^4\le Re_x\le10^{10}`. After a
+prescribed transition at :math:`Re_\mathrm{tr}\gtrsim7\times10^5`, the closure
+fails in a short zone where the layer has turbulent friction but laminar
+momentum thickness, up to :math:`Re_x/Re_\mathrm{tr}\approx1.07` for
+:math:`Re_\mathrm{tr}=10^6` and 1.35 for :math:`5\times10^6`. The real layer is
+not in equilibrium there.
+
+Thickness accuracy
+~~~~~~~~~~~~~~~~~~
+
+The log-wake closure with Schlichting friction was compared with
+incompressible zero-pressure-gradient measurements and DNS (see the
+``Van Driest II with wall-temperature correction`` section). Its
+:math:`\delta_{99}` is about 19% thick at :math:`Re_x=10^6`, 15% at
+:math:`10^7`, 10% at :math:`10^8`, and 9% at :math:`1.5\times10^8`. Most of
+this offset comes from the Schlichting friction, which makes :math:`\theta_m`
+about 5.5% thick. Multiplying by the ratio of the two models gives the
+estimated one-fifth-power error:
+
+.. list-table:: Fully turbulent thickness ratios, ``SCHLICHTING`` /
+   ``SCHLICHTING_LOG_WAKE``
+   :header-rows: 1
+   :widths: 14 16 16 16 38
+
+   * - :math:`Re_x`
+     - :math:`\delta_{99}`
+     - :math:`\theta_m`
+     - :math:`\delta^*`
+     - Estimated ``SCHLICHTING`` :math:`\delta_{99}` error against measurements
+   * - :math:`10^6`
+     - 1.18
+     - 1.02
+     - 0.96
+     - +40%
+   * - :math:`10^7`
+     - 1.01
+     - 0.95
+     - 0.98
+     - +16%
+   * - :math:`10^8`
+     - 0.83
+     - 0.85
+     - 0.90
+     - −8%
+   * - :math:`1.5\times10^8`
+     - 0.80
+     - 0.83
+     - 0.88
+     - −12%
+   * - :math:`10^9`
+     - 0.67
+     - 0.73
+     - 0.79
+     - not measured
+
+The one-fifth-power error changes sign near :math:`Re_x\approx5\times10^7`
+and grows quickly beyond :math:`10^8`, while the log-wake error decreases
+steadily with Reynolds number. ``SCHLICHTING_LOG_WAKE`` is recommended when
+:math:`\delta_{99}`, :math:`\delta^*`, or a :math:`\theta_m` consistent with drag
+matters. ``SCHLICHTING`` remains the default for backward compatibility.
 
 .. list-table:: Thickness symbols
    :header-rows: 1

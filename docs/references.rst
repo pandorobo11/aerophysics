@@ -229,6 +229,13 @@ https://ntrs.nasa.gov/citations/19930082823
 Boundary layers
 ---------------
 
+.. _ref-von-karman-1921:
+
+von Kármán, T. *Über laminare und turbulente Reibung*. Zeitschrift für
+Angewandte Mathematik und Mechanik, 1(4), 233--252, 1921.
+
+https://doi.org/10.1002/zamm.19210010401
+
 .. _ref-schlichting-gersten-2000:
 
 Schlichting, H. and Gersten, K. *Boundary-Layer Theory*, 8th ed. Springer,

@@ -94,6 +94,161 @@ def test_explicit_transition_offsets_accumulated_drag() -> None:
     )
 
 
+def test_power_law_thickness_uses_transition_virtual_origin() -> None:
+    transition = 5e5
+    reynolds = np.array([transition * (1.0 + 1e-12), 1e6, 5e6])
+    x = reynolds * 1e-5 / 10.0
+    result = flat_plate_boundary_layer(
+        x,
+        10.0,
+        1.0,
+        1e-5,
+        regime=BoundaryLayerRegime.TRANSITIONAL,
+        transition_reynolds=transition,
+    )
+    # Momentum thickness is continuous with Blasius at transition.
+    start = (0.664 * np.sqrt(transition) / (0.37 * 7.0 / 72.0)) ** 1.25
+    effective = reynolds - transition + start
+    delta = 0.37 * (x * effective / reynolds) * effective**-0.2
+    assert np.asarray(result.momentum_thickness)[0] == pytest.approx(
+        0.664 * x[0] / np.sqrt(transition), rel=1e-9
+    )
+    assert_allclose(result.boundary_layer_thickness, delta, rtol=1e-12)
+    assert_allclose(result.displacement_thickness, delta / 8.0, rtol=1e-12)
+    assert_allclose(result.momentum_thickness, delta * 7.0 / 72.0, rtol=1e-12)
+    turbulent = flat_plate_boundary_layer(
+        x[-1], 10.0, 1.0, 1e-5, regime=BoundaryLayerRegime.TURBULENT
+    )
+    assert float(turbulent.boundary_layer_thickness) == pytest.approx(
+        0.37 * x[-1] * reynolds[-1] ** -0.2, rel=1e-12
+    )
+    assert np.asarray(result.boundary_layer_thickness)[-1] < float(
+        turbulent.boundary_layer_thickness
+    )
+
+
+def _thickness_range_warnings(**arguments: Any) -> list[str]:
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        # Re_x = 2e7 lies above the one-fifth-power thickness range.
+        flat_plate_boundary_layer(1.0, 200.0, 1.0, 1e-5, **arguments)
+    return [str(item.message) for item in captured if "one-fifth" in str(item.message)]
+
+
+def test_power_law_thickness_warns_above_its_validity_range() -> None:
+    turbulent = BoundaryLayerRegime.TURBULENT
+    assert _thickness_range_warnings(regime=turbulent)
+    assert not _thickness_range_warnings(
+        regime=turbulent, turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE
+    )
+    assert not _thickness_range_warnings(
+        regime=turbulent,
+        compressible=True,
+        turbulent_model=TurbulentModel.ECKERT,
+        mach=0.3,
+        edge_temperature=288.0,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        flat_plate_boundary_layer(
+            1.0, 10.0, 1.0, 1e-5, regime=BoundaryLayerRegime.TURBULENT
+        )
+
+
+def test_log_wake_thickness_closes_the_momentum_integral() -> None:
+    from aerophysics.boundary_layer_profile import (
+        CompressibleVelocityTransformation,
+        TemperatureVelocityRelation,
+        compressible_turbulent_boundary_layer_profile,
+    )
+
+    temperature = 288.15
+    viscosity = float(AIR_VISCOSITY.dynamic_viscosity(temperature))
+    velocity, density, x = 10.0, 1.225, 10.0
+    result = flat_plate_boundary_layer(
+        x,
+        velocity,
+        density,
+        viscosity,
+        regime=BoundaryLayerRegime.TURBULENT,
+        turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
+    )
+    power = flat_plate_boundary_layer(
+        x, velocity, density, viscosity, regime=BoundaryLayerRegime.TURBULENT
+    )
+    for field in (
+        "effective_reynolds_number",
+        "local_skin_friction_coefficient",
+        "average_skin_friction_coefficient",
+        "wall_shear_stress",
+        "drag_per_unit_width",
+    ):
+        assert getattr(result, field) == getattr(power, field)
+    assert result.momentum_thickness == pytest.approx(
+        x * float(result.average_skin_friction_coefficient) / 2.0, rel=1e-14
+    )
+    delta = float(result.boundary_layer_thickness)
+    # Mach 0.03 makes the public compressible profile almost incompressible.
+    public = compressible_turbulent_boundary_layer_profile(
+        np.array([0.0, delta]),
+        velocity,
+        density,
+        temperature,
+        delta,
+        float(result.wall_shear_stress),
+        transformation=CompressibleVelocityTransformation.VAN_DRIEST,
+        temperature_velocity_relation=TemperatureVelocityRelation.WALZ,
+        wall_temperature=temperature,
+    )
+    assert 0.0 <= public.wake_parameter <= 1.0
+    assert public.momentum_thickness == pytest.approx(
+        0.978 * float(result.momentum_thickness), rel=1e-4
+    )
+    assert result.displacement_thickness == pytest.approx(
+        public.displacement_thickness, rel=1e-4
+    )
+    compressible = flat_plate_boundary_layer(
+        x,
+        velocity,
+        density,
+        viscosity,
+        regime=BoundaryLayerRegime.TURBULENT,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
+        mach=velocity / float(AIR.speed_of_sound(temperature)),
+        edge_temperature=temperature,
+    )
+    assert result.boundary_layer_thickness == pytest.approx(
+        compressible.boundary_layer_thickness, rel=1e-3
+    )
+
+
+def test_log_wake_transition_returns_nan_where_wake_is_inadmissible() -> None:
+    transition = 3e6
+    reynolds = np.array([transition * 0.5, transition * 1.01, transition * 3.0])
+    x = reynolds * 1e-5 / 10.0
+    with pytest.warns(ApplicabilityWarning, match="at 1 turbulent point"):
+        result = flat_plate_boundary_layer(
+            x,
+            10.0,
+            1.0,
+            1e-5,
+            regime=BoundaryLayerRegime.TRANSITIONAL,
+            transition_reynolds=transition,
+            turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
+        )
+    thickness = np.asarray(result.boundary_layer_thickness)
+    displacement = np.asarray(result.displacement_thickness)
+    assert thickness[0] == pytest.approx(4.91 * x[0] / np.sqrt(reynolds[0]))
+    assert np.isnan(thickness[1]) and np.isnan(displacement[1])
+    assert np.isfinite(thickness[2]) and np.isfinite(displacement[2])
+    assert_allclose(
+        np.asarray(result.momentum_thickness)[1:],
+        x[1:] * np.asarray(result.average_skin_friction_coefficient)[1:] / 2.0,
+        rtol=1e-14,
+    )
+
+
 def test_array_inputs_broadcast_and_return_float64() -> None:
     result = flat_plate_boundary_layer(
         [[0.5], [1.0]],
@@ -1465,11 +1620,13 @@ def test_compressible_requires_both_edge_thermal_inputs(missing: str) -> None:
 def test_turbulent_models_and_compressibility() -> None:
     assert {model.value for model in TurbulentModel} == {
         "schlichting",
+        "schlichting_log_wake",
         "eckert",
         "van_driest_ii",
         "van_driest_ii_wall_temperature",
     }
     assert not TurbulentModel.SCHLICHTING.compressible
+    assert not TurbulentModel.SCHLICHTING_LOG_WAKE.compressible
     assert all(
         model.compressible
         for model in (
