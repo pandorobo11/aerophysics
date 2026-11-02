@@ -548,7 +548,7 @@ def test_flat_plate_adapter_and_warning_capture() -> None:
         edge_temperature=None,
         wall_temperature=None,
     )
-    assert laminar.rows[0]["boundary_layer_thickness"] == pytest.approx(0.005)
+    assert laminar.rows[0]["boundary_layer_thickness"] == pytest.approx(0.00491)
     assert laminar.rows[0]["recovery_temperature"] is None
     warned = flat_plate(
         distance=1.0,

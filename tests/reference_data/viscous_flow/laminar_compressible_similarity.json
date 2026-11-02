@@ -1,0 +1,39 @@
+{
+  "sources": [
+    "Illingworth (1949), doi:10.1098/rspa.1949.0153",
+    "Howarth (1948), doi:10.1098/rspa.1948.0064",
+    "Chapman and Rubesin (1949), doi:10.2514/8.11853"
+  ],
+  "role": "independent numerical perfect-gas similarity solution; not measurements",
+  "command": "uv run python docs/scripts/build_laminar_similarity_reference.py",
+  "equations": [
+    "(C f'')' + f f'' = 0",
+    "(C g'/Pr)' + f g' + (gamma-1) Me^2 C f''^2 = 0"
+  ],
+  "coordinate": "z: dy sqrt(Re_x)/x = sqrt(2) g dz; Blasius eta=sqrt(2) z",
+  "boundary_conditions": "f(0)=f'(0)=0; f'(infinity)=g(infinity)=1; g'(0)=0 adiabatic or g(0)=Tw/Te isothermal",
+  "normalization": "Re_x=rho_e U_e x/mu_e; cf uses edge dynamic pressure; delta99 at u/Ue=0.99; delta* and theta integrated to infinity",
+  "temperature_units": "K",
+  "edge_temperature_K": 240.0,
+  "prandtl_number": 0.72,
+  "heat_capacity_ratio": 1.4,
+  "transport": {
+    "model": "Sutherland",
+    "sutherland_temperature_K": 110.4,
+    "mu_over_mu_e": "g^1.5 (Te+S)/(g Te+S)"
+  },
+  "wall_temperature": "Tw/Taw uses the solved adiabatic temperature; ratio 1 uses zero heat flux, not sqrt(Pr) recovery",
+  "numerics": {
+    "solver": "scipy.integrate.solve_bvp",
+    "tolerance": 1e-08,
+    "domain": [
+      0.0,
+      14.0
+    ],
+    "initial_nodes": 401,
+    "max_nodes": 30000,
+    "continuation": "Mach increments <=0.5, then decreasing Tw/Taw",
+    "quadrature": "adaptive quad, epsabs=epsrel=1e-10; brentq for u/Ue=0.99"
+  },
+  "limitations": "constant cp and Pr, perfect gas, ZPG, no viscous interaction; high-temperature rows are mathematical checks, not real-gas validation"
+}

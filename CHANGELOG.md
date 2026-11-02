@@ -7,6 +7,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Warn once for compressible laminar points with viscous-interaction
+  parameter `chi_bar > 1`, reporting the maximum and affected point count.
+
 - Add `CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE` and its GUI
   option: Schlichting friction with a VD2 wall-temperature correction,
   momentum-integral theta, and Van Driest/Walz profile thicknesses.
@@ -47,10 +50,18 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- **Breaking:** Replace laminar cf, average friction, wall shear, accumulated
+  drag, theta, displacement and delta99 in all three compressible modes with
+  direct perfect-gas similarity solutions. Recovery temperature is the solved
+  adiabatic wall temperature, omitted wall temperature imposes zero heat flux,
+  and laminar `effective_reynolds_number` is the external Reynolds number.
+  The laminar contribution to transitional average drag changes accordingly.
+  Use the Blasius delta99 coefficient 4.9100 instead of 5.0 for `NONE`.
+
 - **Breaking:** `ECKERT` and `VAN_DRIEST_II` return NaN for turbulent delta99,
   displacement thickness, and momentum thickness, including post-transition
   points. Their former compressible thickness estimates were inaccurate.
-  Friction, drag, laminar thicknesses, and `NONE` outputs are unchanged.
+  Friction and drag are unchanged by the turbulent-thickness removal.
   The GUI displays unavailable metrics as a dash and prevents saving a
   boundary-layer case with unavailable thickness or wall shear.
 
@@ -72,12 +83,16 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Fixed
 
+- Correct compressible laminar momentum thickness, previously too large by
+  `T*/Te`, to `theta = x * cf_local` on the edge basis.
+
 - Convert Eckert reference-temperature skin friction from the reference to the
   edge dynamic-pressure basis with `rho*/rho_e = T_e/T*`. Laminar and
   turbulent Eckert portions, including laminar portions of Van Driest II
   calculations, previously omitted this factor and overpredicted local and
   average friction, wall shear, and drag by `T*/T_e` (about 2.5 for a Mach 6
-  cold wall). Thicknesses and the Van Driest II turbulent path are unchanged.
+  cold wall). The Van Driest II turbulent path is unchanged by this friction
+  correction.
 - Solve Beattie--Bridgeman density for `rho / rho_ideal` with a normalized
   pressure residual and verify the EOS pressure closure before returning it.
   The fixed absolute `1e-12 kg/m^3` tolerance previously returned a density

@@ -54,7 +54,7 @@ edge conditions and returns the one-sided drag per unit width:
 >>> round(layer.reynolds_number, 1)
 1000000.0
 >>> round(layer.boundary_layer_thickness, 6)
-0.005
+0.00491
 >>> round(layer.drag_per_unit_width, 6)
 0.0664
 
@@ -146,5 +146,24 @@ Supply local edge conditions. See :doc:`../models/flat_plate_boundary_layer`
 for the external validation envelope and limitations.
 
 ``ECKERT`` and ``VAN_DRIEST_II`` return ``NaN`` for all three turbulent
-thicknesses, also after a prescribed transition. Their friction and drag,
-laminar thicknesses, and ``NONE`` results are unchanged.
+thicknesses, also after a prescribed transition. Their friction and drag remain available.
+
+
+Compressible laminar thicknesses
+--------------------------------
+
+All three compressible modes solve the perfect-gas laminar similarity equations
+for friction and thicknesses. Momentum thickness obeys ``theta = x * cf_local``
+and average friction is twice local friction, on the edge dynamic-pressure
+basis. Omitted wall temperature means zero wall heat flux; recovery temperature
+is the solved adiabatic temperature even for a specified isothermal wall.
+``effective_reynolds_number`` is the external Reynolds number at laminar points.
+These rules also apply before transition, and to the laminar contribution to
+mixed average drag. ``NONE`` retains the Blasius delta99 coefficient 4.9100.
+See :doc:`../models/flat_plate_boundary_layer` for equations, numerical accuracy,
+and the constant-cp, constant-Pr, zero-pressure-gradient assumptions.
+
+An ``ApplicabilityWarning`` reports laminar viscous interaction when
+``chi_bar = Mach**3 * sqrt(Cw / Re_x) > 1``. Leading-edge induced pressure
+then invalidates the zero-pressure-gradient assumption. The warning excludes
+``NONE`` and turbulent points; it does not correct the edge state.

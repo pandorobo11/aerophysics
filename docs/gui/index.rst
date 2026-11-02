@@ -186,3 +186,12 @@ retain missing thicknesses while friction and drag remain available.
 **現在の境界層ケースとして保存** warns instead of saving when delta99 or wall
 shear is not finite. See :doc:`../models/flat_plate_boundary_layer` for the
 model assumptions and comparison envelope.
+
+For laminar points, all three compressible choices use the same
+similarity solution for friction and thicknesses, with ``theta = x * cf_local``
+and average friction twice local friction. An omitted wall temperature gives
+a zero-heat-flux wall; recovery temperature is the solved adiabatic wall
+temperature. The effective Reynolds number at laminar points is the edge value.
+The incompressible delta99 coefficient is 4.9100. A laminar viscous-interaction
+warning indicates when leading-edge induced pressure violates the flat-plate
+assumptions; see the model page for the parameter and limits.

@@ -4,6 +4,7 @@
     "one-fifth-power turbulent flat-plate correlation",
     "Schlichting smooth-plate average skin-friction correlation"
   ],
+  "blasius_delta99_coefficient": 4.91,
   "role": "independent direct evaluation of published correlation equations",
   "command": "python docs/scripts/build_viscous_reference.py"
 }

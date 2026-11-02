@@ -34,6 +34,7 @@ from numpy.typing import ArrayLike
 from scipy.optimize import brentq
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
+from aerophysics._laminar_similarity import similarity_coefficients
 from aerophysics.boundary_layer_profile import (
     _van_driest_walz_profile,
 )
@@ -43,6 +44,9 @@ from aerophysics.transport import AIR_VISCOSITY, DynamicViscosityModel
 
 _VD2_WALL_TEMPERATURE_EXPONENT = 0.064
 _DELTA99_MOMENTUM_FRACTION = 0.978
+# Blasius velocity reaches 99 percent at this similarity coordinate.
+_BLASIUS_DELTA99 = 4.9100
+_VISCOUS_INTERACTION_THRESHOLD = 1.0
 
 
 class BoundaryLayerRegime(StrEnum):
@@ -79,8 +83,9 @@ class FlatPlateBoundaryLayerResult:
     so ``wall_shear_stress`` is the local coefficient multiplied by the edge
     dynamic pressure, while ``drag_per_unit_width`` is the average coefficient
     multiplied by the edge dynamic pressure and ``distance``. With Eckert
-    portions, ``effective_reynolds_number`` is the reference Reynolds number
-    ``Re*`` at which the incompressible correlations are evaluated.
+    turbulent portions, ``effective_reynolds_number`` is the reference Reynolds number
+    ``Re*`` at which the incompressible friction correlations are evaluated.
+    Laminar similarity portions return the edge Reynolds number ``Re_x``.
     """
 
     distance: FloatResult
@@ -101,7 +106,7 @@ def _laminar_correlations(
     distance: FloatArray, reynolds: FloatArray
 ) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
     root_reynolds = np.sqrt(reynolds)
-    thickness = 5.0 * distance / root_reynolds
+    thickness = _BLASIUS_DELTA99 * distance / root_reynolds
     displacement = 1.7208 * distance / root_reynolds
     momentum = 0.664 * distance / root_reynolds
     local_friction = 0.664 / root_reynolds
@@ -113,6 +118,41 @@ def _laminar_correlations(
         local_friction,
         average_friction,
     )
+
+
+def _warn_viscous_interaction(
+    reynolds: FloatArray,
+    mach: FloatArray,
+    edge_temperature: FloatArray,
+    edge_viscosity: FloatArray,
+    laminar_wall: FloatArray,
+    turbulent_mask: np.ndarray,
+    viscosity_model: DynamicViscosityModel,
+) -> None:
+    laminar_mask = ~turbulent_mask
+    if not np.any(laminar_mask):
+        return
+    wall = laminar_wall[laminar_mask]
+    wall_viscosity = np.asarray(viscosity_model.dynamic_viscosity(wall))
+    wall_chapman_rubesin = (
+        edge_temperature[laminar_mask]
+        / wall
+        * wall_viscosity
+        / edge_viscosity[laminar_mask]
+    )
+    interaction = mach[laminar_mask] ** 3 * np.sqrt(
+        wall_chapman_rubesin / reynolds[laminar_mask]
+    )
+    affected = interaction > _VISCOUS_INTERACTION_THRESHOLD
+    if np.any(affected):
+        warnings.warn(
+            "laminar viscous interaction: leading-edge induced pressure invalidates "
+            "the zero-pressure-gradient flat-plate estimate "
+            f"(chi_bar > 1 at {np.count_nonzero(affected)} point(s); "
+            f"maximum chi_bar = {np.max(interaction):.6g})",
+            ApplicabilityWarning,
+            stacklevel=3,
+        )
 
 
 def _turbulent_friction(
@@ -216,11 +256,10 @@ def _recovery_temperature(
     edge_temperature: FloatArray,
     mach: FloatArray,
     *,
-    turbulent: bool,
     prandtl_number: float,
     gas: PerfectGas,
 ) -> FloatArray:
-    recovery_factor = np.cbrt(prandtl_number) if turbulent else np.sqrt(prandtl_number)
+    recovery_factor = np.cbrt(prandtl_number)
     recovery = edge_temperature * (
         1.0 + recovery_factor * 0.5 * (gas.heat_capacity_ratio - 1.0) * mach**2
     )
@@ -234,7 +273,6 @@ def _eckert_effective_reynolds(
     mach: FloatArray,
     specified_wall_temperature: FloatArray | None,
     *,
-    turbulent: bool,
     prandtl_number: float,
     gas: PerfectGas,
     viscosity_model: DynamicViscosityModel,
@@ -250,7 +288,6 @@ def _eckert_effective_reynolds(
     recovery = _recovery_temperature(
         edge_temperature,
         mach,
-        turbulent=turbulent,
         prandtl_number=prandtl_number,
         gas=gas,
     )
@@ -299,7 +336,6 @@ def _van_driest_ii_state(
     recovery = _recovery_temperature(
         edge_temperature,
         mach,
-        turbulent=True,
         prandtl_number=prandtl_number,
         gas=gas,
     )
@@ -528,8 +564,8 @@ def flat_plate_boundary_layer(
         there is deliberately no default transition location.
     compressibility_correction:
         ``NONE``, ``ECKERT``, ``VAN_DRIEST_II``, or
-        ``VAN_DRIEST_II_WALL_TEMPERATURE``. Both Van Driest II modes use
-        Eckert for laminar portions. Eckert correlations evaluated at ``Re*`` give
+        ``VAN_DRIEST_II_WALL_TEMPERATURE``. All three compressible modes solve
+        laminar similarity equations. Turbulent Eckert friction at ``Re*`` gives
         coefficients on the reference dynamic pressure ``rho* U_e**2/2``;
         they are converted to the edge basis with ``rho*/rho_e = T_e/T*``.
     mach, edge_temperature:
@@ -552,7 +588,7 @@ def flat_plate_boundary_layer(
     and one-seventh-power profile approximation. ``ECKERT`` and
     ``VAN_DRIEST_II`` return NaN for all three thicknesses at turbulent
     points, including post-transition points, because these approximations
-    are inaccurate for compressible flow. Laminar thicknesses are unchanged.
+    are inaccurate for compressible flow.
 
     ``VAN_DRIEST_II_WALL_TEMPERATURE`` multiplies the Schlichting friction
     pair divided by the VD2 friction factor by ``(Tw/Tr)**0.064``. Its
@@ -572,8 +608,33 @@ def flat_plate_boundary_layer(
     Skin-friction coefficients use edge dynamic pressure for every mode.
     ``drag_per_unit_width`` is accumulated from the leading edge on one side.
     The integral momentum relation assumes constant edge and wall conditions
-    and zero pressure gradient. Laminar Eckert thicknesses remain reference-
-    property estimates evaluated at Re*, without density rescaling.
+    and zero pressure gradient.
+
+    Compressible laminar cf, theta, delta*, and delta99 come from the
+    Illingworth/Levy--Lees similarity equations ``(C f'')' + f f'' = 0`` and
+    ``(C g'/Pr)' + f g' + (gamma-1)*Me**2*C*f''**2 = 0``, with
+    g=T/Te and C=mu(g*Te)/(mu_model(Te)*g). The solver uses conservative
+    finite differences, Newton iteration, grid refinement and Richardson
+    extrapolation, with residual-controlled solve_bvp fallback. Agreement
+    with the independent reference is within 0.1 percent; displacement near
+    zero uses an absolute coefficient tolerance of 5e-5. Numerical accuracy
+    does not establish physical validity.
+
+    Omitted wall temperature imposes zero wall heat flux, g'(0)=0.
+    Recovery temperature is the solved adiabatic wall temperature, even for
+    a prescribed isothermal wall. Effective Reynolds number is the edge Re_x.
+    theta=x*cf_local and average_cf=2*cf_local follow from the ZPG integral
+    balance. Negative displacement thickness on strongly cooled walls is
+    retained. If supplied mu_e differs from mu_model(Te), all four normalized
+    coefficients scale by sqrt(mu_model(Te)/mu_e).
+
+    These estimates assume a perfect gas, constant cp and Pr, zero pressure gradient,
+    and no induced pressure; at Taw roughly above 2000 K, dissociation makes
+    them indicative only. In compressible modes, ApplicabilityWarning is
+    emitted once if any laminar point has chi_bar=Me**3*sqrt(Cw/Re_x)>1,
+    where Cw=(Te/Tw)*mu(Tw)/mu_e uses the laminar wall temperature and the
+    selected viscosity model. The warning reports the maximum and point count.
+    Turbulent points and NONE are excluded from this warning.
     """
     transition = _validate_model_choices(
         regime, turbulent_correlation, transition_reynolds
@@ -656,7 +717,8 @@ def flat_plate_boundary_layer(
     turbulent_reynolds_factor = np.ones_like(reynolds)
     # Reference-to-edge density ratios that convert Eckert coefficients from
     # the reference dynamic-pressure basis to the edge basis.
-    laminar_density_ratio = np.ones_like(reynolds)
+    laminar_coefficient = np.full_like(reynolds, 0.664)
+    laminar = _laminar_correlations(x, reynolds)
     turbulent_density_ratio = np.ones_like(reynolds)
     recovery_temperature: FloatArray | None = None
     used_wall_temperature: FloatArray | None = None
@@ -674,22 +736,59 @@ def flat_plate_boundary_layer(
             raise ValueError("edge_temperature must be greater than zero")
         if specified_wall is not None and np.any(specified_wall <= 0.0):
             raise ValueError("wall_temperature must be greater than zero")
-        (
-            laminar_reynolds,
-            laminar_recovery,
-            laminar_wall,
-            laminar_density_ratio,
-        ) = _eckert_effective_reynolds(
-            reynolds,
-            edge_temperature_values,
-            np.asarray(viscosity, dtype=np.float64),
-            mach_values,
-            specified_wall,
-            turbulent=False,
-            prandtl_number=prandtl_number,
-            gas=gas,
-            viscosity_model=viscosity_model,
-        )
+        laminar_recovery = np.zeros_like(reynolds)
+        laminar_wall = np.zeros_like(reynolds)
+        if regime is not BoundaryLayerRegime.TURBULENT:
+            # Transitional turbulent points also need the laminar coefficient
+            # at transition to accumulate drag from the leading edge.
+            states = np.column_stack(
+                (
+                    mach_values.ravel(),
+                    edge_temperature_values.ravel(),
+                    np.full(reynolds.size, np.nan)
+                    if specified_wall is None
+                    else (specified_wall / edge_temperature_values).ravel(),
+                    np.full(reynolds.size, prandtl_number),
+                    np.full(reynolds.size, gas.heat_capacity_ratio),
+                )
+            )
+            if specified_wall is None:
+                solved = similarity_coefficients(
+                    states, viscosity_model, _input_shape=reynolds.shape
+                )
+                adiabatic = solved
+            else:
+                adiabatic_states = states.copy()
+                adiabatic_states[:, 2] = np.nan
+                combined = similarity_coefficients(
+                    np.concatenate((states, adiabatic_states)),
+                    viscosity_model,
+                    _input_shape=reynolds.shape,
+                )
+                solved, adiabatic = np.split(combined, 2)
+            model_mu = np.asarray(
+                viscosity_model.dynamic_viscosity(edge_temperature_values)
+            )
+            coefficients = (
+                solved[:, :4].reshape((*reynolds.shape, 4))
+                * np.sqrt(model_mu / viscosity)[..., None]
+            )
+            laminar_coefficient = coefficients[..., 0]
+            length_scale = x / np.sqrt(reynolds)
+            local = laminar_coefficient / np.sqrt(reynolds)
+            laminar = (
+                coefficients[..., 1] * length_scale,
+                coefficients[..., 2] * length_scale,
+                coefficients[..., 3] * length_scale,
+                local,
+                2 * local,
+            )
+            laminar_recovery = (
+                adiabatic[:, 4].reshape(reynolds.shape) * edge_temperature_values
+            )
+            laminar_wall = (
+                laminar_recovery if specified_wall is None else specified_wall
+            )
         if regime is BoundaryLayerRegime.LAMINAR:
             recovery_temperature = laminar_recovery
             used_wall_temperature = laminar_wall
@@ -705,7 +804,6 @@ def flat_plate_boundary_layer(
                 np.asarray(viscosity, dtype=np.float64),
                 mach_values,
                 specified_wall,
-                turbulent=True,
                 prandtl_number=prandtl_number,
                 gas=gas,
                 viscosity_model=viscosity_model,
@@ -749,9 +847,16 @@ def flat_plate_boundary_layer(
                 laminar_wall,
             )
 
-    laminar = _edge_basis_friction(
-        _laminar_correlations(x, laminar_reynolds), laminar_density_ratio
-    )
+    if compressibility_correction is not CompressibilityCorrection.NONE:
+        _warn_viscous_interaction(
+            reynolds,
+            mach_values,
+            edge_temperature_values,
+            viscosity,
+            laminar_wall,
+            turbulent_mask,
+            viscosity_model,
+        )
     if regime is BoundaryLayerRegime.LAMINAR:
         selected = laminar
     elif regime is BoundaryLayerRegime.TURBULENT:
@@ -800,10 +905,7 @@ def flat_plate_boundary_layer(
                 turbulent_density_ratio * local,
                 turbulent_density_ratio * average,
             )
-        laminar_transition_reynolds = laminar_reynolds / reynolds * transition
-        laminar_average = (
-            laminar_density_ratio * 1.328 / np.sqrt(laminar_transition_reynolds)
-        )
+        laminar_average = 2 * laminar_coefficient / np.sqrt(transition)
         if vd2:
             _, turbulent_average_i = vd2_friction(
                 turbulent_reynolds_factor * transition
