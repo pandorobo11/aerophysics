@@ -7,6 +7,10 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add `CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE` and its GUI
+  option: Schlichting friction with a VD2 wall-temperature correction,
+  momentum-integral theta, and Van Driest/Walz profile thicknesses.
+
 - Add GUI selection of Poll fully turbulent attachment-line heating and
   swept-cylinder laminar/turbulent comparison, with diagnostic columns and
   missing turbulent values outside the model domain. Existing saved
@@ -42,6 +46,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
   T_w > 4000 K, or h_inf/(V^2/2) > 0.1 (approximately M < 7.07 for γ = 1.4).
 
 ### Changed
+
+- **Breaking:** `ECKERT` and `VAN_DRIEST_II` return NaN for turbulent delta99,
+  displacement thickness, and momentum thickness, including post-transition
+  points. Their former compressible thickness estimates were inaccurate.
+  Friction, drag, laminar thicknesses, and `NONE` outputs are unchanged.
+  The GUI displays unavailable metrics as a dash and prevents saving a
+  boundary-layer case with unavailable thickness or wall shear.
 
 - Revise the user manual for readers opening it from the GUI help page. Each
   model page now starts with a plain-language physical background, the

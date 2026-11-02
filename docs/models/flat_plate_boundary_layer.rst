@@ -109,7 +109,7 @@ The laminar Blasius relations are
    \qquad
    \frac{\theta_m}{x}=\frac{0.664}{\sqrt{Re_x}}.
 
-For a turbulent boundary layer, the one-fifth-power thickness and
+For a turbulent boundary layer with ``NONE``, the one-fifth-power thickness and
 one-seventh-power-profile estimates are
 
 .. math::
@@ -306,16 +306,17 @@ the edge dynamic-pressure definitions given above
 Chapman--Rubesin form :math:`C_{f,x}=0.664\sqrt{C^*/Re_x}` with
 :math:`C^*=\rho^*\mu^*/(\rho_e\mu_e)`. At :math:`M\to0` with
 :math:`T_w=T_e` and a supplied edge viscosity :math:`\mu_e=\mu(T_e)`,
-:math:`T^*=T_e` and the correction reduces to ``NONE``. If the supplied edge
+:math:`T^*=T_e` and the friction and laminar thicknesses reduce to ``NONE``. Turbulent
+thicknesses remain unavailable. If the supplied edge
 viscosity differs from the selected model, the effective Reynolds number need
 not equal :math:`Re_x`.
 
-The thickness correlations are evaluated at :math:`Re_x^*` without a density
-conversion. :math:`\delta_{99}`, :math:`\delta^*`, and :math:`\theta_m` are
-reference-property estimates and are not rescaled. For laminar Blasius flow,
+Laminar thickness correlations are evaluated at :math:`Re_x^*` without a
+density conversion. For laminar Blasius flow,
 :math:`2\,\mathrm{d}\theta_m/\mathrm{d}x=C_f^*` rather than :math:`C_{f,x}`.
-The turbulent thickness and skin-friction correlations are independent
-engineering estimates and need not satisfy this differential relation exactly.
+For turbulent portions, all three thicknesses are ``NaN``: the former
+reference-property estimates were inaccurate in compressible flow. This
+also applies after the prescribed transition. Friction and drag are unchanged.
 
 Van Driest II method
 ~~~~~~~~~~~~~~~~~~~~
@@ -393,11 +394,12 @@ raises :class:`~aerophysics.exceptions.ModelRangeError`. At the
 incompressible adiabatic limit :math:`M\to0`, all factors equal one.
 
 Laminar portions of a VD2 calculation still use Eckert, including the
-:math:`T_e/T^*` conversion to the edge basis. Compressible
-thicknesses are engineering estimates obtained from the incompressible
-relations at :math:`F_\theta Re_x`, not the friction Reynolds number
-:math:`Re_{x,i}`. ``turbulent_correlation`` is ignored for VD2 turbulent
-portions and remains active for ``NONE`` and ``ECKERT``.
+:math:`T_e/T^*` conversion to the edge basis and the laminar thicknesses.
+Turbulent :math:`\delta_{99}`, :math:`\delta^*`, and :math:`\theta_m` are
+``NaN``, including post-transition points. The former thickness estimates
+at :math:`F_\theta Re_x` were inaccurate in compressible flow.
+``turbulent_correlation`` is ignored for VD2 turbulent portions and remains
+active for ``NONE`` and ``ECKERT``. The Willems friction equations are unchanged.
 
 .. list-table:: Compressibility symbols
    :header-rows: 1
@@ -431,6 +433,196 @@ portions and remains active for ``NONE`` and ``ECKERT``.
      - internal
      - Van Driest II transformation factors
      - dimensionless
+
+Van Driest II with wall-temperature correction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Select ``CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE`` to obtain
+friction and profile-based thicknesses for compressible turbulent flow.
+This empirical extension combines the VD2 factors above with a wall-temperature
+correction and a momentum-integral closure. The local edge state sets
+:math:`Re_{x,e}=\rho_e U_e x/\mu_e`, and the same VD2 state gives
+:math:`F_C`, :math:`F_x`, :math:`T_r` with :math:`r=Pr^{1/3}`, and
+:math:`T_w` (equal to :math:`T_r` if omitted).
+
+The dimensionless wall-temperature factor is
+
+.. math::
+
+   w=\left(\frac{T_w}{T_r}\right)^{0.064}, \qquad R=F_x Re_{x,e}.
+
+The incompressible friction pair is the Schlichting relation and its exact
+accumulated-drag derivative, from
+:ref:`Schlichting and Gersten (2000) <ref-schlichting-gersten-2000>`:
+
+.. math::
+
+   \bar C_{F,i}=\frac{0.455}{(\log_{10}R)^{2.58}}, \qquad
+   c_{f,i}=\bar C_{F,i}\left(1-\frac{2.58}{\ln R}\right),
+
+   c_f=\frac{w c_{f,i}}{F_C}, \qquad
+   \bar C_F=\frac{w\bar C_{F,i}}{F_C}.
+
+Thus :math:`w=1` for an adiabatic wall. This mode ignores
+``turbulent_correlation`` and uses the Schlichting pair, rather than the
+Willems pair used by the original VD2 mode. At constant edge and wall
+conditions, :math:`c_f=\mathrm{d}(x\bar C_F)/\mathrm{d}x`.
+For ``TRANSITIONAL``, the laminar part uses Eckert and the average uses the
+specified-transition mixing equation above with this new turbulent average.
+
+The zero-pressure-gradient momentum integral gives the full-edge momentum
+thickness and wall shear stress:
+
+.. math::
+
+   \theta=\frac{x\bar C_F}{2}, \qquad
+   \tau_w=\frac{1}{2}\rho_e U_e^2 c_f.
+
+Here :math:`\bar C_F` is the selected turbulent or mixed average, on the
+edge dynamic-pressure basis. Distances and thicknesses are in m, wall shear
+is in Pa, and positive shear acts against the flow on the fluid. The
+streamwise coordinate starts at the leading edge; the profile coordinate
+:math:`y` points outward from the wall.
+
+The 99-percent thickness is the value :math:`d` satisfying
+
+.. math::
+
+   \theta_{\mathrm{prof}}(d)
+    =\int_0^d \frac{\rho u}{\rho_e U_e}
+                  \left(1-\frac{u}{U_e}\right)\,\mathrm{d}y
+    =0.978\theta.
+
+The profile is
+:func:`~aerophysics.boundary_layer_profile.compressible_turbulent_boundary_layer_profile`
+with the Van Driest velocity transformation, Walz temperature relation,
+:math:`\kappa=0.41`, :math:`B=5.2`, and a Coles wake parameter chosen so that
+:math:`u(d)=0.99U_e`. See :doc:`compressible_velocity_transformations`,
+:ref:`Coles (1956) <ref-coles-1956>`, :ref:`Spalding (1961)
+<ref-spalding-1961>`, and the Walz relation reproduced by
+:ref:`Zhang et al. (2014) <ref-zhang-bi-hussain-she-2014>`:
+
+.. math::
+
+   T=T_w+(T_r-T_w)\frac{u}{U_e}
+       +(T_e-T_r)\left(\frac{u}{U_e}\right)^2, \qquad
+   \rho=\rho_e\frac{T_e}{T}.
+
+The returned ``boundary_layer_thickness`` is :math:`d=\delta_{99}`;
+``displacement_thickness`` is
+:math:`\int_0^d[1-\rho u/(\rho_eU_e)]\,\mathrm{d}y`, integrated only through
+:math:`\delta_{99}`; ``momentum_thickness`` is the full :math:`\theta`, before
+multiplication by 0.978. The wake must satisfy :math:`0\le\Pi\le1`.
+If no admissible thickness exists, :class:`~aerophysics.exceptions.ModelRangeError`
+reports the affected broadcast array index and which wake bound is exceeded.
+
+Applicability and external comparisons
+++++++++++++++++++++++++++++++++++++++
+
+The tested envelope is :math:`M_e=0.3`--13.3, :math:`T_w/T_{aw}=0.07`--1,
+:math:`T_\infty=47`--271 K, and :math:`Re_{x,e}\approx10^6`--:math:`10^9`
+(:math:`M_e<2` only up to :math:`1.6\times10^8`), for a smooth
+zero-pressure-gradient plate and a
+calorically perfect gas. Flow is turbulent from the leading edge, or uses
+the prescribed transition model. This envelope is evidence of comparison,
+not a guarantee for every combination of these parameters; the wake closure
+can fail, including near a prescribed transition.
+
+Supply **local edge conditions** rather than freestream conditions. Viscous
+interaction at a sharp leading edge can raise the edge pressure 10--27%
+above freestream pressure at Mach 10. Evaluating a correlation with local
+states does not turn it into a streamwise variable-edge-state solver: the
+momentum/drag formulas retain their constant-state, zero-pressure-gradient
+assumption.
+
+The following summaries are externally supplied validation results dated
+2026-11-01, not simulations rerun by this package's test suite. Differences
+are model minus reference, divided by reference:
+
+* Against SU2 8.5.0 standard SA, :math:`\delta_{99}` RMS differences are
+  **2.5%** for the eight fitted conditions (343 sections), **2.3%** for six
+  held-out conditions (264 sections), and **2.1%** for long plates through
+  :math:`Re_{x,e}=1.7\times10^8`. Above :math:`10^8`, the RMS difference is
+  **5.2%**, spanning **−7.6 to +0.6%**.
+* Displacement thickness integrated through :math:`\delta_{99}` differs by
+  **2.3--2.7% RMS**.
+* Four SU2 standard-SA cases at DNS-matched conditions vary freestream
+  temperature and unit Reynolds number: :math:`T_\infty=47`--271 K,
+  :math:`Re'=4.8`--:math:`10.6\times10^6\ \mathrm{m}^{-1}`,
+  :math:`M_e=2.5`--13.3, :math:`T_w/T_{aw}=0.19`--0.99, and
+  :math:`Re_{x,e}\le9\times10^7`. Casewise :math:`\delta_{99}` RMS differences
+  are **1.8--4.0%** (range **−8.9 to +7.5%**); displacement-thickness RMS
+  differences are **1.2--4.0%**.
+* The :math:`\delta_{99}` difference falls almost linearly with
+  :math:`\log_{10}Re_{x,e}`, by **5--6 percentage points per decade**, with no
+  levelling off up to :math:`10^9`. Seven further SU2 standard-SA cases
+  (M2, M6 and M10 at :math:`Re'=1.2\times10^8\ \mathrm{m}^{-1}` and
+  :math:`T_w/T_{aw}=0.07`--0.5; M1.5, M0.8 and M0.3 at
+  :math:`Re'=2\times10^7\ \mathrm{m}^{-1}` with the wall at recovery
+  temperature) give :math:`\delta_{99}` differences of **+0.2 to +1.1%** at
+  :math:`Re_{x,e}=10^7`, **−6.3 to −3.5%** at :math:`10^8`, and **−12.1 to
+  −8.6%** at :math:`10^9` for the supersonic cold walls. For the
+  recovery-temperature walls at :math:`M_e\le1.5`, the differences are
+  **+9 to +11%** at :math:`10^6`, **+4 to +6%** at :math:`10^7`, and **−0.5 to
+  +1.1%** at :math:`10^8`. The slope is the same at M0.3, so it comes from the
+  profile shape, not from the compressibility transformation. Whether the
+  correlation or the SA model is closer to measured :math:`\delta_{99}` at
+  high Reynolds number has not been established.
+* Over the same cases, :math:`C_f` differs by **−1.3 to +2.0%** mean and
+  :math:`\theta` by **−1.3 to +3.5%** mean (RMS at most **2.2%** and
+  **3.8%**), up to :math:`Re_{x,e}=10^9` and down to M0.3.
+* Against incompressible zero-pressure-gradient measurements and DNS
+  (:ref:`Österlund et al. (2000) <ref-osterlund-2000>`,
+  :ref:`Schlatter and Örlü (2010) <ref-schlatter-orlu-2010>`,
+  :ref:`Vallikivi, Hultmark and Smits (2015) <ref-vallikivi-hultmark-smits-2015>`;
+  :math:`Re_\theta=2\times10^3`--:math:`2.3\times10^5`, about
+  :math:`Re_x=10^6`--:math:`2.7\times10^8`), :math:`\delta_{99}` is too thick
+  by about **+19%** at :math:`Re_x=10^6`, **+15%** at :math:`10^7`, **+10%**
+  at :math:`10^8`, and **+9%** at :math:`1.5\times10^8`. SU2 standard SA is
+  **+7 to +9%** thick over the same range, so most of the SA-relative drift
+  above comes from the correlation approaching the measurements as
+  :math:`Re_x` rises. The difference comes mainly from the incompressible
+  Schlichting friction pair: at a given :math:`Re_\theta` its :math:`C_f` is
+  **6--6.5%** above the measurements, which makes :math:`\theta` about
+  **5.5%** thick and lowers the solved wake parameter (0.33--0.45 against
+  about 0.6 measured). Given the measured :math:`\theta` and :math:`C_f`, the
+  profile closure reproduces :math:`\delta_{99}` within **−6 to +2%** on
+  average. The widely used friction pair is kept unchanged.
+* The solved wake parameter rises with Reynolds number on cold hypersonic
+  walls: at M10 with :math:`T_w/T_{aw}=0.07` it reaches :math:`\Pi=0.976` at
+  :math:`Re_{x,e}=10^9`. Extrapolating that trend, the wake bound
+  :math:`\Pi\le1` would be exceeded, and
+  :class:`~aerophysics.exceptions.ModelRangeError` raised, near
+  :math:`Re_{x,e}\approx1.5\times10^9` for that condition.
+* At matched :math:`Re_\theta`, comparison with the DNS of
+  :ref:`Zhang, Duan and Choudhari (2018) <ref-zhang-duan-choudhari-2018>`
+  gives :math:`C_f` differences **−0.3, −0.6, −3.8, −2.2%**, and
+  :math:`\delta_{99}` differences **−4.5, −0.5, +0.6, +15.3%**, respectively
+  for M2.5, M6 with :math:`T_w/T_r=0.76`, M6 with :math:`T_w/T_r=0.25`, and
+  M14 with :math:`T_w/T_r=0.18`. The M14 result shows that the good M6
+  agreement should not be extrapolated to higher Mach numbers.
+
+The exponent **0.064** is fitted to SU2 solutions; DNS also exhibits lower
+cold-wall friction than VD2. The factor **0.978** is the SU2 mean ratio of
+momentum thickness through :math:`\delta_{99}` to full-edge momentum thickness
+(the truncation difference varies from **−5 to −1%**). Neither constant is
+universal. The nine-row independent-implementation regression fixture uses
+exponent 0.06391; rounding to 0.064 changes the factor by less than 0.03%.
+Its ``su2_delta99`` column is comparison data, not a unit-test acceptance target.
+
+Why the original compressible thicknesses are unavailable
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Across the supplied 1059-section SU2 comparison (standard SA, M2--M10,
+:math:`T_w/T_{aw}=0.07`--1), Eckert's former :math:`\delta_{99}` estimate had
+mean error **+58%** (range **+5 to +92%**); VD2 had mean error **+17%**
+(**18% RMS**, range **−1 to +37%**). Fixed ratios :math:`\delta^*=\delta/8`
+and :math:`\theta=7\delta/72` missed displacement thickness by factors of
+2--5 (underprediction) and momentum thickness by factors of 2--10
+(overprediction). Consequently ``ECKERT`` and ``VAN_DRIEST_II`` now return
+``NaN`` for all three turbulent thicknesses, including post-transition
+points. Friction, drag, laminar portions, and all ``NONE`` outputs retain
+their existing definitions.
 
 Worked friction example
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -470,5 +662,5 @@ Applicability
 The flat-plate model excludes surface roughness, streamwise pressure
 gradients, separation, suction, blowing, and natural-transition prediction.
 The gas remains calorically perfect and compressible transport properties use
-the supplied dynamic-viscosity model. The thickness correlations are
-engineering estimates rather than resolved profile solutions.
+the supplied dynamic-viscosity model. The thickness models remain engineering estimates, including the coupled
+mean-profile closure; comparison with SA is not independent physical validation.

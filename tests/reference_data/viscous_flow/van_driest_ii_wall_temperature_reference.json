@@ -1,0 +1,8 @@
+{
+  "source": "SU2 8.5.0 標準SA の平板の局所外縁状態と、独立した実装による参照値（2026-11-01）",
+  "method": "Van Driest II factors, Schlichting friction pair, wall-temperature exponent 0.06391, and Van Driest/Walz profile closure with theta(delta99)/theta(edge)=0.978",
+  "conditions": "PerfectGas(287.053, 1.4), SutherlandModel(1.7894e-5, 288.15, 110.4), Pr=0.72; supplied edge viscosity and explicit wall temperature, including AD rows",
+  "tolerance": "Relative 0.002 for cf_local and theta; 0.005 for delta99 and displacement_thickness. Rounding the exponent to 0.064 changes the correction by less than 0.03 percent.",
+  "role": "Independent implementation regression; su2_delta99 is comparison data only, not a test target. The wider SU2/DNS validation summaries were supplied externally and are not reproduced by these nine rows.",
+  "units": "SI; x_m, theta, delta99, displacement_thickness and su2_delta99 in m; velocity in m/s; density in kg/m^3; temperature in K; viscosity in Pa s; mach and cf_local dimensionless"
+}

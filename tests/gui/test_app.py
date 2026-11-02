@@ -364,7 +364,13 @@ render_boundary_layer(UnitPreferences())
     assert not app.error
     result, configuration = app.session_state["boundary_payload"]
     assert configuration == original_configuration
-    assert result == original_result
+    assert result.warnings == original_result.warnings
+    for row, original in zip(result.rows, original_result.rows, strict=True):
+        for key, value in original.items():
+            if isinstance(value, float) and math.isnan(value):
+                assert math.isnan(row[key])
+            else:
+                assert row[key] == value
 
 
 def test_additional_compressible_flow_pages() -> None:
@@ -1329,3 +1335,116 @@ render_heating(UnitPreferences())
     assert [warning.value for warning in app.warning] == warnings
     assert app.get("plotly_chart")[0].proto.spec == plot
     assert app.session_state["heating_payload"] == (result, saved)
+
+
+@pytest.mark.parametrize("correction", ["Eckert基準温度法", "Van Driest II"])
+def test_boundary_nan_metrics_exports_and_save_guard(correction: str) -> None:
+    from aerophysics.gui.tables import display_rows, rows_to_csv
+
+    script = """
+from aerophysics.gui.pages import render_boundary_layer
+from aerophysics.gui.units import UnitPreferences
+render_boundary_layer(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.selectbox(key="boundary_correction").set_value(correction).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception and not app.error
+    thickness = next(metric for metric in app.metric if metric.label == "境界層厚さ")
+    assert thickness.value == "—"
+    assert app.get("plotly_chart") and app.dataframe and app.download_button
+    result, _ = app.session_state["boundary_payload"]
+    table = display_rows("boundary_layer", result.rows, UnitPreferences())
+    assert "nan" in rows_to_csv(table).lower()
+    # Retain an existing valid saved case when a later calculation cannot save.
+    previous = BoundaryLayerCase(620.0, 0.5, 240.0, 0.01, 100.0)
+    app.session_state["current_boundary_layer_case"] = previous
+    app.button(key="boundary_save_case").click().run()
+    assert not app.exception
+    assert any("保存できません" in warning.value for warning in app.warning)
+    assert app.session_state["current_boundary_layer_case"] == previous
+    app.radio(key="boundary_mode").set_value("距離スイープ").run()
+    app.number_input(key="boundary_sweep_points").set_value(3).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert len(app.dataframe[0].value) == 3
+    assert app.get("plotly_chart") and app.download_button
+
+
+def test_boundary_wall_temperature_option_replay_and_save() -> None:
+    from aerophysics.gui.config import load_configuration
+
+    script = """
+from aerophysics.gui.pages import render_boundary_layer
+from aerophysics.gui.units import UnitPreferences
+render_boundary_layer(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    assert (
+        "Van Driest II\uff0b壁温補正"
+        in app.selectbox(key="boundary_correction").options
+    )
+    app.selectbox(key="boundary_correction").set_value(
+        "Van Driest II\uff0b壁温補正"
+    ).run()
+    app.number_input(key="boundary_velocity").set_value(620.0).run()
+    app.number_input(key="boundary_mach").set_value(2.0).run()
+    app.number_input(key="boundary_temperature").set_value(240.0).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception and not app.error
+    result, configuration = app.session_state["boundary_payload"]
+    assert (
+        configuration["models"]["compressibility_correction"]
+        == "van_driest_ii_wall_temperature"
+    )
+    assert math.isfinite(result.rows[0]["boundary_layer_thickness"])
+    app.button(key="boundary_save_case").click().run()
+    assert isinstance(
+        app.session_state["current_boundary_layer_case"], BoundaryLayerCase
+    )
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_boundary_layer_configuration"] = load_configuration(
+        dump_configuration(configuration)
+    )
+    replay.run()
+    replay.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert replay.session_state["boundary_payload"][0] == result
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_metric_nonfinite_displays_dash(value: float) -> None:
+    app = AppTest.from_string(
+        """
+import streamlit as st
+from aerophysics.gui.pages import _metric
+_metric("test", {"value": st.session_state["test_value"]}, "value")
+""",
+        default_timeout=30,
+    )
+    app.session_state["test_value"] = value
+    app.run()
+    assert not app.exception
+    assert app.metric[0].value == "—"
+
+
+def test_boundary_save_rejects_nonfinite_shear() -> None:
+    from aerophysics.gui.adapters import CalculationResult
+
+    app = AppTest.from_string(
+        """
+from aerophysics.gui.pages import render_boundary_layer
+from aerophysics.gui.units import UnitPreferences
+render_boundary_layer(UnitPreferences())
+""",
+        default_timeout=30,
+    ).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    result, config = app.session_state["boundary_payload"]
+    row = dict(result.rows[0])
+    row["wall_shear_stress"] = float("nan")
+    app.session_state["boundary_payload"] = (CalculationResult((row,), ()), config)
+    app.button(key="boundary_save_case").click().run()
+    assert not app.exception
+    assert any("保存できません" in warning.value for warning in app.warning)
+    assert "current_boundary_layer_case" not in app.session_state

@@ -549,3 +549,73 @@ def test_forward_rejects_length_choice_and_shear_errors() -> None:
             1.0,
             transformation="van_driest",  # type: ignore[arg-type]
         )
+
+
+@pytest.mark.parametrize(
+    "mach, wall_ratio",
+    [(1e-5, 1.0), (2.0, 0.07), (6.0, 0.25), (13.3, 0.19), (6.0, 1.2)],
+)
+def test_direct_van_driest_walz_integrals_match_public_model(
+    mach: float, wall_ratio: float
+) -> None:
+    from aerophysics.boundary_layer_profile import _van_driest_walz_profile
+
+    temperature = 240.0
+    velocity = mach * float(AIR.speed_of_sound(temperature))
+    recovery = temperature + np.cbrt(0.72) * velocity**2 / (2 * AIR.cp)
+    wall = wall_ratio * recovery
+    shear = 0.5 * 0.5 * velocity**2 * 0.002
+    direct = _van_driest_walz_profile(
+        velocity,
+        0.5,
+        temperature,
+        wall,
+        shear,
+        prandtl_number=0.72,
+        gas=AIR,
+        viscosity_model=AIR_VISCOSITY,
+    )
+    delta = direct.thickness_at_wake(0.5)
+    public = compressible_turbulent_boundary_layer_profile(
+        [0.0, delta],
+        velocity,
+        0.5,
+        temperature,
+        delta,
+        shear,
+        transformation=CompressibleVelocityTransformation.VAN_DRIEST,
+        temperature_velocity_relation=TemperatureVelocityRelation.WALZ,
+        wall_temperature=wall,
+        wake_parameter=0.5,
+    )
+    assert_allclose(
+        direct.integrals(delta),
+        [
+            public.momentum_thickness,
+            public.displacement_thickness,
+            public.wake_parameter,
+        ],
+        rtol=1e-6,
+    )
+
+
+def test_direct_van_driest_walz_wake_bounds() -> None:
+    from aerophysics.boundary_layer_profile import _van_driest_walz_profile
+
+    direct = _van_driest_walz_profile(
+        620.0,
+        0.5,
+        240.0,
+        206.0,
+        200.0,
+        prandtl_number=0.72,
+        gas=AIR,
+        viscosity_model=AIR_VISCOSITY,
+    )
+    for wake in (0.0, 1.0):
+        delta = direct.thickness_at_wake(wake)
+        assert direct.integrals(delta)[2] == pytest.approx(wake, abs=1e-12)
+    with pytest.raises(ModelRangeError, match="Pi < 0"):
+        direct.integrals(direct.thickness_at_wake(0.0) * 1.01)
+    with pytest.raises(ModelRangeError, match="Pi > 1"):
+        direct.integrals(direct.thickness_at_wake(1.0) * 0.99)

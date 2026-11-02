@@ -34,9 +34,15 @@ from numpy.typing import ArrayLike
 from scipy.optimize import brentq
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
+from aerophysics.boundary_layer_profile import (
+    _van_driest_walz_profile,
+)
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import AIR, PerfectGas
 from aerophysics.transport import AIR_VISCOSITY, DynamicViscosityModel
+
+_VD2_WALL_TEMPERATURE_EXPONENT = 0.064
+_DELTA99_MOMENTUM_FRACTION = 0.978
 
 
 class BoundaryLayerRegime(StrEnum):
@@ -60,6 +66,7 @@ class CompressibilityCorrection(StrEnum):
     NONE = "none"
     ECKERT = "eckert"
     VAN_DRIEST_II = "van_driest_ii"
+    VAN_DRIEST_II_WALL_TEMPERATURE = "van_driest_ii_wall_temperature"
 
 
 @dataclass(frozen=True, slots=True)
@@ -431,6 +438,51 @@ def _willems_friction(
     return local, average
 
 
+def _wall_temperature_friction(
+    reynolds: FloatArray,
+) -> tuple[FloatArray, FloatArray]:
+    return _turbulent_friction(reynolds, TurbulentCorrelation.SCHLICHTING)
+
+
+def _wall_temperature_thickness(
+    theta: float,
+    velocity: float,
+    density: float,
+    temperature: float,
+    wall: float,
+    shear: float,
+    *,
+    prandtl_number: float,
+    gas: PerfectGas,
+    viscosity_model: DynamicViscosityModel,
+) -> tuple[float, float]:
+    profile = _van_driest_walz_profile(
+        velocity,
+        density,
+        temperature,
+        wall,
+        shear,
+        prandtl_number=prandtl_number,
+        gas=gas,
+        viscosity_model=viscosity_model,
+    )
+    # Pi decreases with thickness. Its two admissible endpoints give the
+    # entire valid bracket, including roots arbitrarily close to Pi=0 or 1.
+    lower = profile.thickness_at_wake(1.0)
+    upper = profile.thickness_at_wake(0.0)
+    target = _DELTA99_MOMENTUM_FRACTION * theta
+
+    def residual(d: float) -> float:
+        return profile.integrals(d)[0] - target
+
+    if residual(lower) > 0.0:
+        raise ModelRangeError("required thickness is below the Pi=1 bound (Pi > 1)")
+    if residual(upper) < 0.0:
+        raise ModelRangeError("required thickness is above the Pi=0 bound (Pi < 0)")
+    root = brentq(residual, lower, upper, xtol=np.finfo(float).tiny, rtol=1e-6)
+    return root, profile.integrals(root)[1]
+
+
 def flat_plate_boundary_layer(
     distance: ArrayLike,
     edge_velocity: ArrayLike,
@@ -469,15 +521,15 @@ def flat_plate_boundary_layer(
         Skin-friction correlation used wherever the boundary layer is
         turbulent. The default is the Schlichting logarithmic correlation.
         This option is ignored for turbulent portions when
-        ``compressibility_correction=VAN_DRIEST_II`` because that correction
-        uses its dedicated Willems implicit equations.
+        ``compressibility_correction=VAN_DRIEST_II`` (Willems equations), or
+        ``VAN_DRIEST_II_WALL_TEMPERATURE`` (Schlichting pair).
     transition_reynolds:
         Reynolds number at transition. Required only for ``TRANSITIONAL``;
         there is deliberately no default transition location.
     compressibility_correction:
-        ``NONE``, Eckert's reference-temperature method, or Van Driest II.
-        With Van Driest II, laminar portions use Eckert and turbulent portions
-        use Van Driest II. Eckert correlations evaluated at ``Re*`` give
+        ``NONE``, ``ECKERT``, ``VAN_DRIEST_II``, or
+        ``VAN_DRIEST_II_WALL_TEMPERATURE``. Both Van Driest II modes use
+        Eckert for laminar portions. Eckert correlations evaluated at ``Re*`` give
         coefficients on the reference dynamic pressure ``rho* U_e**2/2``;
         they are converted to the edge basis with ``rho*/rho_e = T_e/T*``.
     mach, edge_temperature:
@@ -496,18 +548,32 @@ def flat_plate_boundary_layer(
     Notes
     -----
     ``boundary_layer_thickness`` is the conventional 99-percent thickness.
-    Turbulent thicknesses use the one-fifth-power smooth-plate thickness
-    correlation and a one-seventh-power velocity-profile approximation.
-    ``drag_per_unit_width`` is accumulated from the leading edge to
-    ``distance`` on one side of the plate.
+    With ``NONE``, turbulent thicknesses use the one-fifth-power correlation
+    and one-seventh-power profile approximation. ``ECKERT`` and
+    ``VAN_DRIEST_II`` return NaN for all three thicknesses at turbulent
+    points, including post-transition points, because these approximations
+    are inaccurate for compressible flow. Laminar thicknesses are unchanged.
 
-    Skin-friction coefficients are reported on the edge dynamic-pressure
-    basis for all compressibility corrections. Eckert thicknesses are the
-    incompressible length correlations evaluated at ``Re*`` and are not
-    rescaled; the momentum thickness is a reference-property estimate. For
-    laminar Blasius flow, ``2 d(theta)/dx`` equals the reference-basis
-    friction coefficient; the turbulent thickness estimate is an independent
-    engineering correlation.
+    ``VAN_DRIEST_II_WALL_TEMPERATURE`` multiplies the Schlichting friction
+    pair divided by the VD2 friction factor by ``(Tw/Tr)**0.064``. Its
+    momentum thickness is ``distance * average_skin_friction_coefficient/2``
+    on the edge basis (mixed average for transitional flow). A Van Driest
+    velocity transformation with Walz temperature relation, kappa=0.41,
+    B=5.2, and 0 <= Pi <= 1 determines delta99 and displacement thickness
+    through delta99, matching profile momentum thickness to 0.978 times the
+    returned, full-edge momentum thickness. An inadmissible closure raises
+    ModelRangeError with the broadcast array index and wake-bound direction.
+    External validation covers smooth perfect-gas ZPG flow, Me=0.3--13.3,
+    Tw/Taw=0.07--1, freestream T=47--271 K, Re_x,e about 1e6--1e9 (Me<2 only
+    to 1.6e8). Against SU2 SA, the delta99 difference falls by 5--6 points per
+    decade of Re_x,e (about -9 to -12% at 1e9 on cold supersonic walls).
+    Supply local edge states; extrapolation beyond that envelope is unverified.
+
+    Skin-friction coefficients use edge dynamic pressure for every mode.
+    ``drag_per_unit_width`` is accumulated from the leading edge on one side.
+    The integral momentum relation assumes constant edge and wall conditions
+    and zero pressure gradient. Laminar Eckert thicknesses remain reference-
+    property estimates evaluated at Re*, without density rescaling.
     """
     transition = _validate_model_choices(
         regime, turbulent_correlation, transition_reynolds
@@ -578,6 +644,14 @@ def flat_plate_boundary_layer(
     laminar_reynolds = np.asarray(reynolds, dtype=np.float64)
     turbulent_friction_reynolds = np.asarray(reynolds, dtype=np.float64)
     turbulent_thickness_reynolds = np.asarray(reynolds, dtype=np.float64)
+    wall_corrected = (
+        compressibility_correction
+        is CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE
+    )
+    vd2 = wall_corrected or (
+        compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II
+    )
+    vd2_friction = _wall_temperature_friction if wall_corrected else _willems_friction
     turbulent_friction_factor = np.ones_like(reynolds)
     turbulent_reynolds_factor = np.ones_like(reynolds)
     # Reference-to-edge density ratios that convert Eckert coefficients from
@@ -658,6 +732,11 @@ def flat_plate_boundary_layer(
             turbulent_friction_reynolds = van_driest.friction_reynolds
             turbulent_thickness_reynolds = van_driest.thickness_reynolds
             turbulent_friction_factor = van_driest.friction_factor
+            if wall_corrected:
+                weight = (
+                    van_driest.wall_temperature / van_driest.recovery_temperature
+                ) ** _VD2_WALL_TEMPERATURE_EXPONENT
+                turbulent_friction_factor = turbulent_friction_factor / weight
             turbulent_reynolds_factor = van_driest.reynolds_factor
             recovery_temperature = np.where(
                 turbulent_mask,
@@ -676,11 +755,11 @@ def flat_plate_boundary_layer(
     if regime is BoundaryLayerRegime.LAMINAR:
         selected = laminar
     elif regime is BoundaryLayerRegime.TURBULENT:
-        if compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II:
+        if vd2:
             turbulent_thickness = _turbulent_thicknesses(
                 x, turbulent_thickness_reynolds
             )
-            local_i, average_i = _willems_friction(turbulent_friction_reynolds)
+            local_i, average_i = vd2_friction(turbulent_friction_reynolds)
             turbulent = (
                 *turbulent_thickness,
                 local_i / turbulent_friction_factor,
@@ -701,11 +780,11 @@ def flat_plate_boundary_layer(
             x,
             turbulent_thickness_scale * np.maximum(reynolds, transition),
         )
-        if compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II:
+        if vd2:
             friction_reynolds = turbulent_reynolds_factor * np.maximum(
                 reynolds, transition
             )
-            local_i, average_i = _willems_friction(friction_reynolds)
+            local_i, average_i = vd2_friction(friction_reynolds)
             turbulent = (
                 *turbulent_thickness,
                 local_i / turbulent_friction_factor,
@@ -725,8 +804,8 @@ def flat_plate_boundary_layer(
         laminar_average = (
             laminar_density_ratio * 1.328 / np.sqrt(laminar_transition_reynolds)
         )
-        if compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II:
-            _, turbulent_average_i = _willems_friction(
+        if vd2:
+            _, turbulent_average_i = vd2_friction(
                 turbulent_reynolds_factor * transition
             )
             turbulent_average = turbulent_average_i / turbulent_friction_factor
@@ -755,6 +834,37 @@ def flat_plate_boundary_layer(
     dynamic_pressure = 0.5 * density * velocity**2
     shear = dynamic_pressure * local_friction
     drag = dynamic_pressure * x * average_friction
+    if compressibility_correction in (
+        CompressibilityCorrection.ECKERT,
+        CompressibilityCorrection.VAN_DRIEST_II,
+    ):
+        thickness = np.where(turbulent_mask, np.nan, thickness)
+        displacement = np.where(turbulent_mask, np.nan, displacement)
+        momentum = np.where(turbulent_mask, np.nan, momentum)
+    elif wall_corrected:
+        thickness = np.array(thickness, copy=True)
+        displacement = np.array(displacement, copy=True)
+        momentum = np.where(turbulent_mask, x * average_friction / 2.0, momentum)
+        assert used_wall_temperature is not None
+        for index in np.ndindex(reynolds.shape):
+            if not turbulent_mask[index]:
+                continue
+            try:
+                thickness[index], displacement[index] = _wall_temperature_thickness(
+                    float(momentum[index]),
+                    float(velocity[index]),
+                    float(density[index]),
+                    float(broadcast[5][index]),
+                    float(used_wall_temperature[index]),
+                    float(shear[index]),
+                    prandtl_number=prandtl_number,
+                    gas=gas,
+                    viscosity_model=viscosity_model,
+                )
+            except ModelRangeError as error:
+                raise ModelRangeError(
+                    f"thickness at array index {index}: {error}"
+                ) from error
 
     def output(values: FloatArray) -> FloatResult:
         return return_float(np.asarray(values, dtype=np.float64), scalar=scalar)

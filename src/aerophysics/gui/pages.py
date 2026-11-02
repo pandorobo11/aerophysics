@@ -83,7 +83,7 @@ def _metric(
     label: str, row: Mapping[str, object], heading: str, fmt: str = ".5g"
 ) -> None:
     value = row.get(heading)
-    if isinstance(value, (int, float)):
+    if isinstance(value, (int, float)) and np.isfinite(value):
         st.metric(label, format(float(value), fmt))
     else:
         st.metric(label, "—")
@@ -1056,6 +1056,9 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
                 CompressibilityCorrection.NONE: "なし",
                 CompressibilityCorrection.ECKERT: "Eckert基準温度法",
                 CompressibilityCorrection.VAN_DRIEST_II: "Van Driest II",
+                CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE: (
+                    "Van Driest II＋壁温補正"
+                ),
             }[value],
             key="boundary_correction",
         )
@@ -1272,7 +1275,14 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
         if st.button("現在の境界層ケースとして保存", key="boundary_save_case"):
             row = result.rows[0]
             input_values = configuration.get("inputs_si")
-            if isinstance(input_values, dict):
+            if not all(
+                np.isfinite(float(row[key]))
+                for key in ("boundary_layer_thickness", "wall_shear_stress")
+            ):
+                st.warning(
+                    "この補正では乱流の境界層厚さを出力しないため、境界層ケースを保存できません。"
+                )
+            elif isinstance(input_values, dict):
                 st.session_state["current_boundary_layer_case"] = BoundaryLayerCase(
                     edge_velocity=float(input_values["edge_velocity"]),
                     edge_density=float(input_values["edge_density"]),

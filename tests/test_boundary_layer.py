@@ -1,5 +1,6 @@
 """Tests for smooth flat-plate boundary-layer correlations."""
 
+import warnings
 from typing import Any
 
 import numpy as np
@@ -228,9 +229,21 @@ def test_eckert_reduces_to_none_in_incompressible_limit(
         "wall_shear_stress",
         "drag_per_unit_width",
     ):
+        expected = np.asarray(getattr(reference, name))
+        if name in (
+            "boundary_layer_thickness",
+            "displacement_thickness",
+            "momentum_thickness",
+        ):
+            turbulent = np.zeros_like(expected, dtype=bool)
+            if regime is BoundaryLayerRegime.TURBULENT:
+                turbulent[:] = True
+            elif regime is BoundaryLayerRegime.TRANSITIONAL:
+                turbulent = np.asarray(reference.reynolds_number) > transition_reynolds
+            expected = np.where(turbulent, np.nan, expected)
         assert_allclose(
             getattr(corrected, name),
-            getattr(reference, name),
+            expected,
             rtol=1e-12,
             err_msg=name,
         )
@@ -452,7 +465,7 @@ def test_van_driest_local_and_average_implicit_residuals(
         edge_temperature=edge_temperature,
         wall_temperature=wall_temperature,
     )
-    friction_factor, momentum_factor, reynolds_factor, recovery = _van_driest_factors(
+    friction_factor, _, reynolds_factor, recovery = _van_driest_factors(
         mach, edge_temperature, wall_temperature
     )
     expected_wall = recovery if wall_temperature is None else wall_temperature
@@ -460,10 +473,7 @@ def test_van_driest_local_and_average_implicit_residuals(
     assert result.effective_reynolds_number == pytest.approx(
         result.reynolds_number * reynolds_factor
     )
-    # Thickness uses Re_x*F_theta, not the friction Reynolds number.
-    assert result.boundary_layer_thickness == pytest.approx(
-        0.37 * (float(result.reynolds_number) * momentum_factor) ** -0.2
-    )
+    assert np.isnan(result.boundary_layer_thickness)
 
     local = float(result.local_skin_friction_coefficient)
     average = float(result.average_skin_friction_coefficient)
@@ -844,3 +854,317 @@ def test_van_driest_reports_unbracketed_willems_solution() -> None:
             mach=0.0,
             edge_temperature=250.0,
         )
+
+
+# The independent fixture uses explicit local edge states and wall temperatures,
+# including AD rows. SU2 delta99 is deliberately not a test target.
+def _wall_temperature_reference_rows() -> list[dict[str, str]]:
+    import csv
+    from pathlib import Path
+
+    path = (
+        Path(__file__).parent
+        / "reference_data/viscous_flow/van_driest_ii_wall_temperature_reference.csv"
+    )
+    with path.open(newline="") as stream:
+        return list(csv.DictReader(stream))
+
+
+@pytest.mark.parametrize(
+    "row", _wall_temperature_reference_rows(), ids=lambda row: row["case"]
+)
+def test_wall_temperature_reference_and_public_profile(row: dict[str, str]) -> None:
+    from aerophysics.boundary_layer_profile import (
+        CompressibleVelocityTransformation,
+        TemperatureVelocityRelation,
+        _van_driest_walz_profile,
+        compressible_turbulent_boundary_layer_profile,
+    )
+    from aerophysics.gas import PerfectGas
+    from aerophysics.transport import SutherlandModel
+
+    r = {key: float(value) for key, value in row.items() if key != "case"}
+    gas = PerfectGas(287.053, 1.4)
+    viscosity = SutherlandModel(1.7894e-5, 288.15, 110.4)
+    result = flat_plate_boundary_layer(
+        r["x_m"],
+        r["edge_velocity"],
+        r["edge_density"],
+        r["edge_viscosity"],
+        regime=BoundaryLayerRegime.TURBULENT,
+        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+        mach=r["mach"],
+        edge_temperature=r["edge_temperature"],
+        wall_temperature=r["wall_temperature"],
+        prandtl_number=0.72,
+        gas=gas,
+        viscosity_model=viscosity,
+    )
+    for field, reference, tolerance in (
+        ("local_skin_friction_coefficient", "cf_local", 2e-3),
+        ("momentum_thickness", "theta", 2e-3),
+        ("boundary_layer_thickness", "delta99", 5e-3),
+        ("displacement_thickness", "displacement_thickness", 5e-3),
+    ):
+        assert isinstance(getattr(result, field), float)
+        assert getattr(result, field) == pytest.approx(r[reference], rel=tolerance)
+    assert result.momentum_thickness == pytest.approx(
+        r["x_m"] * float(result.average_skin_friction_coefficient) / 2.0, rel=1e-14
+    )
+    delta = float(result.boundary_layer_thickness)
+    shear = float(result.wall_shear_stress)
+    public = compressible_turbulent_boundary_layer_profile(
+        np.array([0.0, delta]),
+        r["edge_velocity"],
+        r["edge_density"],
+        r["edge_temperature"],
+        delta,
+        shear,
+        transformation=CompressibleVelocityTransformation.VAN_DRIEST,
+        temperature_velocity_relation=TemperatureVelocityRelation.WALZ,
+        wall_temperature=r["wall_temperature"],
+        gas=gas,
+        viscosity_model=viscosity,
+        prandtl_number=0.72,
+    )
+    fast = _van_driest_walz_profile(
+        r["edge_velocity"],
+        r["edge_density"],
+        r["edge_temperature"],
+        r["wall_temperature"],
+        shear,
+        gas=gas,
+        viscosity_model=viscosity,
+        prandtl_number=0.72,
+    ).integrals(delta)
+    assert_allclose(
+        fast,
+        [
+            public.momentum_thickness,
+            public.displacement_thickness,
+            public.wake_parameter,
+        ],
+        rtol=1e-6,
+    )
+    assert public.momentum_thickness == pytest.approx(
+        0.978 * float(result.momentum_thickness), rel=1e-4
+    )
+    assert public.edge_velocity_ratio == pytest.approx(0.99, rel=1e-8)
+    assert result.displacement_thickness == pytest.approx(
+        public.displacement_thickness, rel=1e-6
+    )
+
+
+@pytest.mark.parametrize("wall", [None, 206.0])
+@pytest.mark.parametrize(
+    "regime", [BoundaryLayerRegime.TURBULENT, BoundaryLayerRegime.TRANSITIONAL]
+)
+def test_wall_temperature_friction_and_momentum_integral(
+    wall: float | None, regime: BoundaryLayerRegime
+) -> None:
+    args: dict[str, Any] = dict(
+        edge_velocity=620.0,
+        edge_density=0.5,
+        edge_dynamic_viscosity=1.55e-5,
+        regime=regime,
+        transition_reynolds=5e5 if regime is BoundaryLayerRegime.TRANSITIONAL else None,
+        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+        mach=2.0,
+        edge_temperature=240.0,
+        wall_temperature=wall,
+    )
+    x = 0.5
+    result = flat_plate_boundary_layer(x, **args)
+    fc, _, fx, recovery = _van_driest_factors(2.0, 240.0, wall, 1.55e-5)
+    weight = 1.0 if wall is None else (wall / recovery) ** 0.064
+    re = 0.5 * 620.0 * x / 1.55e-5
+    average = weight / fc * 0.455 / np.log10(fx * re) ** 2.58
+    local = average * (1.0 - 2.58 / np.log(fx * re))
+    assert result.local_skin_friction_coefficient == pytest.approx(local, rel=1e-12)
+    if regime is BoundaryLayerRegime.TRANSITIONAL:
+        laminar = flat_plate_boundary_layer(
+            5e5 * 1.55e-5 / (0.5 * 620.0),
+            620.0,
+            0.5,
+            1.55e-5,
+            regime=BoundaryLayerRegime.LAMINAR,
+            mach=2.0,
+            edge_temperature=240.0,
+            wall_temperature=wall,
+            compressibility_correction=CompressibilityCorrection.ECKERT,
+        )
+        average += (
+            5e5
+            / re
+            * (
+                float(laminar.average_skin_friction_coefficient)
+                - weight / fc * 0.455 / np.log10(fx * 5e5) ** 2.58
+            )
+        )
+    assert result.average_skin_friction_coefficient == pytest.approx(average, rel=1e-12)
+    assert result.momentum_thickness == pytest.approx(x * average / 2.0, rel=1e-12)
+    assert np.isfinite(result.boundary_layer_thickness)
+    assert np.isfinite(result.displacement_thickness)
+    h = x * 1e-5
+    below = flat_plate_boundary_layer(x - h, **args)
+    above = flat_plate_boundary_layer(x + h, **args)
+    derivative = (
+        (x + h) * float(above.average_skin_friction_coefficient)
+        - (x - h) * float(below.average_skin_friction_coefficient)
+    ) / (2 * h)
+    assert result.local_skin_friction_coefficient == pytest.approx(derivative, rel=1e-4)
+    power = flat_plate_boundary_layer(
+        x, **args, turbulent_correlation=TurbulentCorrelation.POWER_LAW
+    )
+    assert power == result
+
+
+@pytest.mark.parametrize(
+    "correction",
+    [CompressibilityCorrection.ECKERT, CompressibilityCorrection.VAN_DRIEST_II],
+)
+@pytest.mark.parametrize(
+    "regime", [BoundaryLayerRegime.TURBULENT, BoundaryLayerRegime.TRANSITIONAL]
+)
+def test_compressible_turbulent_thicknesses_are_nan(
+    correction: CompressibilityCorrection, regime: BoundaryLayerRegime
+) -> None:
+    arguments: dict[str, Any] = dict(
+        edge_velocity=620.0,
+        edge_density=0.5,
+        edge_dynamic_viscosity=1.55e-5,
+        compressibility_correction=correction,
+        mach=2.0,
+        edge_temperature=240.0,
+        wall_temperature=206.0,
+    )
+    x = np.array([0.01, 0.025, 0.5])
+    result = flat_plate_boundary_layer(
+        x,
+        **arguments,
+        regime=regime,
+        transition_reynolds=5e5 if regime is BoundaryLayerRegime.TRANSITIONAL else None,
+    )
+    laminar = flat_plate_boundary_layer(
+        x, **arguments, regime=BoundaryLayerRegime.LAMINAR
+    )
+    mask = (
+        np.ones(3, dtype=bool) if regime is BoundaryLayerRegime.TURBULENT else x > 0.025
+    )
+    for field in (
+        "boundary_layer_thickness",
+        "displacement_thickness",
+        "momentum_thickness",
+    ):
+        values = np.asarray(getattr(result, field))
+        assert np.all(np.isnan(values[mask]))
+        assert_allclose(
+            values[~mask], np.asarray(getattr(laminar, field))[~mask], rtol=1e-14
+        )
+    for field in (
+        "local_skin_friction_coefficient",
+        "average_skin_friction_coefficient",
+        "wall_shear_stress",
+        "drag_per_unit_width",
+    ):
+        assert np.all(np.isfinite(getattr(result, field)))
+
+
+def test_wall_temperature_broadcast_transition_and_laminar() -> None:
+    args: dict[str, Any] = dict(
+        edge_velocity=[620.0, 621.0],
+        edge_density=0.5,
+        edge_dynamic_viscosity=1.55e-5,
+        mach=2.0,
+        edge_temperature=240.0,
+        wall_temperature=[206.0, 250.0],
+    )
+    mixed = flat_plate_boundary_layer(
+        [[0.01], [0.5]],
+        **args,
+        regime=BoundaryLayerRegime.TRANSITIONAL,
+        transition_reynolds=5e5,
+        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+    )
+    laminar = flat_plate_boundary_layer(
+        [[0.01], [0.5]],
+        **args,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressibility_correction=CompressibilityCorrection.ECKERT,
+    )
+    new_laminar = flat_plate_boundary_layer(
+        [[0.01], [0.5]],
+        **args,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+    )
+    for field in (
+        "boundary_layer_thickness",
+        "displacement_thickness",
+        "momentum_thickness",
+        "local_skin_friction_coefficient",
+        "average_skin_friction_coefficient",
+        "wall_shear_stress",
+        "drag_per_unit_width",
+        "recovery_temperature",
+        "wall_temperature",
+    ):
+        values = np.asarray(getattr(mixed, field))
+        assert values.shape == (2, 2)
+        assert values.dtype == np.float64
+        assert np.all(np.isfinite(values))
+        assert_allclose(values[0], np.asarray(getattr(laminar, field))[0])
+        assert_allclose(getattr(new_laminar, field), getattr(laminar, field))
+    assert_allclose(
+        np.asarray(mixed.momentum_thickness)[1],
+        0.5 * np.asarray(mixed.average_skin_friction_coefficient)[1] / 2.0,
+    )
+
+
+def test_wall_temperature_unresolvable_wake_reports_array_index() -> None:
+    with (
+        pytest.warns(ApplicabilityWarning, match="turbulent flat-plate correlations"),
+        pytest.raises(ModelRangeError, match=r"index \(0, 1\).*Pi > 1"),
+    ):
+        flat_plate_boundary_layer(
+            [[0.5, 1e-6]],
+            620.0,
+            0.5,
+            1.55e-5,
+            regime=BoundaryLayerRegime.TURBULENT,
+            compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+            mach=2.0,
+            edge_temperature=240.0,
+            wall_temperature=206.0,
+        )
+
+
+def test_wall_temperature_m10_sweep_has_no_low_re_tau_warning() -> None:
+    from aerophysics.gas import PerfectGas
+    from aerophysics.transport import SutherlandModel
+
+    row = next(
+        row for row in _wall_temperature_reference_rows() if row["case"] == "M10-AD"
+    )
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        result = flat_plate_boundary_layer(
+            np.linspace(0.01, 8.0, 200),
+            float(row["edge_velocity"]),
+            float(row["edge_density"]),
+            float(row["edge_viscosity"]),
+            regime=BoundaryLayerRegime.TURBULENT,
+            compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+            mach=float(row["mach"]),
+            edge_temperature=float(row["edge_temperature"]),
+            wall_temperature=float(row["wall_temperature"]),
+            gas=PerfectGas(287.053, 1.4),
+            viscosity_model=SutherlandModel(1.7894e-5, 288.15, 110.4),
+        )
+
+    assert np.all(np.isfinite(result.boundary_layer_thickness))
+    # The first station is below the existing Re_x correlation range. The
+    # validated low-Re_tau stations must not introduce additional warnings.
+    assert len(captured) == 1
+    assert captured[0].category is ApplicabilityWarning
+    assert "turbulent flat-plate correlations" in str(captured[0].message)

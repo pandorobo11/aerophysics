@@ -30,7 +30,7 @@ from enum import StrEnum
 
 import numpy as np
 from numpy.typing import ArrayLike
-from scipy.integrate import cumulative_trapezoid, solve_ivp
+from scipy.integrate import cumulative_trapezoid, quad, solve_ivp
 from scipy.optimize import brentq
 
 from aerophysics._array import FloatArray, as_float_array
@@ -397,6 +397,121 @@ def _integration_grid(
         dtype=np.float64,
     )
     return np.unique(np.concatenate((outer, inner, requested_wall_distance_plus)))
+
+
+@dataclass(frozen=True, slots=True)
+class _VanDriestWalzProfile:
+    """Direct evaluation of the existing Van Driest/Walz inverse model.
+
+    Van Driest leaves y+ unchanged. Inverting Spalding pointwise and adding
+    the Coles wake therefore replaces the coupled ODE exactly. For Walz,
+    T/Tw = 1 + b*q - a*q**2; the inverse of integral(dq/sqrt(T/Tw)) is
+    q(s) = sin(s*sqrt(a))/sqrt(a) + b*sin(s*sqrt(a)/2)**2/a.
+    The sinc form also has a stable a=0 limit. No lookup table is used.
+    """
+
+    length_scale: float
+    velocity_scale: float
+    transformed_edge: float
+    temperature_edge_wall_ratio: float
+    a: float
+    b: float
+
+    def thickness_at_wake(self, wake: float) -> float:
+        wall_velocity = self.transformed_edge - 2.0 * wake / 0.41
+        if wall_velocity <= 0.0:
+            raise ModelRangeError("Pi > 1 bound has non-positive wall-law velocity")
+        return self.length_scale * float(
+            _spalding_wall_coordinate(
+                np.asarray(wall_velocity), von_karman_constant=0.41, intercept=5.2
+            )
+        )
+
+    def integrals(self, thickness: float) -> tuple[float, float, float]:
+        """Return theta(delta99), delta*(delta99), and the required Pi."""
+        reynolds = thickness / self.length_scale
+        height = _integration_grid(np.array([0.0, reynolds]), reynolds)
+        # Invert Spalding with pointwise Newton steps from a logarithmic guess.
+        wall_velocity = np.log1p(height * np.exp(0.41 * 5.2)) / 0.41
+        for _ in range(30):
+            scaled = 0.41 * wall_velocity
+            derivative = 1.0 + np.exp(-0.41 * 5.2) * 0.41 * (
+                np.expm1(scaled) - scaled - 0.5 * scaled**2
+            )
+            step = (
+                _spalding_wall_coordinate(
+                    wall_velocity, von_karman_constant=0.41, intercept=5.2
+                )
+                - height
+            ) / derivative
+            wall_velocity -= step
+            if np.max(np.abs(step)) < 1e-12:
+                break
+        else:
+            raise ModelRangeError("Spalding inverse did not converge")
+        wake = 0.41 / 2.0 * (self.transformed_edge - wall_velocity[-1])
+        if wake < -1e-10 or wake > 1.0 + 1e-10:
+            direction = "Pi < 0" if wake < 0.0 else "Pi > 1"
+            raise ModelRangeError(f"{direction}: required Pi={wake:.8g}")
+        wake = float(np.clip(wake, 0.0, 1.0))
+        transformed = wall_velocity + wake / 0.41 * _wake_function(height / reynolds)
+        integral = transformed * self.velocity_scale
+        angle = integral * np.sqrt(self.a)
+        ratio = (
+            integral * np.sinc(angle / np.pi)
+            + self.b * (0.5 * integral * np.sinc(angle / (2.0 * np.pi))) ** 2
+        )
+        temperature_ratio = 1.0 + self.b * ratio - self.a * ratio**2
+        mass_ratio = self.temperature_edge_wall_ratio * ratio / temperature_ratio
+        physical_height = height * self.length_scale
+        return (
+            float(np.trapezoid(mass_ratio * (1.0 - ratio), physical_height)),
+            float(np.trapezoid(1.0 - mass_ratio, physical_height)),
+            wake,
+        )
+
+
+def _van_driest_walz_profile(
+    edge_velocity: float,
+    edge_density: float,
+    edge_temperature: float,
+    wall_temperature: float,
+    wall_shear_stress: float,
+    *,
+    prandtl_number: float,
+    gas: PerfectGas,
+    viscosity_model: DynamicViscosityModel,
+) -> _VanDriestWalzProfile:
+    """Prepare scalar profile integrals with the public model's default kappa/B."""
+    if wall_shear_stress <= 0.0:
+        raise ModelRangeError("profile closure requires positive wall shear stress")
+    recovery_rise = np.cbrt(prandtl_number) * edge_velocity**2 / (2.0 * gas.cp)
+    wall_density = edge_density * edge_temperature / wall_temperature
+    friction_velocity = np.sqrt(wall_shear_stress / wall_density)
+    length_scale = float(viscosity_model.dynamic_viscosity(wall_temperature)) / (
+        wall_density * friction_velocity
+    )
+    a = recovery_rise / wall_temperature
+    b = (edge_temperature + recovery_rise - wall_temperature) / wall_temperature
+    velocity_scale = friction_velocity / edge_velocity
+    transformed_edge = (
+        quad(
+            lambda q: 1.0 / np.sqrt(1.0 + b * q - a * q * q),
+            0.0,
+            0.99,
+            epsabs=1e-12,
+            epsrel=1e-12,
+        )[0]
+        / velocity_scale
+    )
+    return _VanDriestWalzProfile(
+        float(length_scale),
+        float(velocity_scale),
+        float(transformed_edge),
+        edge_temperature / wall_temperature,
+        float(a),
+        float(b),
+    )
 
 
 def transform_compressible_velocity_profile(
