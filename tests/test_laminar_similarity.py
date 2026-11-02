@@ -13,7 +13,6 @@ from numpy.testing import assert_allclose
 from aerophysics.boundary_layer import (
     _BLASIUS_DELTA99,
     BoundaryLayerRegime,
-    CompressibilityCorrection,
     flat_plate_boundary_layer,
 )
 from aerophysics.transport import AIR_VISCOSITY
@@ -147,17 +146,7 @@ def test_similarity_domain_and_tolerance_convergence(
     assert np.max(refined.bvp.rms_residuals) <= 1e-10
 
 
-@pytest.mark.parametrize(
-    "correction",
-    [
-        CompressibilityCorrection.ECKERT,
-        CompressibilityCorrection.VAN_DRIEST_II,
-        CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
-    ],
-)
-def test_compressible_laminar_accuracy_against_similarity(
-    correction: CompressibilityCorrection,
-) -> None:
+def test_compressible_laminar_accuracy_against_similarity() -> None:
     rows = reference_rows()
     viscosity = float(AIR_VISCOSITY.dynamic_viscosity(240.0))
     for row in rows:
@@ -170,7 +159,7 @@ def test_compressible_laminar_accuracy_against_similarity(
             1.0,
             viscosity,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=correction,
+            compressible=True,
             mach=row["mach"],
             edge_temperature=240.0,
             wall_temperature=None if ratio == 1 else row["wall_temperature_K"],
@@ -213,7 +202,7 @@ def test_true_adiabatic_wall_and_prescribed_wall_recovery() -> None:
     mu = float(AIR_VISCOSITY.dynamic_viscosity(240.0))
     kwargs: dict[str, Any] = dict(
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
         mach=10.0,
         edge_temperature=240.0,
     )
@@ -255,7 +244,7 @@ def test_distance_sweep_solves_one_exact_state_per_wall_condition(
         1.0,
         mu,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
         mach=2.0,
         edge_temperature=240.0,
         wall_temperature=wall,
@@ -313,7 +302,7 @@ def test_generic_viscosity_and_edge_viscosity_scaling(model: Any) -> None:
             1.0,
             mu,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
+            compressible=True,
             mach=6.0,
             edge_temperature=240.0,
             prandtl_number=1.0,
@@ -458,7 +447,7 @@ def test_public_failure_preserves_broadcast_index(
             0.1,
             1.5e-5,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
+            compressible=True,
             mach=np.array([[10.0, 2.0]]),
             edge_temperature=240.0,
         )

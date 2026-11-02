@@ -17,7 +17,6 @@ import numpy as np
 from aerophysics._laminar_similarity import similarity_coefficients
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
-    CompressibilityCorrection,
     flat_plate_boundary_layer,
 )
 from aerophysics.transport import AIR_VISCOSITY
@@ -55,7 +54,7 @@ def main() -> None:
         1.0,
         viscosity,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
         mach=mach,
         edge_temperature=temperature,
         wall_temperature=states[:, 2] * temperature,
@@ -69,7 +68,7 @@ def main() -> None:
             1.0,
             viscosity[0],
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
+            compressible=True,
             mach=mach[0],
             edge_temperature=temperature[0],
             wall_temperature=wall,

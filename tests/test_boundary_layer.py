@@ -9,8 +9,7 @@ from numpy.testing import assert_allclose
 
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
-    CompressibilityCorrection,
-    TurbulentCorrelation,
+    TurbulentModel,
     flat_plate_boundary_layer,
 )
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
@@ -42,7 +41,7 @@ def test_one_fifth_power_turbulent_integral_thicknesses() -> None:
         1.0,
         1e-5,
         regime=BoundaryLayerRegime.TURBULENT,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
+        turbulent_model=TurbulentModel.SCHLICHTING,
     )
     # delta and C_f are covered by the source-equation verification.
     delta = float(result.boundary_layer_thickness)
@@ -73,13 +72,13 @@ def test_explicit_transition_offsets_accumulated_drag() -> None:
         1.0,
         1e-5,
         regime=BoundaryLayerRegime.TRANSITIONAL,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
+        turbulent_model=TurbulentModel.SCHLICHTING,
         transition_reynolds=5e5,
     )
     reynolds = np.array([2.5e5, 5e5, 1e6])
     laminar_average_at_transition = 1.328 / np.sqrt(5e5)
-    turbulent_average = 0.074 * reynolds[-1] ** -0.2
-    turbulent_average_at_transition = 0.074 * (5e5) ** -0.2
+    turbulent_average = 0.455 / np.log10(reynolds[-1]) ** 2.58
+    turbulent_average_at_transition = 0.455 / np.log10(5e5) ** 2.58
     expected_last = turbulent_average + 0.5 * (
         laminar_average_at_transition - turbulent_average_at_transition
     )
@@ -129,7 +128,7 @@ def test_eckert_accepts_blottner_mixture_viscosity_model() -> None:
         0.1,
         edge_viscosity,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
         mach=1.0,
         edge_temperature=edge_temperature,
         wall_temperature=1000.0,
@@ -141,7 +140,7 @@ def test_eckert_accepts_blottner_mixture_viscosity_model() -> None:
         0.1,
         edge_viscosity,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
         mach=1.0,
         edge_temperature=edge_temperature,
         wall_temperature=1000.0,
@@ -159,8 +158,8 @@ def test_eckert_uses_supplied_edge_viscosity_in_correction() -> None:
         1.0,
         1e-5,
         regime=BoundaryLayerRegime.TURBULENT,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
+        turbulent_model=TurbulentModel.ECKERT,
         mach=3.0,
         edge_temperature=220.0,
         wall_temperature=300.0,
@@ -180,21 +179,21 @@ def test_eckert_uses_supplied_edge_viscosity_in_correction() -> None:
     assert result.wall_temperature == 300.0
     assert result.effective_reynolds_number == pytest.approx(expected_reynolds)
     assert result.average_skin_friction_coefficient == pytest.approx(
-        220.0 / reference * 0.074 * expected_reynolds**-0.2
+        220.0 / reference * 0.455 / np.log10(expected_reynolds) ** 2.58
     )
 
 
 @pytest.mark.parametrize(
     ("correction", "regime", "transition_reynolds"),
     [
-        (CompressibilityCorrection.ECKERT, BoundaryLayerRegime.LAMINAR, None),
-        (CompressibilityCorrection.ECKERT, BoundaryLayerRegime.TURBULENT, None),
-        (CompressibilityCorrection.ECKERT, BoundaryLayerRegime.TRANSITIONAL, 2e6),
-        (CompressibilityCorrection.VAN_DRIEST_II, BoundaryLayerRegime.LAMINAR, None),
+        (TurbulentModel.ECKERT, BoundaryLayerRegime.LAMINAR, None),
+        (TurbulentModel.ECKERT, BoundaryLayerRegime.TURBULENT, None),
+        (TurbulentModel.ECKERT, BoundaryLayerRegime.TRANSITIONAL, 2e6),
+        (TurbulentModel.VAN_DRIEST_II, BoundaryLayerRegime.LAMINAR, None),
     ],
 )
 def test_eckert_reduces_to_none_in_incompressible_limit(
-    correction: CompressibilityCorrection,
+    correction: TurbulentModel,
     regime: BoundaryLayerRegime,
     transition_reynolds: float | None,
 ) -> None:
@@ -215,7 +214,8 @@ def test_eckert_reduces_to_none_in_incompressible_limit(
     reference = flat_plate_boundary_layer(**arguments)
     corrected = flat_plate_boundary_layer(
         **arguments,
-        compressibility_correction=correction,
+        compressible=True,
+        turbulent_model=None if regime is BoundaryLayerRegime.LAMINAR else correction,
         mach=0.0,
         edge_temperature=edge_temperature,
         wall_temperature=edge_temperature,
@@ -274,7 +274,8 @@ def test_eckert_hypersonic_cold_wall_uses_reference_dynamic_pressure() -> None:
         edge_density,
         edge_viscosity,
         regime=BoundaryLayerRegime.TURBULENT,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
+        turbulent_model=TurbulentModel.ECKERT,
         mach=6.0,
         edge_temperature=240.0,
         wall_temperature=300.0,
@@ -317,46 +318,34 @@ def test_eckert_hypersonic_cold_wall_uses_reference_dynamic_pressure() -> None:
 def test_hypersonic_cold_wall_laminar_uses_similarity_edge_dynamic_pressure() -> None:
     velocity, density, viscosity = _hypersonic_cold_wall_state()
     distance = np.array([0.05, 0.5])
-    results = [
-        flat_plate_boundary_layer(
-            distance,
-            velocity,
-            density,
-            viscosity,
-            regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=correction,
-            mach=6.0,
-            edge_temperature=240.0,
-            wall_temperature=300.0,
-        )
-        for correction in _COMPRESSIBLE_MODES
-    ]
-    for result in results:
-        assert_allclose(result.effective_reynolds_number, result.reynolds_number)
-        assert_allclose(
-            result.wall_shear_stress,
-            0.5
-            * density
-            * velocity**2
-            * np.asarray(result.local_skin_friction_coefficient),
-        )
-        assert_allclose(
-            result.drag_per_unit_width,
-            2 * distance * np.asarray(result.wall_shear_stress),
-        )
-        assert_allclose(
-            result.momentum_thickness,
-            distance * np.asarray(result.local_skin_friction_coefficient),
-            rtol=1e-12,
-        )
-        for field in (
-            "boundary_layer_thickness",
-            "displacement_thickness",
-            "local_skin_friction_coefficient",
-        ):
-            assert_allclose(
-                getattr(result, field), getattr(results[0], field), rtol=1e-12
-            )
+    result = flat_plate_boundary_layer(
+        distance,
+        velocity,
+        density,
+        viscosity,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressible=True,
+        mach=6.0,
+        edge_temperature=240.0,
+        wall_temperature=300.0,
+    )
+    assert_allclose(result.effective_reynolds_number, result.reynolds_number)
+    assert_allclose(
+        result.wall_shear_stress,
+        0.5
+        * density
+        * velocity**2
+        * np.asarray(result.local_skin_friction_coefficient),
+    )
+    assert_allclose(
+        result.drag_per_unit_width,
+        2 * distance * np.asarray(result.wall_shear_stress),
+    )
+    assert_allclose(
+        result.momentum_thickness,
+        distance * np.asarray(result.local_skin_friction_coefficient),
+        rtol=1e-12,
+    )
 
 
 def test_eckert_transition_mixes_edge_basis_average_friction() -> None:
@@ -371,8 +360,8 @@ def test_eckert_transition_mixes_edge_basis_average_friction() -> None:
         edge_viscosity,
         regime=BoundaryLayerRegime.TRANSITIONAL,
         transition_reynolds=transition,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
+        turbulent_model=TurbulentModel.ECKERT,
         mach=6.0,
         edge_temperature=240.0,
         wall_temperature=300.0,
@@ -397,24 +386,24 @@ def test_eckert_transition_mixes_edge_basis_average_friction() -> None:
             edge_density,
             edge_viscosity,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
+            compressible=True,
             mach=6.0,
             edge_temperature=240.0,
             wall_temperature=300.0,
         ).average_skin_friction_coefficient
     )
-    expected_average = turbulent_ratio * 0.074 * (turbulent_scale * 2e7) ** -0.2 + (
-        transition / 2e7
-    ) * (
+    expected_average = turbulent_ratio * 0.455 / np.log10(
+        turbulent_scale * 2e7
+    ) ** 2.58 + (transition / 2e7) * (
         laminar_average
-        - turbulent_ratio * 0.074 * (turbulent_scale * transition) ** -0.2
+        - turbulent_ratio * 0.455 / np.log10(turbulent_scale * transition) ** 2.58
     )
     average = np.asarray(result.average_skin_friction_coefficient)
     drag = np.asarray(result.drag_per_unit_width)
     assert average[2] == pytest.approx(expected_average, rel=1e-12)
     # Accumulated drag is continuous: across the infinitesimal step it grows
     # only by the local turbulent wall shear times the step length.  The
-    # power-law local coefficient is the exact derivative of its average.
+    # Schlichting local coefficient is the exact derivative of its average.
     shear = np.asarray(result.wall_shear_stress)
     assert drag[1] - drag[0] == pytest.approx(
         shear[1] * (distances[1] - distances[0]), rel=1e-5
@@ -464,7 +453,8 @@ def test_van_driest_local_and_average_implicit_residuals(
         1.0,
         1e-5,
         regime=BoundaryLayerRegime.TURBULENT,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II,
         mach=mach,
         edge_temperature=edge_temperature,
         wall_temperature=wall_temperature,
@@ -497,33 +487,6 @@ def test_van_driest_local_and_average_implicit_residuals(
     )
 
 
-def test_van_driest_ignores_turbulent_correlation_selection() -> None:
-    arguments: dict[str, Any] = {
-        "distance": 1.0,
-        "edge_velocity": 100.0,
-        "edge_density": 1.0,
-        "edge_dynamic_viscosity": 1e-5,
-        "regime": BoundaryLayerRegime.TURBULENT,
-        "compressibility_correction": CompressibilityCorrection.VAN_DRIEST_II,
-        "mach": 5.0,
-        "edge_temperature": 220.0,
-    }
-    power = flat_plate_boundary_layer(
-        **arguments,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
-    )
-    schlichting = flat_plate_boundary_layer(
-        **arguments,
-        turbulent_correlation=TurbulentCorrelation.SCHLICHTING,
-    )
-    assert power.local_skin_friction_coefficient == pytest.approx(
-        schlichting.local_skin_friction_coefficient
-    )
-    assert power.average_skin_friction_coefficient == pytest.approx(
-        schlichting.average_skin_friction_coefficient
-    )
-
-
 def test_van_driest_transition_uses_eckert_then_van_driest() -> None:
     mixed = flat_plate_boundary_layer(
         [0.1, 1.0],
@@ -532,8 +495,8 @@ def test_van_driest_transition_uses_eckert_then_van_driest() -> None:
         1e-5,
         regime=BoundaryLayerRegime.TRANSITIONAL,
         transition_reynolds=2e6,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II,
         mach=2.0,
         edge_temperature=250.0,
     )
@@ -543,7 +506,7 @@ def test_van_driest_transition_uses_eckert_then_van_driest() -> None:
         1.0,
         1e-5,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
         mach=2.0,
         edge_temperature=250.0,
     )
@@ -570,7 +533,8 @@ def test_van_driest_transition_accumulated_drag_is_continuous() -> None:
         1e-5,
         regime=BoundaryLayerRegime.TRANSITIONAL,
         transition_reynolds=transition,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II,
         mach=5.0,
         edge_temperature=220.0,
         wall_temperature=300.0,
@@ -593,7 +557,7 @@ def test_compressibility_inputs_broadcast() -> None:
         1.0,
         1e-5,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
         mach=[1.0, 2.0, 3.0],
         edge_temperature=250.0,
     )
@@ -650,7 +614,7 @@ def test_inputs_must_broadcast() -> None:
             1.0,
             1e-5,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
+            compressible=True,
             mach=[1.0, 2.0, 3.0],
             edge_temperature=250.0,
         )
@@ -694,14 +658,14 @@ def test_invalid_enum_values_are_rejected() -> None:
             1e-5,
             regime="laminar",  # type: ignore[arg-type]
         )
-    with pytest.raises(ValueError, match="turbulent_correlation"):
+    with pytest.raises(ValueError, match="turbulent_model"):
         flat_plate_boundary_layer(
             1.0,
             10.0,
             1.0,
             1e-5,
             regime=BoundaryLayerRegime.LAMINAR,
-            turbulent_correlation="power_law",  # type: ignore[arg-type]
+            turbulent_model="power_law",  # type: ignore[arg-type]
         )
 
 
@@ -733,17 +697,17 @@ def test_compressibility_selection_and_required_inputs() -> None:
             1.0,
             1e-5,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
+            compressible=True,
             mach=1.0,
         )
-    with pytest.raises(ValueError, match="compressibility_correction"):
+    with pytest.raises(ValueError, match="compressible"):
         flat_plate_boundary_layer(
             1.0,
             10.0,
             1.0,
             1e-5,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction="eckert",  # type: ignore[arg-type]
+            compressible="eckert",  # type: ignore[arg-type]
         )
 
 
@@ -769,7 +733,7 @@ def test_invalid_thermal_inputs(keyword: str, value: float, match: str) -> None:
             1.0,
             1e-5,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
+            compressible=True,
             **arguments,  # type: ignore[arg-type]
         )
 
@@ -794,7 +758,8 @@ def test_van_driest_noncompressible_limit_is_stable() -> None:
         1.0,
         1e-5,
         regime=BoundaryLayerRegime.TURBULENT,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II,
         mach=0.0,
         edge_temperature=250.0,
     )
@@ -815,7 +780,8 @@ def test_van_driest_array_inputs_broadcast() -> None:
         1.0,
         1e-5,
         regime=BoundaryLayerRegime.TURBULENT,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II,
         mach=[2.0, 5.0, 8.0],
         edge_temperature=220.0,
         wall_temperature=300.0,
@@ -839,7 +805,8 @@ def test_van_driest_rejects_degenerate_thermal_state() -> None:
             1.0,
             1e-5,
             regime=BoundaryLayerRegime.TURBULENT,
-            compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+            compressible=True,
+            turbulent_model=TurbulentModel.VAN_DRIEST_II,
             mach=2.0,
             edge_temperature=250.0,
             wall_temperature=1e100,
@@ -854,7 +821,8 @@ def test_van_driest_reports_unbracketed_willems_solution() -> None:
             1.0,
             1.0,
             regime=BoundaryLayerRegime.TURBULENT,
-            compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+            compressible=True,
+            turbulent_model=TurbulentModel.VAN_DRIEST_II,
             mach=0.0,
             edge_temperature=250.0,
         )
@@ -896,7 +864,8 @@ def test_wall_temperature_reference_and_public_profile(row: dict[str, str]) -> N
         r["edge_density"],
         r["edge_viscosity"],
         regime=BoundaryLayerRegime.TURBULENT,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
         mach=r["mach"],
         edge_temperature=r["edge_temperature"],
         wall_temperature=r["wall_temperature"],
@@ -972,7 +941,8 @@ def test_wall_temperature_friction_and_momentum_integral(
         edge_dynamic_viscosity=1.55e-5,
         regime=regime,
         transition_reynolds=5e5 if regime is BoundaryLayerRegime.TRANSITIONAL else None,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
         mach=2.0,
         edge_temperature=240.0,
         wall_temperature=wall,
@@ -995,7 +965,7 @@ def test_wall_temperature_friction_and_momentum_integral(
             mach=2.0,
             edge_temperature=240.0,
             wall_temperature=wall,
-            compressibility_correction=CompressibilityCorrection.ECKERT,
+            compressible=True,
         )
         average += (
             5e5
@@ -1017,27 +987,24 @@ def test_wall_temperature_friction_and_momentum_integral(
         - (x - h) * float(below.average_skin_friction_coefficient)
     ) / (2 * h)
     assert result.local_skin_friction_coefficient == pytest.approx(derivative, rel=1e-4)
-    power = flat_plate_boundary_layer(
-        x, **args, turbulent_correlation=TurbulentCorrelation.POWER_LAW
-    )
-    assert power == result
 
 
 @pytest.mark.parametrize(
     "correction",
-    [CompressibilityCorrection.ECKERT, CompressibilityCorrection.VAN_DRIEST_II],
+    [TurbulentModel.ECKERT, TurbulentModel.VAN_DRIEST_II],
 )
 @pytest.mark.parametrize(
     "regime", [BoundaryLayerRegime.TURBULENT, BoundaryLayerRegime.TRANSITIONAL]
 )
 def test_compressible_turbulent_thicknesses_are_nan(
-    correction: CompressibilityCorrection, regime: BoundaryLayerRegime
+    correction: TurbulentModel, regime: BoundaryLayerRegime
 ) -> None:
     arguments: dict[str, Any] = dict(
         edge_velocity=620.0,
         edge_density=0.5,
         edge_dynamic_viscosity=1.55e-5,
-        compressibility_correction=correction,
+        compressible=True,
+        turbulent_model=correction,
         mach=2.0,
         edge_temperature=240.0,
         wall_temperature=206.0,
@@ -1049,6 +1016,7 @@ def test_compressible_turbulent_thicknesses_are_nan(
         regime=regime,
         transition_reynolds=5e5 if regime is BoundaryLayerRegime.TRANSITIONAL else None,
     )
+    arguments["turbulent_model"] = None
     laminar = flat_plate_boundary_layer(
         x, **arguments, regime=BoundaryLayerRegime.LAMINAR
     )
@@ -1088,19 +1056,20 @@ def test_wall_temperature_broadcast_transition_and_laminar() -> None:
         **args,
         regime=BoundaryLayerRegime.TRANSITIONAL,
         transition_reynolds=5e5,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+        compressible=True,
+        turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
     )
     laminar = flat_plate_boundary_layer(
         [[0.01], [0.5]],
         **args,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
     )
     new_laminar = flat_plate_boundary_layer(
         [[0.01], [0.5]],
         **args,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+        compressible=True,
     )
     for field in (
         "boundary_layer_thickness",
@@ -1136,7 +1105,8 @@ def test_wall_temperature_unresolvable_wake_reports_array_index() -> None:
             0.5,
             1.55e-5,
             regime=BoundaryLayerRegime.TURBULENT,
-            compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+            compressible=True,
+            turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
             mach=2.0,
             edge_temperature=240.0,
             wall_temperature=206.0,
@@ -1158,7 +1128,8 @@ def test_wall_temperature_m10_sweep_has_no_low_re_tau_warning() -> None:
             float(row["edge_density"]),
             float(row["edge_viscosity"]),
             regime=BoundaryLayerRegime.TURBULENT,
-            compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE,
+            compressible=True,
+            turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
             mach=float(row["mach"]),
             edge_temperature=float(row["edge_temperature"]),
             wall_temperature=float(row["wall_temperature"]),
@@ -1174,17 +1145,11 @@ def test_wall_temperature_m10_sweep_has_no_low_re_tau_warning() -> None:
     assert "turbulent flat-plate correlations" in str(captured[0].message)
 
 
-_COMPRESSIBLE_MODES = tuple(
-    mode
-    for mode in CompressibilityCorrection
-    if mode is not CompressibilityCorrection.NONE
-)
+_COMPRESSIBLE_MODES = tuple(mode for mode in TurbulentModel if mode.compressible)
 
 
-@pytest.mark.parametrize("correction", _COMPRESSIBLE_MODES)
 @pytest.mark.parametrize("wall_temperature", [None, 300.0])
 def test_compressible_laminar_momentum_integral(
-    correction: CompressibilityCorrection,
     wall_temperature: float | None,
 ) -> None:
     viscosity = float(AIR_VISCOSITY.dynamic_viscosity(240.0))
@@ -1194,7 +1159,7 @@ def test_compressible_laminar_momentum_integral(
         1.0,
         viscosity,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=correction,
+        compressible=True,
         mach=[0.3, 2.0, 6.0, 15.0],
         edge_temperature=240.0,
         wall_temperature=wall_temperature,
@@ -1206,10 +1171,8 @@ def test_compressible_laminar_momentum_integral(
     )
 
 
-@pytest.mark.parametrize("correction", _COMPRESSIBLE_MODES)
 @pytest.mark.parametrize("mach", [0.0, 1e-7])
 def test_compressible_laminar_blasius_limit(
-    correction: CompressibilityCorrection,
     mach: float,
 ) -> None:
     viscosity = float(AIR_VISCOSITY.dynamic_viscosity(240.0))
@@ -1218,7 +1181,7 @@ def test_compressible_laminar_blasius_limit(
     corrected = flat_plate_boundary_layer(
         *inputs,
         regime=BoundaryLayerRegime.LAMINAR,
-        compressibility_correction=correction,
+        compressible=True,
         mach=mach,
         edge_temperature=240.0,
         wall_temperature=240.0,
@@ -1233,10 +1196,8 @@ def test_compressible_laminar_blasius_limit(
         assert_allclose(getattr(corrected, field), getattr(plain, field), rtol=2e-4)
 
 
-@pytest.mark.parametrize("correction", _COMPRESSIBLE_MODES)
 @pytest.mark.parametrize("interaction", [0.999, 1.0, 1.001])
 def test_viscous_interaction_threshold(
-    correction: CompressibilityCorrection,
     interaction: float,
 ) -> None:
     # Tw=Te and mu_e=mu(Tw) give Cw=1 exactly; M=10 gives Re=1e6/chi^2.
@@ -1249,7 +1210,7 @@ def test_viscous_interaction_threshold(
             viscosity,
             viscosity,
             regime=BoundaryLayerRegime.LAMINAR,
-            compressibility_correction=correction,
+            compressible=True,
             mach=10.0,
             edge_temperature=240.0,
             wall_temperature=240.0,
@@ -1267,7 +1228,7 @@ def test_viscous_interaction_threshold(
     "viscosity_model", [AIR_VISCOSITY, SutherlandModel(2e-5, 300.0, 180.0)]
 )
 def test_viscous_interaction_uses_wall_viscosity_and_laminar_mask(
-    correction: CompressibilityCorrection,
+    correction: TurbulentModel,
     viscosity_model: Any,
 ) -> None:
     temperature = 240.0
@@ -1283,7 +1244,8 @@ def test_viscous_interaction_uses_wall_viscosity_and_laminar_mask(
             viscosity,
             regime=BoundaryLayerRegime.TRANSITIONAL,
             transition_reynolds=2e5,
-            compressibility_correction=correction,
+            compressible=True,
+            turbulent_model=correction,
             mach=mach,
             edge_temperature=temperature,
             viscosity_model=viscosity_model,
@@ -1301,14 +1263,14 @@ def test_viscous_interaction_uses_wall_viscosity_and_laminar_mask(
     )
 
 
-@pytest.mark.parametrize("correction", tuple(CompressibilityCorrection))
+@pytest.mark.parametrize("correction", tuple(TurbulentModel))
 def test_viscous_interaction_excludes_none_and_turbulent(
-    correction: CompressibilityCorrection,
+    correction: TurbulentModel,
 ) -> None:
     viscosity = float(AIR_VISCOSITY.dynamic_viscosity(240.0))
     thermal: dict[str, Any] = {}
     regime = BoundaryLayerRegime.LAMINAR
-    if correction is not CompressibilityCorrection.NONE:
+    if correction.compressible:
         thermal = {"mach": 15.0, "edge_temperature": 240.0}
         regime = BoundaryLayerRegime.TURBULENT
     with warnings.catch_warnings(record=True) as captured:
@@ -1319,7 +1281,8 @@ def test_viscous_interaction_excludes_none_and_turbulent(
             1e6 * viscosity / (15.0 * float(AIR.speed_of_sound(240.0))),
             viscosity,
             regime=regime,
-            compressibility_correction=correction,
+            compressible=correction.compressible,
+            turbulent_model=correction if correction.compressible else None,
             **thermal,
         )
     assert not captured
@@ -1327,12 +1290,13 @@ def test_viscous_interaction_excludes_none_and_turbulent(
 
 @pytest.mark.parametrize("correction", _COMPRESSIBLE_MODES)
 def test_compressible_transition_uses_new_laminar_thickness(
-    correction: CompressibilityCorrection,
+    correction: TurbulentModel,
 ) -> None:
     viscosity = float(AIR_VISCOSITY.dynamic_viscosity(240.0))
     x = np.array([0.5, 1.0, 10.0])
     thermal: dict[str, Any] = {
-        "compressibility_correction": correction,
+        "compressible": True,
+        "turbulent_model": correction,
         "mach": 2.0,
         "edge_temperature": 240.0,
     }
@@ -1345,6 +1309,7 @@ def test_compressible_transition_uses_new_laminar_thickness(
         transition_reynolds=1e6,
         **thermal,
     )
+    thermal["turbulent_model"] = None
     laminar = flat_plate_boundary_layer(
         x[:2],
         1e6 * viscosity,
@@ -1361,16 +1326,157 @@ def test_compressible_transition_uses_new_laminar_thickness(
         assert_allclose(
             np.asarray(getattr(mixed, field))[:2], getattr(laminar, field), rtol=1e-12
         )
-        if correction is not CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE:
+        if correction is not TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE:
             assert np.isnan(np.asarray(getattr(mixed, field))[2])
     assert_allclose(
         np.asarray(mixed.momentum_thickness)[:2],
         x[:2] * np.asarray(mixed.local_skin_friction_coefficient)[:2],
         rtol=1e-12,
     )
-    if correction is CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE:
+    if correction is TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE:
         assert_allclose(
             np.asarray(mixed.momentum_thickness)[2],
             x[2] * np.asarray(mixed.average_skin_friction_coefficient)[2] / 2,
             rtol=1e-12,
         )
+
+
+@pytest.mark.parametrize("regime", list(BoundaryLayerRegime))
+@pytest.mark.parametrize("compressible", [False, True])
+@pytest.mark.parametrize("model", [None, *TurbulentModel])
+def test_model_selection_matrix(
+    regime: BoundaryLayerRegime, compressible: bool, model: TurbulentModel | None
+) -> None:
+    valid = (
+        model is None
+        if regime is BoundaryLayerRegime.LAMINAR
+        else (model is not None and model.compressible)
+        if compressible
+        else (model is None or not model.compressible)
+    )
+    arguments: dict[str, Any] = {
+        "regime": regime,
+        "compressible": compressible,
+        "turbulent_model": model,
+        "transition_reynolds": 5e5
+        if regime is BoundaryLayerRegime.TRANSITIONAL
+        else None,
+    }
+    if compressible:
+        arguments.update(mach=2.0, edge_temperature=240.0)
+    if valid:
+        result = flat_plate_boundary_layer(1.0, 100.0, 1.0, 1e-5, **arguments)
+        assert np.isfinite(result.local_skin_friction_coefficient)
+    else:
+        with pytest.raises(ValueError, match="turbulent_model"):
+            flat_plate_boundary_layer(1.0, 100.0, 1.0, 1e-5, **arguments)
+
+
+@pytest.mark.parametrize("value", [0, 1, "true", None, np.array([True])])
+def test_compressible_requires_boolean(value: Any) -> None:
+    with pytest.raises(ValueError, match="compressible must be a bool"):
+        flat_plate_boundary_layer(
+            1.0,
+            100.0,
+            1.0,
+            1e-5,
+            regime=BoundaryLayerRegime.LAMINAR,
+            compressible=value,
+        )
+
+
+@pytest.mark.parametrize("compressible", [np.bool_(False), np.bool_(True)])
+def test_numpy_boolean_compressibility(compressible: Any) -> None:
+    thermal: dict[str, Any] = (
+        {"mach": 2.0, "edge_temperature": 240.0} if compressible else {}
+    )
+    actual = flat_plate_boundary_layer(
+        1.0,
+        100.0,
+        1.0,
+        1e-5,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressible=compressible,
+        **thermal,
+    )
+    expected = flat_plate_boundary_layer(
+        1.0,
+        100.0,
+        1.0,
+        1e-5,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressible=bool(compressible),
+        **thermal,
+    )
+    assert actual == expected
+
+
+@pytest.mark.parametrize(
+    "regime", [BoundaryLayerRegime.TURBULENT, BoundaryLayerRegime.TRANSITIONAL]
+)
+def test_incompressible_default_is_schlichting(regime: BoundaryLayerRegime) -> None:
+    arguments: dict[str, Any] = {
+        "regime": regime,
+        "transition_reynolds": 5e5
+        if regime is BoundaryLayerRegime.TRANSITIONAL
+        else None,
+    }
+    default = flat_plate_boundary_layer(1.0, 100.0, 1.0, 1e-5, **arguments)
+    explicit = flat_plate_boundary_layer(
+        1.0,
+        100.0,
+        1.0,
+        1e-5,
+        **arguments,
+        turbulent_model=TurbulentModel.SCHLICHTING,
+    )
+    assert default == explicit
+
+
+@pytest.mark.parametrize("field", ["mach", "edge_temperature", "wall_temperature"])
+def test_incompressible_rejects_each_thermal_input(field: str) -> None:
+    with pytest.raises(ValueError, match="thermal inputs require compressible=True"):
+        flat_plate_boundary_layer(
+            1.0,
+            100.0,
+            1.0,
+            1e-5,
+            regime=BoundaryLayerRegime.LAMINAR,
+            **{field: 300.0},  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize("missing", ["mach", "edge_temperature"])
+def test_compressible_requires_both_edge_thermal_inputs(missing: str) -> None:
+    thermal: dict[str, Any] = {"mach": 2.0, "edge_temperature": 240.0}
+    del thermal[missing]
+    with pytest.raises(ValueError, match="mach and edge_temperature are required"):
+        flat_plate_boundary_layer(
+            1.0,
+            100.0,
+            1.0,
+            1e-5,
+            regime=BoundaryLayerRegime.LAMINAR,
+            compressible=True,
+            **thermal,
+        )
+
+
+def test_turbulent_models_and_compressibility() -> None:
+    assert {model.value for model in TurbulentModel} == {
+        "schlichting",
+        "eckert",
+        "van_driest_ii",
+        "van_driest_ii_wall_temperature",
+    }
+    assert not TurbulentModel.SCHLICHTING.compressible
+    assert all(
+        model.compressible
+        for model in (
+            TurbulentModel.ECKERT,
+            TurbulentModel.VAN_DRIEST_II,
+            TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
+        )
+    )
+    for removed in ("POWER_LAW", "ECKERT_POWER_LAW", "ECKERT_SCHLICHTING"):
+        assert not hasattr(TurbulentModel, removed)

@@ -178,16 +178,21 @@ The **大気・飛行条件** page and the **連続流れ計算** page are descr
 Compressible boundary-layer results
 -----------------------------------
 
-The flat-plate page offers **Van Driest II＋壁温補正** for wall-temperature
-corrected friction and profile-based thicknesses. **Eckert基準温度法** and
-**Van Driest II** return unavailable (NaN) turbulent thicknesses, including
+The flat-plate page separates **圧縮性を考慮** from **乱流モデル**. The model
+selector appears only for turbulent or transitional flow and offers only
+models matching the checkbox. Incompressible flow shows **Schlichting** as its only selectable model;
+compressible flow defaults to **Van Driest II＋壁温補正（Schlichting）**, which
+provides wall-temperature-corrected friction and profile-based thicknesses.
+Changing compressibility resets an incompatible selection to that default.
+**Eckert基準温度法（Schlichting）** and
+**Van Driest II（Willems の式）** return unavailable (NaN) turbulent thicknesses, including
 post-transition points. Metrics display **—**; tables, plots, and CSV exports
 retain missing thicknesses while friction and drag remain available.
 **現在の境界層ケースとして保存** warns instead of saving when delta99 or wall
 shear is not finite. See :doc:`../models/flat_plate_boundary_layer` for the
 model assumptions and comparison envelope.
 
-For laminar points, all three compressible choices use the same
+For laminar points, enabling **圧縮性を考慮** selects the compressible
 similarity solution for friction and thicknesses, with ``theta = x * cf_local``
 and average friction twice local friction. An omitted wall temperature gives
 a zero-heat-flux wall; recovery temperature is the solved adiabatic wall
@@ -195,3 +200,11 @@ temperature. The effective Reynolds number at laminar points is the edge value.
 The incompressible delta99 coefficient is 4.9100. A laminar viscous-interaction
 warning indicates when leading-edge induced pressure violates the flat-plate
 assumptions; see the model page for the parameter and limits.
+
+Saved schema-version-1 configurations using the former separate correlation
+and correction keys are converted when loaded, except for turbulent or
+transitional one-fifth-power friction with NONE or ECKERT: those settings
+raise an error asking the user to select Schlichting. Legacy power-law
+selections for laminar or VD2 flow still load because the friction selection
+was unused in those cases. Exports use only
+``compressible`` and ``turbulent_model`` (null for laminar flow).

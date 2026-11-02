@@ -5,8 +5,7 @@ import pytest
 
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
-    CompressibilityCorrection,
-    TurbulentCorrelation,
+    TurbulentModel,
 )
 from aerophysics.boundary_layer_profile import (
     CompressibleVelocityTransformation,
@@ -359,9 +358,9 @@ def test_boundary_layer_figures_include_transition_and_thermal() -> None:
         edge_density=0.5,
         edge_dynamic_viscosity=1.6e-5,
         regime=BoundaryLayerRegime.TRANSITIONAL,
-        turbulent_correlation=TurbulentCorrelation.POWER_LAW,
         transition_reynolds=2e6,
-        compressibility_correction=CompressibilityCorrection.ECKERT,
+        compressible=True,
+        turbulent_model=TurbulentModel.ECKERT,
         mach=2.0,
         edge_temperature=250.0,
         wall_temperature=None,

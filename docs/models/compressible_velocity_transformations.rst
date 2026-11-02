@@ -93,7 +93,7 @@ The following models are distinct and should not be interchanged:
   mean-velocity mapping described below.
 * The **Van Driest II transformation** maps compressible skin-friction and
   momentum-thickness correlations.  The
-  :class:`~aerophysics.boundary_layer.CompressibilityCorrection`\ ``.VAN_DRIEST_II``
+  :class:`~aerophysics.boundary_layer.TurbulentModel`\ ``.VAN_DRIEST_II``
   option implements an engineering form of that skin-friction correction; it
   does not return a transformed mean velocity profile. See :ref:`Hopkins and
   Inouye (1971) <ref-hopkins-inouye-1971>` and :ref:`Hopkins (1972)

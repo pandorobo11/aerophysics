@@ -138,7 +138,8 @@ elements.
 Compressible turbulent thicknesses
 ----------------------------------
 
-Use ``CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE`` for the
+Use ``compressible=True`` and
+``turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE`` for the
 wall-temperature-corrected Schlichting/VD2 friction pair and Van Driest/Walz
 profile thicknesses. Momentum thickness follows the accumulated friction
 integral; displacement thickness is integrated only through delta99.
@@ -152,18 +153,18 @@ thicknesses, also after a prescribed transition. Their friction and drag remain 
 Compressible laminar thicknesses
 --------------------------------
 
-All three compressible modes solve the perfect-gas laminar similarity equations
+With ``compressible=True``, laminar points solve the perfect-gas similarity equations
 for friction and thicknesses. Momentum thickness obeys ``theta = x * cf_local``
 and average friction is twice local friction, on the edge dynamic-pressure
 basis. Omitted wall temperature means zero wall heat flux; recovery temperature
 is the solved adiabatic temperature even for a specified isothermal wall.
 ``effective_reynolds_number`` is the external Reynolds number at laminar points.
 These rules also apply before transition, and to the laminar contribution to
-mixed average drag. ``NONE`` retains the Blasius delta99 coefficient 4.9100.
+mixed average drag. ``compressible=False`` retains the Blasius delta99 coefficient 4.9100.
 See :doc:`../models/flat_plate_boundary_layer` for equations, numerical accuracy,
 and the constant-cp, constant-Pr, zero-pressure-gradient assumptions.
 
 An ``ApplicabilityWarning`` reports laminar viscous interaction when
 ``chi_bar = Mach**3 * sqrt(Cw / Re_x) > 1``. Leading-edge induced pressure
 then invalidates the zero-pressure-gradient assumption. The warning excludes
-``NONE`` and turbulent points; it does not correct the edge state.
+``compressible=False`` and turbulent points; it does not correct the edge state.

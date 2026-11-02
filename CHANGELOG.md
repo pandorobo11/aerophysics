@@ -10,7 +10,7 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Warn once for compressible laminar points with viscous-interaction
   parameter `chi_bar > 1`, reporting the maximum and affected point count.
 
-- Add `CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE` and its GUI
+- Add `TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE` and its GUI
   option: Schlichting friction with a VD2 wall-temperature correction,
   momentum-integral theta, and Van Driest/Walz profile thicknesses.
 
@@ -50,15 +50,50 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- **Breaking:** Replace `compressibility_correction` / `CompressibilityCorrection`
+  and `turbulent_correlation` / `TurbulentCorrelation` with `compressible` and
+  `turbulent_model: TurbulentModel | None`, with no compatibility aliases.
+  Incompatible or unused combinations raise `ValueError`. Numerical results
+  for retained models are unchanged by this API reorganization. The GUI separates compressibility
+  from the turbulent model and reads compatible legacy settings files; new exports
+  use the new keys with schema version 1.
+
+  | Former correction / correlation | compressible | turbulent_model |
+  | --- | --- | --- |
+  | NONE / SCHLICHTING | False | SCHLICHTING (default) |
+  | NONE / POWER_LAW (turbulent or transitional) | — | Removed; select SCHLICHTING |
+  | ECKERT / SCHLICHTING | True | ECKERT |
+  | ECKERT / POWER_LAW (turbulent or transitional) | — | Removed; select ECKERT with Schlichting friction |
+  | VAN_DRIEST_II / either | True | VAN_DRIEST_II |
+  | VAN_DRIEST_II_WALL_TEMPERATURE / either | True | VAN_DRIEST_II_WALL_TEMPERATURE |
+  | Laminar / NONE | False | None (Blasius) |
+  | Laminar / any compressible correction | True | None (similarity) |
+
+  Laminar calls must omit the turbulent model. Compressible turbulent and
+  transitional calls require an explicit compressible model; incompressible
+  calls accept only SCHLICHTING.
+
+- **Breaking:** Remove `TurbulentCorrelation.POWER_LAW` and its Eckert
+  reference-state variant. The one-fifth-power local friction coefficient is
+  about 19% below Schlichting at Re_x = 1e8 and 32% below at Re_x = 1e9,
+  despite sharing the same nominal Reynolds warning range. Retain the
+  incompressible one-fifth-power **thickness** correlation unchanged.
+  Legacy GUI settings selecting `power_law` for turbulent or transitional
+  NONE/ECKERT flow now fail on loading and ask the user to select Schlichting;
+  they are never silently converted. Laminar and VD2 legacy settings still
+  load because that friction choice was unused. `TurbulentModel` now contains
+  only SCHLICHTING, ECKERT (Schlichting at the reference state), VAN_DRIEST_II,
+  and VAN_DRIEST_II_WALL_TEMPERATURE.
+
 - **Breaking:** Replace laminar cf, average friction, wall shear, accumulated
-  drag, theta, displacement and delta99 in all three compressible modes with
+  drag, theta, displacement and delta99 for `compressible=True` with
   direct perfect-gas similarity solutions. Recovery temperature is the solved
   adiabatic wall temperature, omitted wall temperature imposes zero heat flux,
   and laminar `effective_reynolds_number` is the external Reynolds number.
   The laminar contribution to transitional average drag changes accordingly.
-  Use the Blasius delta99 coefficient 4.9100 instead of 5.0 for `NONE`.
+  Use the Blasius delta99 coefficient 4.9100 instead of 5.0 for `compressible=False`.
 
-- **Breaking:** `ECKERT` and `VAN_DRIEST_II` return NaN for turbulent delta99,
+- **Breaking:** `TurbulentModel.ECKERT` and `TurbulentModel.VAN_DRIEST_II` return NaN for turbulent delta99,
   displacement thickness, and momentum thickness, including post-transition
   points. Their former compressible thickness estimates were inaccurate.
   Friction and drag are unchanged by the turbulent-thickness removal.

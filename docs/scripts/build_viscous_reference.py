@@ -27,8 +27,6 @@ def main() -> None:
                 "blasius_local_cf": f"{0.664 / math.sqrt(reynolds):.15g}",
                 "blasius_average_cf": f"{1.328 / math.sqrt(reynolds):.15g}",
                 "power_delta_over_x": f"{0.37 * reynolds**-0.2:.15g}",
-                "power_local_cf": f"{0.0592 * reynolds**-0.2:.15g}",
-                "power_average_cf": f"{0.074 * reynolds**-0.2:.15g}",
                 "schlichting_average_cf": (
                     f"{0.455 / math.log10(reynolds) ** 2.58:.15g}"
                 ),
@@ -41,7 +39,7 @@ def main() -> None:
     metadata = {
         "sources": [
             "Blasius laminar flat-plate similarity solution",
-            "one-fifth-power turbulent flat-plate correlation",
+            "one-fifth-power turbulent flat-plate thickness correlation",
             "Schlichting smooth-plate average skin-friction correlation",
         ],
         "blasius_delta99_coefficient": 4.9100,

@@ -11,8 +11,7 @@ import streamlit as st
 from aerophysics.atmosphere import geometric_to_geopotential, geopotential_to_geometric
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
-    CompressibilityCorrection,
-    TurbulentCorrelation,
+    TurbulentModel,
 )
 from aerophysics.exceptions import ShockConvergenceError
 from aerophysics.gui.adapters import (
@@ -1017,23 +1016,6 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
             key="boundary_regime",
         )
         assert regime is not None
-        correlation = st.selectbox(
-            "乱流摩擦相関",
-            tuple(TurbulentCorrelation),
-            index=list(TurbulentCorrelation).index(
-                TurbulentCorrelation(
-                    str(models.get("turbulent_correlation", "schlichting"))
-                )
-            ),
-            format_func=lambda value: (
-                "Schlichting"
-                if value is TurbulentCorrelation.SCHLICHTING
-                else "1/5乗則"
-            ),
-            key="boundary_correlation",
-            disabled=regime is BoundaryLayerRegime.LAMINAR,
-        )
-        assert correlation is not None
         transition_reynolds = (
             finite_number(
                 "指定遷移 Reynolds数 Re_tr",
@@ -1044,29 +1026,51 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
             if regime is BoundaryLayerRegime.TRANSITIONAL
             else None
         )
-        correction = st.selectbox(
-            "圧縮性補正",
-            tuple(CompressibilityCorrection),
-            index=list(CompressibilityCorrection).index(
-                CompressibilityCorrection(
-                    str(models.get("compressibility_correction", "none"))
-                )
-            ),
-            format_func=lambda value: {
-                CompressibilityCorrection.NONE: "なし",
-                CompressibilityCorrection.ECKERT: "Eckert基準温度法",
-                CompressibilityCorrection.VAN_DRIEST_II: "Van Driest II",
-                CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE: (
-                    "Van Driest II＋壁温補正"
-                ),
-            }[value],
-            key="boundary_correction",
+        compressible = st.checkbox(
+            "圧縮性を考慮",
+            value=bool(models.get("compressible", False)),
+            key="boundary_compressible",
         )
-        assert correction is not None
+        turbulent_model = None
+        if regime is not BoundaryLayerRegime.LAMINAR:
+            options = (
+                (
+                    TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
+                    TurbulentModel.VAN_DRIEST_II,
+                    TurbulentModel.ECKERT,
+                )
+                if compressible
+                else (TurbulentModel.SCHLICHTING,)
+            )
+            stored_model = models.get("turbulent_model")
+            default_model = next(
+                (model for model in options if model.value == stored_model), options[0]
+            )
+            if (
+                "boundary_turbulent_model" in st.session_state
+                and st.session_state["boundary_turbulent_model"] not in options
+            ):
+                st.session_state["boundary_turbulent_model"] = options[0]
+            turbulent_model = st.selectbox(
+                "乱流モデル",
+                options,
+                index=options.index(default_model),
+                format_func=lambda value: {
+                    TurbulentModel.SCHLICHTING: "Schlichting",
+                    TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE: (
+                        "Van Driest II＋壁温補正（Schlichting）"
+                    ),
+                    TurbulentModel.VAN_DRIEST_II: "Van Driest II（Willems の式）",
+                    TurbulentModel.ECKERT: "Eckert基準温度法（Schlichting）",
+                }[value],
+                key="boundary_turbulent_model",
+            )
+        if regime is not BoundaryLayerRegime.TURBULENT:
+            st.caption("層流：圧縮性相似解" if compressible else "層流：Blasius 解")
         mach: float | None = None
         edge_temperature: float | None = None
         wall_temperature: float | None = None
-        if correction is not CompressibilityCorrection.NONE:
+        if compressible:
             mach = finite_number(
                 "Mach M_e",
                 mach_si,
@@ -1151,9 +1155,9 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
                     edge_density=density_value_si,
                     edge_dynamic_viscosity=edge_viscosity,
                     regime=regime,
-                    turbulent_correlation=correlation,
+                    turbulent_model=turbulent_model,
                     transition_reynolds=transition_reynolds,
-                    compressibility_correction=correction,
+                    compressible=compressible,
                     mach=mach,
                     edge_temperature=edge_temperature,
                     wall_temperature=wall_temperature,
@@ -1171,9 +1175,9 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
                     edge_density=density_value_si,
                     edge_dynamic_viscosity=edge_viscosity,
                     regime=regime,
-                    turbulent_correlation=correlation,
+                    turbulent_model=turbulent_model,
                     transition_reynolds=transition_reynolds,
-                    compressibility_correction=correction,
+                    compressible=compressible,
                     mach=mach,
                     edge_temperature=edge_temperature,
                     wall_temperature=wall_temperature,
@@ -1205,8 +1209,10 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
                 models={
                     "source": source,
                     "regime": regime.value,
-                    "turbulent_correlation": correlation.value,
-                    "compressibility_correction": correction.value,
+                    "turbulent_model": turbulent_model.value
+                    if turbulent_model
+                    else None,
+                    "compressible": compressible,
                 },
                 units=preferences,
                 sweep_si=sweep_config,

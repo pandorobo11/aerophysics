@@ -6,6 +6,11 @@ import math
 from dataclasses import dataclass
 from typing import Literal, cast
 
+from aerophysics.boundary_layer import (
+    BoundaryLayerRegime,
+    TurbulentModel,
+    _resolve_turbulent_model,
+)
 from aerophysics.gui.adapters import sweep_values
 
 type _FieldKind = Literal["bool", "int", "number", "number_list", "string"]
@@ -172,9 +177,9 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
         models={
             "source": _choice("manual", "flight"),
             "regime": _choice("laminar", "turbulent", "transitional"),
-            "turbulent_correlation": _choice("power_law", "schlichting"),
-            "compressibility_correction": _choice(
-                "none", "eckert", "van_driest_ii", "van_driest_ii_wall_temperature"
+            "compressible": _BOOL,
+            "turbulent_model": _FieldRule(
+                "string", nullable=True, choices=frozenset(TurbulentModel)
             ),
         },
         sweep_variables=frozenset({"distance"}),
@@ -491,6 +496,50 @@ def _validate_sweep(value: object, schema: _CalculatorSchema) -> dict[str, objec
     return normalized
 
 
+def _migrate_boundary_models(value: object) -> object:
+    """Normalize legacy schema-v1 selections without changing saved numerics."""
+    if not isinstance(value, dict):
+        return value
+    legacy = {"turbulent_correlation", "compressibility_correction"}
+    if not legacy.intersection(value):
+        return value
+    if {"compressible", "turbulent_model"}.intersection(value):
+        raise _SchemaError("models must not mix legacy and new boundary-layer keys")
+    if "compressibility_correction" not in value:
+        raise _SchemaError(
+            "models is missing required fields: compressibility_correction"
+        )
+    migrated = dict(value)
+    correction = _validate_field(
+        migrated.pop("compressibility_correction"),
+        _choice("none", "eckert", "van_driest_ii", "van_driest_ii_wall_temperature"),
+        "models.compressibility_correction",
+    )
+    correlation = _validate_field(
+        migrated.pop("turbulent_correlation", "schlichting"),
+        _choice("power_law", "schlichting"),
+        "models.turbulent_correlation",
+    )
+    if (
+        correlation == "power_law"
+        and migrated.get("regime") in ("turbulent", "transitional")
+        and correction in ("none", "eckert")
+    ):
+        raise _SchemaError(
+            "the one-fifth-power turbulent friction law (power_law) was removed; "
+            "select schlichting"
+        )
+    migrated["compressible"] = correction != "none"
+    migrated["turbulent_model"] = (
+        None
+        if migrated.get("regime") == "laminar"
+        else correlation
+        if correction == "none"
+        else correction
+    )
+    return migrated
+
+
 def validate_calculator_payload(
     *,
     calculator: str,
@@ -513,7 +562,22 @@ def validate_calculator_payload(
         return inputs, gas, None
     schema = _SCHEMAS[calculator]
     normalized_inputs = _validate_object(inputs_si, schema.inputs, "inputs_si")
+    if calculator == "boundary_layer":
+        models = _migrate_boundary_models(models)
     normalized_models = _validate_object(models, schema.models, "models")
+    if calculator == "boundary_layer":
+        model = normalized_models["turbulent_model"]
+        try:
+            resolved = _resolve_turbulent_model(
+                BoundaryLayerRegime(str(normalized_models["regime"])),
+                cast(bool, normalized_models["compressible"]),
+                None if model is None else TurbulentModel(str(model)),
+            )
+        except ValueError as error:
+            raise _SchemaError(str(error)) from error
+        normalized_models["turbulent_model"] = (
+            None if resolved is None else resolved.value
+        )
     if mode == "single":
         if has_sweep:
             raise _SchemaError("single mode does not allow sweep_si")

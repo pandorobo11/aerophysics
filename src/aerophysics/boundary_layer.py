@@ -57,20 +57,27 @@ class BoundaryLayerRegime(StrEnum):
     TRANSITIONAL = "transitional"
 
 
-class TurbulentCorrelation(StrEnum):
-    """Smooth-plate turbulent skin-friction correlation."""
+class TurbulentModel(StrEnum):
+    """Turbulent skin-friction and compressibility treatment.
 
-    POWER_LAW = "power_law"
+    SCHLICHTING uses logarithmic friction and one-fifth-power thickness
+    with a one-seventh-power profile. ECKERT evaluates Schlichting friction
+    at the Eckert reference state and returns NaN thicknesses.
+    VAN_DRIEST_II uses the transformed implicit Willems friction equations
+    and returns NaN thicknesses. VAN_DRIEST_II_WALL_TEMPERATURE uses
+    transformed Schlichting friction with (Tw/Tr)**0.064, momentum-integral
+    theta, and Van Driest/Walz profile delta99 and displacement thickness.
+    """
+
     SCHLICHTING = "schlichting"
-
-
-class CompressibilityCorrection(StrEnum):
-    """Property and skin-friction treatment for compressible flow."""
-
-    NONE = "none"
     ECKERT = "eckert"
     VAN_DRIEST_II = "van_driest_ii"
     VAN_DRIEST_II_WALL_TEMPERATURE = "van_driest_ii_wall_temperature"
+
+    @property
+    def compressible(self) -> bool:
+        """Whether this model requires compressible edge and wall states."""
+        return self is not TurbulentModel.SCHLICHTING
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,12 +86,14 @@ class FlatPlateBoundaryLayerResult:
 
     ``local_skin_friction_coefficient`` and
     ``average_skin_friction_coefficient`` are always referred to the edge
-    dynamic pressure ``rho_e U_e**2/2`` for every compressibility correction,
+    dynamic pressure ``rho_e U_e**2/2`` for every model,
     so ``wall_shear_stress`` is the local coefficient multiplied by the edge
     dynamic pressure, while ``drag_per_unit_width`` is the average coefficient
-    multiplied by the edge dynamic pressure and ``distance``. With Eckert
-    turbulent portions, ``effective_reynolds_number`` is the reference Reynolds number
-    ``Re*`` at which the incompressible friction correlations are evaluated.
+    multiplied by the edge dynamic pressure and ``distance``. With
+    ECKERT turbulent portions,
+    ``effective_reynolds_number`` is the
+    reference Reynolds number ``Re*`` at which the incompressible friction
+    correlations are evaluated.
     Laminar similarity portions return the edge Reynolds number ``Re_x``.
     """
 
@@ -157,13 +166,7 @@ def _warn_viscous_interaction(
 
 def _turbulent_friction(
     reynolds: FloatArray,
-    correlation: TurbulentCorrelation,
 ) -> tuple[FloatArray, FloatArray]:
-    if correlation is TurbulentCorrelation.POWER_LAW:
-        local = 0.0592 * reynolds**-0.2
-        average = 0.074 * reynolds**-0.2
-        return local, average
-
     if np.any(reynolds <= 1.0):
         raise ModelRangeError(
             "Schlichting correlation requires Reynolds number greater than one"
@@ -177,10 +180,9 @@ def _turbulent_friction(
 def _turbulent_correlations(
     distance: FloatArray,
     reynolds: FloatArray,
-    correlation: TurbulentCorrelation,
 ) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
     thickness, displacement, momentum = _turbulent_thicknesses(distance, reynolds)
-    local_friction, average_friction = _turbulent_friction(reynolds, correlation)
+    local_friction, average_friction = _turbulent_friction(reynolds)
     return (
         thickness,
         displacement,
@@ -215,15 +217,47 @@ def _edge_basis_friction(
     )
 
 
+def _resolve_turbulent_model(
+    regime: BoundaryLayerRegime,
+    compressible: bool,
+    turbulent_model: TurbulentModel | None,
+) -> TurbulentModel | None:
+    """Validate the independent laminar and turbulent model selections."""
+    if not isinstance(regime, BoundaryLayerRegime):
+        raise ValueError("regime must be a BoundaryLayerRegime value")
+    if not isinstance(compressible, (bool, np.bool_)):
+        raise ValueError("compressible must be a bool; use True or False")
+    if turbulent_model is not None and not isinstance(turbulent_model, TurbulentModel):
+        raise ValueError("turbulent_model must be a TurbulentModel value or None")
+    if regime is BoundaryLayerRegime.LAMINAR:
+        if turbulent_model is not None:
+            raise ValueError(
+                "turbulent_model is not used for a laminar boundary layer; omit it"
+            )
+        return None
+    if compressible:
+        if turbulent_model is None or not turbulent_model.compressible:
+            raise ValueError(
+                "compressible=True requires a compressible turbulent_model: "
+                "ECKERT, VAN_DRIEST_II, "
+                "or VAN_DRIEST_II_WALL_TEMPERATURE"
+            )
+    elif turbulent_model is None:
+        return TurbulentModel.SCHLICHTING
+    elif turbulent_model.compressible:
+        raise ValueError(
+            "compressible=False requires SCHLICHTING; "
+            "use compressible=True for a compressible turbulent_model"
+        )
+    return turbulent_model
+
+
 def _validate_model_choices(
     regime: BoundaryLayerRegime,
-    turbulent_correlation: TurbulentCorrelation,
     transition_reynolds: float | None,
 ) -> float | None:
     if not isinstance(regime, BoundaryLayerRegime):
         raise ValueError("regime must be a BoundaryLayerRegime value")
-    if not isinstance(turbulent_correlation, TurbulentCorrelation):
-        raise ValueError("turbulent_correlation must be a TurbulentCorrelation value")
     if regime is BoundaryLayerRegime.TRANSITIONAL:
         if transition_reynolds is None:
             raise ValueError(
@@ -477,7 +511,7 @@ def _willems_friction(
 def _wall_temperature_friction(
     reynolds: FloatArray,
 ) -> tuple[FloatArray, FloatArray]:
-    return _turbulent_friction(reynolds, TurbulentCorrelation.SCHLICHTING)
+    return _turbulent_friction(reynolds)
 
 
 def _wall_temperature_thickness(
@@ -526,11 +560,9 @@ def flat_plate_boundary_layer(
     edge_dynamic_viscosity: ArrayLike,
     *,
     regime: BoundaryLayerRegime,
-    turbulent_correlation: TurbulentCorrelation = (TurbulentCorrelation.SCHLICHTING),
+    compressible: bool = False,
+    turbulent_model: TurbulentModel | None = None,
     transition_reynolds: float | None = None,
-    compressibility_correction: CompressibilityCorrection = (
-        CompressibilityCorrection.NONE
-    ),
     mach: ArrayLike | None = None,
     edge_temperature: ArrayLike | None = None,
     wall_temperature: ArrayLike | None = None,
@@ -553,25 +585,23 @@ def flat_plate_boundary_layer(
         corrections use this same edge-viscosity value.
     regime:
         Explicit laminar, turbulent, or transitional model selection.
-    turbulent_correlation:
-        Skin-friction correlation used wherever the boundary layer is
-        turbulent. The default is the Schlichting logarithmic correlation.
-        This option is ignored for turbulent portions when
-        ``compressibility_correction=VAN_DRIEST_II`` (Willems equations), or
-        ``VAN_DRIEST_II_WALL_TEMPERATURE`` (Schlichting pair).
+    compressible:
+        False uses Blasius for laminar points; True solves compressible
+        laminar similarity and requires mach and edge_temperature.
+        Accepts ``bool`` and ``numpy.bool_``. Thermal inputs require True.
+    turbulent_model:
+        Omit for LAMINAR. For TURBULENT or TRANSITIONAL, False defaults to
+        SCHLICHTING and accepts only that model. True requires an explicit
+        compressible TurbulentModel. Incompatible selections raise ValueError.
+        Eckert models convert reference-state friction to the edge dynamic
+        pressure using rho*/rho_e = T_e/T*.
     transition_reynolds:
-        Reynolds number at transition. Required only for ``TRANSITIONAL``;
+        Reynolds number at transition. Required only for TRANSITIONAL;
         there is deliberately no default transition location.
-    compressibility_correction:
-        ``NONE``, ``ECKERT``, ``VAN_DRIEST_II``, or
-        ``VAN_DRIEST_II_WALL_TEMPERATURE``. All three compressible modes solve
-        laminar similarity equations. Turbulent Eckert friction at ``Re*`` gives
-        coefficients on the reference dynamic pressure ``rho* U_e**2/2``;
-        they are converted to the edge basis with ``rho*/rho_e = T_e/T*``.
     mach, edge_temperature:
-        Required for a compressibility correction. Temperature is in K.
+        Required when compressible=True. Temperature is in K.
     wall_temperature:
-        Wall temperature in K. If omitted for a compressibility correction,
+        Wall temperature in K. If omitted when compressible=True,
         an adiabatic wall at the regime-appropriate recovery temperature is
         used.
     prandtl_number:
@@ -584,9 +614,10 @@ def flat_plate_boundary_layer(
     Notes
     -----
     ``boundary_layer_thickness`` is the conventional 99-percent thickness.
-    With ``NONE``, turbulent thicknesses use the one-fifth-power correlation
-    and one-seventh-power profile approximation. ``ECKERT`` and
-    ``VAN_DRIEST_II`` return NaN for all three thicknesses at turbulent
+    With ``compressible=False``, turbulent thicknesses use the one-fifth-power
+    correlation and one-seventh-power profile approximation.
+    ``ECKERT`` and ``VAN_DRIEST_II``
+    return NaN for all three thicknesses at turbulent
     points, including post-transition points, because these approximations
     are inaccurate for compressible flow.
 
@@ -630,19 +661,15 @@ def flat_plate_boundary_layer(
 
     These estimates assume a perfect gas, constant cp and Pr, zero pressure gradient,
     and no induced pressure; at Taw roughly above 2000 K, dissociation makes
-    them indicative only. In compressible modes, ApplicabilityWarning is
+    them indicative only. With compressible=True, ApplicabilityWarning is
     emitted once if any laminar point has chi_bar=Me**3*sqrt(Cw/Re_x)>1,
     where Cw=(Te/Tw)*mu(Tw)/mu_e uses the laminar wall temperature and the
     selected viscosity model. The warning reports the maximum and point count.
-    Turbulent points and NONE are excluded from this warning.
+    Turbulent points and compressible=False are excluded from this warning.
     """
-    transition = _validate_model_choices(
-        regime, turbulent_correlation, transition_reynolds
-    )
-    if not isinstance(compressibility_correction, CompressibilityCorrection):
-        raise ValueError(
-            "compressibility_correction must be a CompressibilityCorrection value"
-        )
+    turbulent_model = _resolve_turbulent_model(regime, compressible, turbulent_model)
+    transition = _validate_model_choices(regime, transition_reynolds)
+    eckert = turbulent_model is TurbulentModel.ECKERT
     if not np.isfinite(prandtl_number) or prandtl_number <= 0.0:
         raise ValueError("prandtl_number must be finite and greater than zero")
     raw_values = (
@@ -658,19 +685,20 @@ def flat_plate_boundary_layer(
         arrays.append(array)
         scalar = scalar and is_scalar
     thermal_values: list[tuple[str, ArrayLike]] = []
-    if compressibility_correction is CompressibilityCorrection.NONE:
+    if not compressible:
         if (
             mach is not None
             or edge_temperature is not None
             or wall_temperature is not None
         ):
             raise ValueError(
-                "thermal inputs require an explicit compressibility correction"
+                "thermal inputs require compressible=True; "
+                "omit them for compressible=False"
             )
     else:
         if mach is None or edge_temperature is None:
             raise ValueError(
-                "mach and edge_temperature are required for compressibility correction"
+                "mach and edge_temperature are required for compressible=True"
             )
         thermal_values.extend((("mach", mach), ("edge_temperature", edge_temperature)))
         if wall_temperature is not None:
@@ -705,13 +733,8 @@ def flat_plate_boundary_layer(
     laminar_reynolds = np.asarray(reynolds, dtype=np.float64)
     turbulent_friction_reynolds = np.asarray(reynolds, dtype=np.float64)
     turbulent_thickness_reynolds = np.asarray(reynolds, dtype=np.float64)
-    wall_corrected = (
-        compressibility_correction
-        is CompressibilityCorrection.VAN_DRIEST_II_WALL_TEMPERATURE
-    )
-    vd2 = wall_corrected or (
-        compressibility_correction is CompressibilityCorrection.VAN_DRIEST_II
-    )
+    wall_corrected = turbulent_model is TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE
+    vd2 = wall_corrected or (turbulent_model is TurbulentModel.VAN_DRIEST_II)
     vd2_friction = _wall_temperature_friction if wall_corrected else _willems_friction
     turbulent_friction_factor = np.ones_like(reynolds)
     turbulent_reynolds_factor = np.ones_like(reynolds)
@@ -722,7 +745,7 @@ def flat_plate_boundary_layer(
     turbulent_density_ratio = np.ones_like(reynolds)
     recovery_temperature: FloatArray | None = None
     used_wall_temperature: FloatArray | None = None
-    if compressibility_correction is not CompressibilityCorrection.NONE:
+    if compressible:
         mach_values = np.asarray(broadcast[4], dtype=np.float64)
         edge_temperature_values = np.asarray(broadcast[5], dtype=np.float64)
         specified_wall = (
@@ -792,7 +815,7 @@ def flat_plate_boundary_layer(
         if regime is BoundaryLayerRegime.LAMINAR:
             recovery_temperature = laminar_recovery
             used_wall_temperature = laminar_wall
-        elif compressibility_correction is CompressibilityCorrection.ECKERT:
+        elif eckert:
             (
                 turbulent_friction_reynolds,
                 turbulent_recovery,
@@ -847,7 +870,7 @@ def flat_plate_boundary_layer(
                 laminar_wall,
             )
 
-    if compressibility_correction is not CompressibilityCorrection.NONE:
+    if compressible:
         _warn_viscous_interaction(
             reynolds,
             mach_values,
@@ -872,9 +895,7 @@ def flat_plate_boundary_layer(
             )
         else:
             turbulent = _edge_basis_friction(
-                _turbulent_correlations(
-                    x, turbulent_friction_reynolds, turbulent_correlation
-                ),
+                _turbulent_correlations(x, turbulent_friction_reynolds),
                 turbulent_density_ratio,
             )
         selected = turbulent
@@ -898,7 +919,6 @@ def flat_plate_boundary_layer(
         else:
             local, average = _turbulent_friction(
                 turbulent_reynolds_factor * np.maximum(reynolds, transition),
-                turbulent_correlation,
             )
             turbulent = (
                 *turbulent_thickness,
@@ -914,7 +934,6 @@ def flat_plate_boundary_layer(
         else:
             _, turbulent_average_reference = _turbulent_friction(
                 turbulent_reynolds_factor * transition,
-                turbulent_correlation,
             )
             turbulent_average = turbulent_density_ratio * turbulent_average_reference
         mixed_average = turbulent[4] + (transition / reynolds) * (
@@ -936,10 +955,7 @@ def flat_plate_boundary_layer(
     dynamic_pressure = 0.5 * density * velocity**2
     shear = dynamic_pressure * local_friction
     drag = dynamic_pressure * x * average_friction
-    if compressibility_correction in (
-        CompressibilityCorrection.ECKERT,
-        CompressibilityCorrection.VAN_DRIEST_II,
-    ):
+    if eckert or turbulent_model is TurbulentModel.VAN_DRIEST_II:
         thickness = np.where(turbulent_mask, np.nan, thickness)
         displacement = np.where(turbulent_mask, np.nan, displacement)
         momentum = np.where(turbulent_mask, np.nan, momentum)
@@ -993,8 +1009,7 @@ def flat_plate_boundary_layer(
 
 __all__ = [
     "BoundaryLayerRegime",
-    "CompressibilityCorrection",
     "FlatPlateBoundaryLayerResult",
-    "TurbulentCorrelation",
+    "TurbulentModel",
     "flat_plate_boundary_layer",
 ]

@@ -1,7 +1,7 @@
 {
   "sources": [
     "Blasius laminar flat-plate similarity solution",
-    "one-fifth-power turbulent flat-plate correlation",
+    "one-fifth-power turbulent flat-plate thickness correlation",
     "Schlichting smooth-plate average skin-friction correlation"
   ],
   "blasius_delta99_coefficient": 4.91,

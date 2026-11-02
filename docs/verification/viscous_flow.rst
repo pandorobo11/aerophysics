@@ -9,7 +9,8 @@ Van Driest II compressibility paths, Van Driest and Volpiani velocity-profile
 transformations, the Spalding--Coles composite profile, GRA/Walz temperature
 closures, and boundary-layer-immersed protrusion integration.
 
-The Blasius, one-fifth-power, and Schlichting results are compared with a
+The Blasius and Schlichting friction results, and the retained one-fifth-power
+turbulent thickness results, are compared with a
 fixed CSV independently evaluated from their published equations over Reynolds
 numbers ``1e5`` through ``1e9``.  NACA TN-3811 and NASA TN D-6945 are the
 primary chart references for Van Driest II.  Three representative points from
@@ -24,7 +25,7 @@ Results
 .. include:: ../_generated/viscous_flow_validation.rst
 
 .. image:: ../_static/viscous_skin_friction.svg
-   :alt: Blasius, one-fifth-power, and Schlichting local skin-friction coefficients.
+   :alt: Blasius and Schlichting local skin-friction coefficients.
    :align: center
 
 .. image:: ../_static/protrusion_shielding.svg
@@ -34,8 +35,8 @@ Results
 Interpretation and model validation boundary
 --------------------------------------------
 
-Skin friction decreases with Reynolds number in all three smooth-plate
-correlations.  The constant-property Van Driest transform reduces to the
+Skin friction decreases with Reynolds number in both smooth-plate
+friction correlations.  The constant-property Van Driest transform reduces to the
 ordinary wall variables, and Van Driest II approaches its dedicated
 incompressible correlation as Mach tends to zero.  For a constant-width
 protrusion in a one-seventh-power velocity profile, direct integration gives

@@ -7,8 +7,7 @@ from pathlib import Path
 
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
-    CompressibilityCorrection,
-    TurbulentCorrelation,
+    TurbulentModel,
     flat_plate_boundary_layer,
 )
 from aerophysics.gas import AIR
@@ -35,21 +34,13 @@ def test_flat_plate_correlations_match_independent_source_equations() -> None:
             1.0,
             regime=BoundaryLayerRegime.LAMINAR,
         )
-        power = flat_plate_boundary_layer(
-            1.0,
-            reynolds,
-            1.0,
-            1.0,
-            regime=BoundaryLayerRegime.TURBULENT,
-            turbulent_correlation=TurbulentCorrelation.POWER_LAW,
-        )
         schlichting = flat_plate_boundary_layer(
             1.0,
             reynolds,
             1.0,
             1.0,
             regime=BoundaryLayerRegime.TURBULENT,
-            turbulent_correlation=TurbulentCorrelation.SCHLICHTING,
+            turbulent_model=TurbulentModel.SCHLICHTING,
         )
         comparisons = (
             (laminar.boundary_layer_thickness, "blasius_delta_over_x"),
@@ -57,9 +48,7 @@ def test_flat_plate_correlations_match_independent_source_equations() -> None:
             (laminar.momentum_thickness, "blasius_momentum_over_x"),
             (laminar.local_skin_friction_coefficient, "blasius_local_cf"),
             (laminar.average_skin_friction_coefficient, "blasius_average_cf"),
-            (power.boundary_layer_thickness, "power_delta_over_x"),
-            (power.local_skin_friction_coefficient, "power_local_cf"),
-            (power.average_skin_friction_coefficient, "power_average_cf"),
+            (schlichting.boundary_layer_thickness, "power_delta_over_x"),
             (
                 schlichting.average_skin_friction_coefficient,
                 "schlichting_average_cf",
@@ -89,7 +78,8 @@ def test_van_driest_ii_matches_digitized_nasa_chart_points() -> None:
             1.0,
             viscosity,
             regime=BoundaryLayerRegime.TURBULENT,
-            compressibility_correction=CompressibilityCorrection.VAN_DRIEST_II,
+            compressible=True,
+            turbulent_model=TurbulentModel.VAN_DRIEST_II,
             mach=mach,
             edge_temperature=temperature,
             wall_temperature=(
