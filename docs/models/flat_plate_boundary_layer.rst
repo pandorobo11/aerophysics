@@ -193,7 +193,8 @@ near :math:`Re_x=10^6`; equilibrium log-wake profiles give :math:`H` falling to
 about 1.2 and :math:`\delta_{99}/\theta_m` rising to about 11 by :math:`10^9`.
 The correlation is therefore nominally limited to
 :math:`5\times10^5\le Re_x\le10^7`. Turbulent points above
-:math:`Re_x=10^7` (measured from the virtual origin below) emit
+:math:`Re_x=10^7` (for ``TRANSITIONAL``, the equivalent :math:`Re_\mathrm{eq}`
+described under :ref:`flat-plate-specified-transition`) emit
 :class:`~aerophysics.exceptions.ApplicabilityWarning`.
 
 The Schlichting friction is not derived from these thicknesses:
@@ -201,25 +202,15 @@ The Schlichting friction is not derived from these thicknesses:
 returned drag, by +2% at :math:`Re_x=10^6`, −15% at :math:`10^8`, and −27% at
 :math:`10^9`.
 
-For ``TRANSITIONAL``, :math:`x` and :math:`Re_x` in these equations are measured
-from a turbulent virtual origin :math:`x_0`. It is placed so that the turbulent
-momentum thickness equals the Blasius value at transition:
-
-.. math::
-
-   Re_x-Re_{x_0}=Re_x-Re_\mathrm{tr}
-   +\left(\frac{0.664\sqrt{Re_\mathrm{tr}}}{0.37\cdot7/72}\right)^{5/4},
-   \qquad
-   x-x_0=x\frac{Re_x-Re_{x_0}}{Re_x}.
-
-:math:`\theta_m` is then continuous at transition. :math:`\delta_{99}` still
-jumps there, because the assumed profile changes from Blasius to the
-one-seventh-power shape. Without the virtual origin, the thicknesses just
-after transition were those of a plate turbulent from its leading edge, with a
-momentum thickness 2.8 times the laminar value at
-:math:`Re_\mathrm{tr}=5\times10^5`. Fully turbulent results are unchanged.
-Friction and the mixed average keep the leading-edge origin described under
-:ref:`flat-plate-skin-friction-coefficients`.
+For ``TRANSITIONAL``, :math:`x` and :math:`Re_x` in these equations are
+:math:`x_\mathrm{eq}` and :math:`Re_\mathrm{eq}` of the equivalent turbulent
+plate described under :ref:`flat-plate-specified-transition`, the same origin
+used for friction. The power-law :math:`\theta_m` is then 1.3--2.2% above the
+Blasius value at transition for :math:`Re_\mathrm{tr}=5\times10^5`--
+:math:`5\times10^6`, the power law's own mismatch with Schlichting friction
+at :math:`Re_\mathrm{eq}\approx1.4\times10^5`--:math:`6\times10^5`.
+:math:`\delta_{99}` jumps there, because the assumed profile changes from
+Blasius to the one-seventh-power shape.
 
 .. _flat-plate-log-wake-thickness:
 
@@ -235,7 +226,7 @@ mean-velocity profile instead of fixed ratios:
    \qquad
    \tau_w=\tfrac{1}{2}\rho_eU_e^2C_{f,x}.
 
-:math:`\bar C_f` is the Schlichting average, or the specified-transition mixed
+:math:`\bar C_f` is the Schlichting average, or the specified-transition
 average, so :math:`\theta_m` always agrees with ``drag_per_unit_width`` and is
 continuous at transition. :math:`\delta_{99}` is the value :math:`d` for which
 the Spalding inner law (:ref:`Spalding, 1961 <ref-spalding-1961>`) plus the
@@ -258,11 +249,10 @@ Where no wake parameter :math:`0\le\Pi\le1` matches, :math:`\delta_{99}` and
 :class:`~aerophysics.exceptions.ApplicabilityWarning` reports the number of
 such points; :math:`\theta_m`, friction, and drag are still returned. Fully
 turbulent plates are admissible for :math:`10^4\le Re_x\le10^{10}`. After a
-prescribed transition at :math:`Re_\mathrm{tr}\gtrsim7\times10^5`, the closure
-fails in a short zone where the layer has turbulent friction but laminar
-momentum thickness, up to :math:`Re_x/Re_\mathrm{tr}\approx1.07` for
-:math:`Re_\mathrm{tr}=10^6` and 1.35 for :math:`5\times10^6`. The real layer is
-not in equilibrium there.
+prescribed transition, friction and :math:`\theta_m` are those of the fully
+turbulent plate at :math:`Re_\mathrm{eq}`, so the closure is admissible
+whenever that plate is; :math:`Re_\mathrm{eq}\approx1.4\times10^5` just after
+:math:`Re_\mathrm{tr}=5\times10^5`.
 
 Thickness accuracy
 ~~~~~~~~~~~~~~~~~~
@@ -414,23 +404,86 @@ local relation
 Turbulent use outside :math:`5\times10^5\le Re_x\le10^9` emits
 :class:`~aerophysics.exceptions.ApplicabilityWarning`.
 
+.. _flat-plate-specified-transition:
+
 Specified transition
 ^^^^^^^^^^^^^^^^^^^^
 
 For ``BoundaryLayerRegime.TRANSITIONAL``, local quantities switch from the
-laminar to selected turbulent correlation at the caller-supplied
-:math:`Re_\mathrm{tr}`. Average friction preserves the laminar drag accumulated
-before transition:
+laminar to the selected turbulent model at the caller-supplied
+:math:`Re_\mathrm{tr}`. Downstream, the layer continues as the fully turbulent
+plate of that model whose momentum thickness equals the laminar value at
+transition. For constant edge and wall conditions and zero pressure gradient,
+the momentum integral gives :math:`\theta_m=x\bar C_f/2` for both the laminar
+and the fully turbulent plate, so the turbulent start :math:`Re_0` solves
 
 .. math::
 
-   \bar C_{f,\mathrm{mixed}}(Re_x)
-   =\bar C_{f,t}(Re_x)
-   +\frac{Re_\mathrm{tr}}{Re_x}
-    \left[
-      \bar C_{f,l}(Re_\mathrm{tr})
-      -\bar C_{f,t}(Re_\mathrm{tr})
-    \right].
+   Re_0\,\bar C_{f,t}(Re_0)=Re_\mathrm{tr}\,\bar C_{f,l}(Re_\mathrm{tr})
+   =2Re_{\theta,\mathrm{tr}}.
+
+The equivalent Reynolds number and length then give
+
+.. math::
+
+   Re_\mathrm{eq}=Re_0+Re_x-Re_\mathrm{tr},
+   \qquad
+   x_\mathrm{eq}=x\frac{Re_\mathrm{eq}}{Re_x},
+
+   C_{f,x}=C_{f,t}(Re_\mathrm{eq}),
+   \qquad
+   \bar C_f=\frac{Re_\mathrm{eq}}{Re_x}\bar C_{f,t}(Re_\mathrm{eq}).
+
+Here :math:`C_{f,t}` and :math:`\bar C_{f,t}` are the fully turbulent
+edge-basis coefficients of the selected model, and :math:`\bar C_{f,l}` is
+Blasius, or the compressible similarity solution with ``compressible=True``.
+The compressible models write these coefficients as
+:math:`s\,C_{f,i}(kRe_x)`, with :math:`(s,k)=(\rho^*/\rho_e,Re^*/Re_x)` for
+``ECKERT`` and :math:`(w/F_C,F_x)` for the Van Driest II models (:math:`w=1`
+for ``VAN_DRIEST_II``), so the root is found in incompressible variables:
+
+.. math::
+
+   kRe_0\,\bar C_{f,i}(kRe_0)=2Re_{\theta,\mathrm{tr}}\frac{k}{s}.
+
+For Van Driest II with :math:`w=1`, :math:`k/s=F_\theta`, the momentum-thickness
+Reynolds number transformation. The Schlichting root is found by Brent's
+method in :math:`\ln R`; the Willems average equation is inverted explicitly as
+:math:`R=S(\log_{10}S/0.242)^2` with :math:`S=R\bar C_{f,i}`. Thickness
+correlations, including the ``SCHLICHTING`` power law, use
+:math:`x_\mathrm{eq}` and :math:`Re_\mathrm{eq}`, and
+``effective_reynolds_number`` returns :math:`kRe_\mathrm{eq}` at turbulent
+points (:math:`k=1` for ``compressible=False``). :math:`Re_0` for
+:math:`Re_\mathrm{tr}=5\times10^5` is :math:`1.417\times10^5` with
+Schlichting friction.
+
+Accumulated drag, and :math:`\theta_m` where returned, are continuous at
+transition, and :math:`\mathrm{d}(x\bar C_f)/\mathrm{d}x=C_{f,x}` holds on both
+sides. Local friction, :math:`\delta_{99}`, and :math:`\delta^*` jump, because
+transition is instantaneous here. Turbulent friction just after transition is
+thus consistent with the actual momentum thickness, and post-transition
+thickness closures see a fully turbulent equilibrium state.
+
+Earlier versions kept the leading-edge origin for turbulent friction and
+used the Prandtl-type mixed average
+:math:`\bar C_{f,t}(Re_x)+(Re_\mathrm{tr}/Re_x)[\bar C_{f,l}-\bar C_{f,t}]_{Re_\mathrm{tr}}`.
+That average conserves drag, but its local friction belongs to a layer whose
+momentum thickness is 2.8 times the laminar value at
+:math:`Re_\mathrm{tr}=5\times10^5`. With Schlichting friction, the local
+coefficient just after transition is now 26% higher for
+:math:`Re_\mathrm{tr}=5\times10^5` and 42% higher for
+:math:`5\times10^6`. Average friction is 6--9% higher at
+:math:`Re_x/Re_\mathrm{tr}=1.2`--2 for :math:`Re_\mathrm{tr}=5\times10^5`, up
+to 15% for :math:`5\times10^6`, and less than 1% higher beyond
+:math:`100Re_\mathrm{tr}`. Fully turbulent and laminar results are unchanged.
+
+The continuity, drag-derivative, and fully turbulent limits are verified
+analytically in the test suite. The equivalent plate has not been compared
+with transitional measurements; a real transition region has finite length and
+non-equilibrium turbulence. If :math:`2Re_{\theta,\mathrm{tr}}` is below the
+smallest value the turbulent correlation can produce (about 4.5 for
+Schlichting, :math:`Re_\mathrm{tr}\lesssim11` with Blasius), the call raises
+:class:`~aerophysics.exceptions.ModelRangeError`.
 
 This is a prescribed transition location, not a transition-prediction model.
 
@@ -540,10 +593,10 @@ when supplied :math:`\mu_e` differs, all four coefficients multiply
 :math:`\sqrt{\mu_{\mathrm{model}}(T_e)/\mu_e}`. The momentum integral is
 checked independently against friction before enforcing the exact ZPG
 identity :math:`\theta_m=xc_f`. The average coefficient is exactly
-:math:`\bar C_f=2c_f`. The transitional mixed average uses this same laminar
-coefficient at :math:`Re_{\mathrm{tr}}`. Thus post-transition average drag
-changes; for the wall-temperature mode its momentum-integral and profile
-thicknesses also respond to this changed accumulated drag.
+:math:`\bar C_f=2c_f`. The specified-transition start :math:`Re_0` uses this
+same laminar momentum thickness at :math:`Re_{\mathrm{tr}}`. Thus
+post-transition friction and drag depend on it; for the wall-temperature mode
+its momentum-integral and profile thicknesses also respond.
 
 ``effective_reynolds_number`` returns the external :math:`Re_x` at laminar
 points. At zero Mach and :math:`T_w=T_e`, the numerical coefficients approach
@@ -739,7 +792,8 @@ at :math:`F_\theta Re_x` were inaccurate in compressible flow.
      - K
    * - :math:`Re_{x,i}`
      - ``effective_reynolds_number``
-     - Equivalent incompressible VD2 friction Reynolds number
+     - Equivalent incompressible VD2 friction Reynolds number (from
+       :math:`Re_\mathrm{eq}` after a specified transition)
      - dimensionless
    * - :math:`F_C,F_\theta,F_x`
      - internal
@@ -779,7 +833,8 @@ Thus :math:`w=1` for an adiabatic wall. This model uses the Schlichting pair;
 ``TurbulentModel.VAN_DRIEST_II`` uses the Willems pair. At constant edge and wall
 conditions, :math:`c_f=\mathrm{d}(x\bar C_F)/\mathrm{d}x`.
 For ``TRANSITIONAL``, the laminar part uses the similarity solution and the
-average uses the specified-transition mixing equation above with this new turbulent average.
+turbulent part the equivalent plate of :ref:`flat-plate-specified-transition`
+with this friction pair.
 
 The zero-pressure-gradient momentum integral gives the full-edge momentum
 thickness and wall shear stress:
@@ -789,7 +844,8 @@ thickness and wall shear stress:
    \theta=\frac{x\bar C_F}{2}, \qquad
    \tau_w=\frac{1}{2}\rho_e U_e^2 c_f.
 
-Here :math:`\bar C_F` is the selected turbulent or mixed average, on the
+Here :math:`\bar C_F` is the selected turbulent or specified-transition
+average, on the
 edge dynamic-pressure basis. Distances and thicknesses are in m, wall shear
 is in Pa, and positive shear acts against the flow on the fluid. The
 streamwise coordinate starts at the leading edge; the profile coordinate
@@ -837,7 +893,7 @@ zero-pressure-gradient plate and a
 calorically perfect gas. Flow is turbulent from the leading edge, or uses
 the prescribed transition model. This envelope is evidence of comparison,
 not a guarantee for every combination of these parameters; the wake closure
-can fail, including near a prescribed transition.
+can fail.
 
 Supply **local edge conditions** rather than freestream conditions. Viscous
 interaction at a sharp leading edge can raise the edge pressure 10--27%

@@ -60,7 +60,10 @@ edge conditions and returns the one-sided drag per unit width:
 
 Use ``LAMINAR`` or ``TURBULENT`` when the state is known. ``TRANSITIONAL``
 requires a caller-supplied transition Reynolds number; the API does not
-predict natural transition. Compressibility corrections are opt-in. See
+predict natural transition. Downstream of it, the turbulent part continues
+the fully turbulent plate with the same momentum thickness, so drag and
+momentum thickness are continuous while local friction jumps. Compressibility
+corrections are opt-in. See
 :doc:`../models/flat_plate_boundary_layer` for the available correlations,
 required thermodynamic inputs, and applicability ranges.
 
@@ -161,8 +164,7 @@ drag and a log-wake profile delta99:
 
 The one-fifth-power delta99 is about 40% thick at :math:`Re_x=10^6` and
 becomes too thin above about :math:`5\times10^7`; it warns above
-:math:`10^7`. After a prescribed transition it is measured from a virtual
-origin that keeps momentum thickness continuous. See
+:math:`10^7`. See
 :ref:`flat-plate-log-wake-thickness` for the closure, its accuracy, and the
 points where it returns ``NaN``.
 
@@ -190,8 +192,8 @@ and average friction is twice local friction, on the edge dynamic-pressure
 basis. Omitted wall temperature means zero wall heat flux; recovery temperature
 is the solved adiabatic temperature even for a specified isothermal wall.
 ``effective_reynolds_number`` is the external Reynolds number at laminar points.
-These rules also apply before transition, and to the laminar contribution to
-mixed average drag. ``compressible=False`` retains the Blasius delta99 coefficient 4.9100.
+These rules also apply before transition, and to the laminar momentum
+thickness that starts the turbulent part after transition. ``compressible=False`` retains the Blasius delta99 coefficient 4.9100.
 See :doc:`../models/flat_plate_boundary_layer` for equations, numerical accuracy,
 and the constant-cp, constant-Pr, zero-pressure-gradient assumptions.
 

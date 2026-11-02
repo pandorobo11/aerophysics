@@ -110,6 +110,9 @@ class FlatPlateBoundaryLayerResult:
     reference Reynolds number ``Re*`` at which the incompressible friction
     correlations are evaluated.
     Laminar similarity portions return the edge Reynolds number ``Re_x``.
+    After a prescribed transition, turbulent portions return the Reynolds
+    number of the equivalent fully turbulent plate described in
+    ``flat_plate_boundary_layer``.
     """
 
     distance: FloatResult
@@ -217,23 +220,56 @@ def _turbulent_thicknesses(
     return thickness, displacement, momentum
 
 
-def _virtual_origin_reynolds(
-    reynolds: FloatArray,
-    transition: float,
-    laminar_momentum_coefficient: FloatArray,
-) -> FloatArray:
-    """Return Re measured from the one-fifth-power turbulent virtual origin.
+def _schlichting_momentum_inverse(drag_reynolds: FloatArray) -> FloatArray:
+    """Return R with ``R * 0.455/log10(R)**2.58`` equal to ``drag_reynolds``.
 
-    The origin is placed so that the power-law momentum thickness equals the
-    laminar momentum thickness at transition.
+    The product is twice the fully turbulent momentum-thickness Reynolds
+    number. It increases monotonically above ``ln R = 2.58``, where the local
+    coefficient is positive.
     """
-    laminar_momentum_reynolds = laminar_momentum_coefficient * np.sqrt(transition)
-    turbulent_start = (
-        laminar_momentum_reynolds / (_POWER_LAW_MOMENTUM_RATIO * _POWER_LAW_DELTA99)
-    ) ** 1.25
+    lower = 2.58 * (1.0 + 1e-12)
+    upper = np.log(1e300)
+
+    def log_drag(log_reynolds: float) -> float:
+        return float(
+            log_reynolds + np.log(0.455) - 2.58 * np.log(log_reynolds / np.log(10.0))
+        )
+
+    roots = np.empty_like(drag_reynolds)
+    for index in np.ndindex(drag_reynolds.shape):
+        target = float(drag_reynolds[index])
+        if not np.isfinite(target) or not (
+            log_drag(lower) < np.log(target) < log_drag(upper)
+        ):
+            raise ModelRangeError(
+                "transition momentum thickness is outside the Schlichting "
+                "turbulent correlation; increase transition_reynolds"
+            )
+        roots[index] = np.exp(
+            brentq(
+                lambda value, target=target: log_drag(value) - np.log(target),
+                lower,
+                upper,
+                xtol=1e-14,
+                rtol=4.0 * np.finfo(np.float64).eps,
+            )
+        )
+    return np.asarray(roots, dtype=np.float64)
+
+
+def _willems_momentum_inverse(drag_reynolds: FloatArray) -> FloatArray:
+    """Return R whose Willems average coefficient gives ``R * Cf = drag_reynolds``.
+
+    With ``s = R * Cf`` the average equation ``0.242/sqrt(Cf) = log10(s)``
+    gives ``R = s * (log10(s)/0.242)**2`` explicitly for ``s > 1``.
+    """
+    if np.any(~np.isfinite(drag_reynolds) | (drag_reynolds <= 1.0)):
+        raise ModelRangeError(
+            "transition momentum thickness is outside the Willems "
+            "turbulent correlation; increase transition_reynolds"
+        )
     return np.asarray(
-        np.maximum(reynolds, transition) - transition + turbulent_start,
-        dtype=np.float64,
+        drag_reynolds * (np.log10(drag_reynolds) / 0.242) ** 2, dtype=np.float64
     )
 
 
@@ -650,8 +686,7 @@ def flat_plate_boundary_layer(
     ``boundary_layer_thickness`` is the conventional 99-percent thickness.
     ``SCHLICHTING`` turbulent thicknesses use delta99=0.37*x*Re_x**-0.2 with
     the one-seventh-power ratios delta*=delta99/8 and theta=7*delta99/72.
-    After a prescribed transition, x and Re_x are measured from a virtual
-    origin that makes theta continuous. Against incompressible measurements
+    Against incompressible measurements
     delta99 is an estimated 40% thick at Re_x=1e6 and 8% thin at 1e8, and
     turbulent points with Re above 1e7 emit ApplicabilityWarning.
     ``SCHLICHTING_LOG_WAKE`` has the same friction and drag. It sets
@@ -659,8 +694,8 @@ def flat_plate_boundary_layer(
     delta99 and delta* with the constant-property limit of the profile
     closure described below, using the supplied edge viscosity; delta99 is
     about 19% thick at 1e6 and 10% at 1e8. Where no wake 0 <= Pi <= 1
-    matches, as just after a late transition, delta99 and delta* are NaN and
-    ApplicabilityWarning is emitted; theta is retained.
+    matches, delta99 and delta* are NaN and ApplicabilityWarning is
+    emitted; theta is retained.
     ``ECKERT`` and ``VAN_DRIEST_II``
     return NaN for all three thicknesses at turbulent
     points, including post-transition points, because these approximations
@@ -669,7 +704,7 @@ def flat_plate_boundary_layer(
     ``VAN_DRIEST_II_WALL_TEMPERATURE`` multiplies the Schlichting friction
     pair divided by the VD2 friction factor by ``(Tw/Tr)**0.064``. Its
     momentum thickness is ``distance * average_skin_friction_coefficient/2``
-    on the edge basis (mixed average for transitional flow). A Van Driest
+    on the edge basis. A Van Driest
     velocity transformation with Walz temperature relation, kappa=0.41,
     B=5.2, and 0 <= Pi <= 1 determines delta99 and displacement thickness
     through delta99, matching profile momentum thickness to 0.978 times the
@@ -680,6 +715,18 @@ def flat_plate_boundary_layer(
     to 1.6e8). Against SU2 SA, the delta99 difference falls by 5--6 points per
     decade of Re_x,e (about -9 to -12% at 1e9 on cold supersonic walls).
     Supply local edge states; extrapolation beyond that envelope is unverified.
+
+    After a prescribed transition, every turbulent model continues the
+    fully turbulent plate whose momentum thickness equals the laminar value
+    at transition. With the model's fully turbulent edge-basis average
+    Cbar_f,t, the start Re_0 solves Re_0*Cbar_f,t(Re_0) = Re_tr*Cbar_f,l(Re_tr).
+    Local friction and thicknesses use Re_eq = Re_0 + Re_x - Re_tr and
+    x_eq = x*Re_eq/Re_x, and average friction is Re_eq*Cbar_f,t(Re_eq)/Re_x.
+    Accumulated drag, and theta where returned, are therefore continuous;
+    local friction, delta99 and delta* jump. ``SCHLICHTING`` theta exceeds
+    the laminar value at transition by its own power-law mismatch, 1.3--2.2%
+    for Re_tr=5e5--5e6. Transition Reynolds numbers too low for the
+    turbulent correlation raise ModelRangeError.
 
     Skin-friction coefficients use edge dynamic pressure for every mode.
     ``drag_per_unit_width`` is accumulated from the leading edge on one side.
@@ -947,59 +994,39 @@ def flat_plate_boundary_layer(
         selected = turbulent
     else:
         assert transition is not None
-        if compressible:
-            # Compressible turbulent thicknesses are replaced below.
-            turbulent_thickness_scale = turbulent_thickness_reynolds / reynolds
-            turbulent_thickness = _turbulent_thicknesses(
-                x,
-                turbulent_thickness_scale * np.maximum(reynolds, transition),
-            )
-        else:
-            turbulent_thickness_reynolds = _virtual_origin_reynolds(
-                reynolds, transition, laminar_coefficient
-            )
-            turbulent_thickness = _turbulent_thicknesses(
-                x * turbulent_thickness_reynolds / reynolds,
-                turbulent_thickness_reynolds,
-            )
-        if vd2:
-            friction_reynolds = turbulent_reynolds_factor * np.maximum(
-                reynolds, transition
-            )
-            local_i, average_i = vd2_friction(friction_reynolds)
-            turbulent = (
-                *turbulent_thickness,
-                local_i / turbulent_friction_factor,
-                average_i / turbulent_friction_factor,
-            )
-        else:
-            local, average = _turbulent_friction(
-                turbulent_reynolds_factor * np.maximum(reynolds, transition),
-            )
-            turbulent = (
-                *turbulent_thickness,
-                turbulent_density_ratio * local,
-                turbulent_density_ratio * average,
-            )
-        laminar_average = 2 * laminar_coefficient / np.sqrt(transition)
-        if vd2:
-            _, turbulent_average_i = vd2_friction(
-                turbulent_reynolds_factor * transition
-            )
-            turbulent_average = turbulent_average_i / turbulent_friction_factor
-        else:
-            _, turbulent_average_reference = _turbulent_friction(
-                turbulent_reynolds_factor * transition,
-            )
-            turbulent_average = turbulent_density_ratio * turbulent_average_reference
-        mixed_average = turbulent[4] + (transition / reynolds) * (
-            laminar_average - turbulent_average
+        # After transition the layer continues as the fully turbulent plate
+        # with the laminar momentum thickness at transition. Each model's
+        # edge-basis friction is scale * c_f,i(factor * Re), so its fully
+        # turbulent drag Reynolds number is Re * Cbar_f = 2 Re_theta.
+        edge_scale = turbulent_density_ratio / turbulent_friction_factor
+        laminar_drag_reynolds = 2.0 * laminar_coefficient * np.sqrt(transition)
+        momentum_inverse = (
+            _willems_momentum_inverse
+            if turbulent_model is TurbulentModel.VAN_DRIEST_II
+            else _schlichting_momentum_inverse
         )
+        start = (
+            momentum_inverse(
+                laminar_drag_reynolds * turbulent_reynolds_factor / edge_scale
+            )
+            / turbulent_reynolds_factor
+        )
+        equivalent_reynolds = start + np.maximum(reynolds, transition) - transition
+        turbulent_friction_reynolds = turbulent_reynolds_factor * equivalent_reynolds
+        local_i, average_i = (vd2_friction if vd2 else _turbulent_friction)(
+            turbulent_friction_reynolds
+        )
+        # Compressible turbulent thicknesses are replaced below.
+        turbulent_thickness_reynolds = equivalent_reynolds
+        turbulent_thickness = _turbulent_thicknesses(
+            x * equivalent_reynolds / reynolds, equivalent_reynolds
+        )
+        mixed_average = edge_scale * average_i * equivalent_reynolds / reynolds
         selected = (
-            np.where(turbulent_mask, turbulent[0], laminar[0]),
-            np.where(turbulent_mask, turbulent[1], laminar[1]),
-            np.where(turbulent_mask, turbulent[2], laminar[2]),
-            np.where(turbulent_mask, turbulent[3], laminar[3]),
+            np.where(turbulent_mask, turbulent_thickness[0], laminar[0]),
+            np.where(turbulent_mask, turbulent_thickness[1], laminar[1]),
+            np.where(turbulent_mask, turbulent_thickness[2], laminar[2]),
+            np.where(turbulent_mask, edge_scale * local_i, laminar[3]),
             np.where(turbulent_mask, mixed_average, laminar[4]),
         )
 

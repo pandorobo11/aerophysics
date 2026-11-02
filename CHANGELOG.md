@@ -12,8 +12,8 @@ uses Semantic Versioning, including during the pre-1.0 period.
   theta = x * average_cf / 2, and finds delta99 and displacement thickness
   with the constant-property Spalding--Coles closure of
   `VAN_DRIEST_II_WALL_TEMPERATURE`. Points without an admissible wake
-  parameter, such as just after a late transition, return NaN delta99 and
-  displacement thickness with an `ApplicabilityWarning`. `SCHLICHTING`
+  parameter return NaN delta99 and displacement thickness with an
+  `ApplicabilityWarning`. `SCHLICHTING`
   (one-fifth-power thickness) remains the default.
 
 - Warn when `SCHLICHTING` one-fifth-power turbulent thicknesses are used
@@ -64,10 +64,23 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
-- `compressible=False` transitional one-fifth-power thicknesses are measured
-  from a turbulent virtual origin, so momentum thickness is continuous at
-  transition instead of jumping to the value for a plate turbulent from its
-  leading edge. Fully turbulent results, friction, and drag are unchanged.
+- **Breaking:** After a prescribed transition, every turbulent model now
+  continues the fully turbulent plate whose momentum thickness equals the
+  laminar value at transition. Local friction, average friction, drag,
+  thicknesses, and `effective_reynolds_number` use the Reynolds number
+  `Re_eq = Re_0 + Re_x - Re_tr` of that plate, where `Re_0` is found from the
+  model's own fully turbulent friction. The former Prandtl-type mixed average
+  kept the leading-edge origin for friction, giving post-transition friction
+  of a layer 2.8 times as thick as the actual one at Re_tr = 5e5. With
+  Schlichting friction, the local coefficient just after transition rises by
+  26% (Re_tr = 5e5) to 42% (5e6), and average friction by 6--15% near
+  transition, falling below 1% beyond 100 Re_tr. Drag and momentum thickness
+  stay continuous and obey d(x * average_cf)/dx = cf. `SCHLICHTING`
+  one-fifth-power thicknesses use the same origin (theta is 1.3--2.2% above
+  Blasius at transition), and `SCHLICHTING_LOG_WAKE` no longer returns NaN
+  thicknesses just after a late transition. Transition Reynolds numbers too
+  low for the turbulent correlation raise `ModelRangeError`. Fully turbulent
+  and laminar results are unchanged.
 
 - **Breaking:** Replace `compressibility_correction` / `CompressibilityCorrection`
   and `turbulent_correlation` / `TurbulentCorrelation` with `compressible` and

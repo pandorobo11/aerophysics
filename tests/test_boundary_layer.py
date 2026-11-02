@@ -7,6 +7,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from scipy.optimize import brentq
+
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     TurbulentModel,
@@ -65,32 +67,75 @@ def test_schlichting_is_default_and_local_is_drag_derivative() -> None:
     )
 
 
-def test_explicit_transition_offsets_accumulated_drag() -> None:
+def _schlichting_average(reynolds: Any) -> Any:
+    return 0.455 / np.log10(reynolds) ** 2.58
+
+
+def _schlichting_local(reynolds: Any) -> Any:
+    return _schlichting_average(reynolds) * (1.0 - 2.58 / np.log(reynolds))
+
+
+def _schlichting_start(drag_reynolds: float) -> float:
+    """Return R with fully turbulent Schlichting R * Cbar_f = drag_reynolds."""
+    return float(
+        brentq(
+            lambda value: value * _schlichting_average(value) - drag_reynolds,
+            20.0,
+            1e15,
+            rtol=1e-15,
+        )
+    )
+
+
+def test_transition_continues_equivalent_turbulent_plate() -> None:
+    transition = 5e5
+    reynolds = np.array([2.5e5, transition, transition * (1.0 + 1e-9), 1e6, 1e7])
+    x = reynolds * 1e-5 / 10.0
+    arguments: dict[str, Any] = {
+        "edge_velocity": 10.0,
+        "edge_density": 1.0,
+        "edge_dynamic_viscosity": 1e-5,
+        "regime": BoundaryLayerRegime.TRANSITIONAL,
+        "transition_reynolds": transition,
+    }
     result = flat_plate_boundary_layer(
-        [0.25, 0.5, 1.0],
-        10.0,
-        1.0,
-        1e-5,
-        regime=BoundaryLayerRegime.TRANSITIONAL,
-        turbulent_model=TurbulentModel.SCHLICHTING,
-        transition_reynolds=5e5,
+        x, turbulent_model=TurbulentModel.SCHLICHTING, **arguments
     )
-    reynolds = np.array([2.5e5, 5e5, 1e6])
-    laminar_average_at_transition = 1.328 / np.sqrt(5e5)
-    turbulent_average = 0.455 / np.log10(reynolds[-1]) ** 2.58
-    turbulent_average_at_transition = 0.455 / np.log10(5e5) ** 2.58
-    expected_last = turbulent_average + 0.5 * (
-        laminar_average_at_transition - turbulent_average_at_transition
+    # The Schlichting plate with the Blasius drag at transition starts
+    # Re_x - Re_tr upstream of the equivalent fully turbulent state.
+    start = _schlichting_start(1.328 * np.sqrt(transition))
+    assert start == pytest.approx(1.41726e5, rel=1e-5)
+    equivalent = start + reynolds[2:] - transition
+    local = np.asarray(result.local_skin_friction_coefficient)
+    average = np.asarray(result.average_skin_friction_coefficient)
+    assert local[0] == pytest.approx(0.664 / np.sqrt(reynolds[0]))
+    assert average[1] == pytest.approx(1.328 / np.sqrt(transition))
+    assert_allclose(local[2:], _schlichting_local(equivalent), rtol=1e-12)
+    assert_allclose(
+        average[2:],
+        _schlichting_average(equivalent) * equivalent / reynolds[2:],
+        rtol=1e-12,
     )
-    assert_allclose(result.reynolds_number, reynolds)
-    assert np.asarray(result.local_skin_friction_coefficient)[0] == pytest.approx(
-        0.664 / np.sqrt(reynolds[0])
+    assert_allclose(
+        np.asarray(result.effective_reynolds_number),
+        np.concatenate((reynolds[:2], equivalent)),
+        rtol=1e-12,
     )
-    assert np.asarray(result.average_skin_friction_coefficient)[1] == pytest.approx(
-        laminar_average_at_transition
+    # Accumulated drag is continuous and grows by the local turbulent shear.
+    drag = np.asarray(result.drag_per_unit_width)
+    shear = np.asarray(result.wall_shear_stress)
+    assert drag[2] - drag[1] == pytest.approx(shear[2] * (x[2] - x[1]), rel=1e-5)
+    # Downstream, the transitional plate approaches the fully turbulent one.
+    turbulent = flat_plate_boundary_layer(
+        x[-1],
+        regime=BoundaryLayerRegime.TURBULENT,
+        edge_velocity=10.0,
+        edge_density=1.0,
+        edge_dynamic_viscosity=1e-5,
     )
-    assert np.asarray(result.average_skin_friction_coefficient)[2] == pytest.approx(
-        expected_last
+    assert average[-1] < float(turbulent.average_skin_friction_coefficient)
+    assert average[-1] == pytest.approx(
+        turbulent.average_skin_friction_coefficient, rel=0.04
     )
 
 
@@ -106,16 +151,17 @@ def test_power_law_thickness_uses_transition_virtual_origin() -> None:
         regime=BoundaryLayerRegime.TRANSITIONAL,
         transition_reynolds=transition,
     )
-    # Momentum thickness is continuous with Blasius at transition.
-    start = (0.664 * np.sqrt(transition) / (0.37 * 7.0 / 72.0)) ** 1.25
-    effective = reynolds - transition + start
+    # The friction-law origin also places the one-fifth-power thicknesses.
+    effective = _schlichting_start(1.328 * np.sqrt(transition)) + reynolds - transition
     delta = 0.37 * (x * effective / reynolds) * effective**-0.2
-    assert np.asarray(result.momentum_thickness)[0] == pytest.approx(
-        0.664 * x[0] / np.sqrt(transition), rel=1e-9
-    )
     assert_allclose(result.boundary_layer_thickness, delta, rtol=1e-12)
     assert_allclose(result.displacement_thickness, delta / 8.0, rtol=1e-12)
     assert_allclose(result.momentum_thickness, delta * 7.0 / 72.0, rtol=1e-12)
+    # The power-law theta differs from the Blasius value only by the
+    # one-fifth-power law's own mismatch with Schlichting friction.
+    assert np.asarray(result.momentum_thickness)[0] == pytest.approx(
+        0.664 * x[0] / np.sqrt(transition), rel=0.02
+    )
     turbulent = flat_plate_boundary_layer(
         x[-1], 10.0, 1.0, 1e-5, regime=BoundaryLayerRegime.TURBULENT
     )
@@ -125,6 +171,20 @@ def test_power_law_thickness_uses_transition_virtual_origin() -> None:
     assert np.asarray(result.boundary_layer_thickness)[-1] < float(
         turbulent.boundary_layer_thickness
     )
+
+
+def test_transition_below_turbulent_correlation_domain_raises() -> None:
+    # Schlichting R * Cbar_f has its minimum about 4.5, so a transition
+    # momentum thickness below that has no equivalent turbulent plate.
+    with pytest.raises(ModelRangeError, match="increase transition_reynolds"):
+        flat_plate_boundary_layer(
+            1.0,
+            10.0,
+            1.0,
+            1e-5,
+            regime=BoundaryLayerRegime.TRANSITIONAL,
+            transition_reynolds=10.0,
+        )
 
 
 def _thickness_range_warnings(**arguments: Any) -> list[str]:
@@ -223,11 +283,14 @@ def test_log_wake_thickness_closes_the_momentum_integral() -> None:
     )
 
 
-def test_log_wake_transition_returns_nan_where_wake_is_inadmissible() -> None:
+def test_log_wake_transition_is_admissible_after_late_transition() -> None:
+    # After transition (cf, theta) are a fully turbulent state, so the wake
+    # closure is admissible immediately downstream of a late transition.
     transition = 3e6
     reynolds = np.array([transition * 0.5, transition * 1.01, transition * 3.0])
     x = reynolds * 1e-5 / 10.0
-    with pytest.warns(ApplicabilityWarning, match="at 1 turbulent point"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ApplicabilityWarning)
         result = flat_plate_boundary_layer(
             x,
             10.0,
@@ -238,15 +301,47 @@ def test_log_wake_transition_returns_nan_where_wake_is_inadmissible() -> None:
             turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
         )
     thickness = np.asarray(result.boundary_layer_thickness)
-    displacement = np.asarray(result.displacement_thickness)
     assert thickness[0] == pytest.approx(4.91 * x[0] / np.sqrt(reynolds[0]))
-    assert np.isnan(thickness[1]) and np.isnan(displacement[1])
-    assert np.isfinite(thickness[2]) and np.isfinite(displacement[2])
+    assert np.all(np.isfinite(thickness))
+    assert np.all(np.isfinite(result.displacement_thickness))
     assert_allclose(
         np.asarray(result.momentum_thickness)[1:],
         x[1:] * np.asarray(result.average_skin_friction_coefficient)[1:] / 2.0,
         rtol=1e-14,
     )
+    # The turbulent state equals the fully turbulent plate at Re_eff.
+    effective = float(np.asarray(result.effective_reynolds_number)[1])
+    turbulent = flat_plate_boundary_layer(
+        x[1] * effective / reynolds[1],
+        10.0,
+        1.0,
+        1e-5,
+        regime=BoundaryLayerRegime.TURBULENT,
+        turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
+    )
+    assert np.asarray(result.wall_shear_stress)[1] == pytest.approx(
+        turbulent.wall_shear_stress, rel=1e-12
+    )
+    assert thickness[1] == pytest.approx(turbulent.boundary_layer_thickness, rel=1e-5)
+
+
+def test_log_wake_returns_nan_where_wake_is_inadmissible() -> None:
+    reynolds = np.array([1e6, 1e14])
+    x = reynolds * 1e-5 / 10.0
+    with pytest.warns(ApplicabilityWarning, match="at 1 turbulent point"):
+        result = flat_plate_boundary_layer(
+            x,
+            10.0,
+            1.0,
+            1e-5,
+            regime=BoundaryLayerRegime.TURBULENT,
+            turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
+        )
+    thickness = np.asarray(result.boundary_layer_thickness)
+    displacement = np.asarray(result.displacement_thickness)
+    assert np.isfinite(thickness[0]) and np.isfinite(displacement[0])
+    assert np.isnan(thickness[1]) and np.isnan(displacement[1])
+    assert np.isfinite(np.asarray(result.momentum_thickness)[1])
 
 
 def test_array_inputs_broadcast_and_return_float64() -> None:
@@ -400,10 +495,15 @@ def test_eckert_reduces_to_none_in_incompressible_limit(
         assert_allclose(
             getattr(corrected, name),
             expected,
+            # Transitional turbulent points depend on the unrounded laminar
+            # momentum thickness at transition.
             rtol=(
                 1e-12
                 if regime is BoundaryLayerRegime.TURBULENT
-                or name == "effective_reynolds_number"
+                or (
+                    name == "effective_reynolds_number"
+                    and regime is BoundaryLayerRegime.LAMINAR
+                )
                 else 2e-4
             ),
             err_msg=name,
@@ -547,11 +647,20 @@ def test_eckert_transition_mixes_edge_basis_average_friction() -> None:
             wall_temperature=300.0,
         ).average_skin_friction_coefficient
     )
-    expected_average = turbulent_ratio * 0.455 / np.log10(
-        turbulent_scale * 2e7
-    ) ** 2.58 + (transition / 2e7) * (
-        laminar_average
-        - turbulent_ratio * 0.455 / np.log10(turbulent_scale * transition) ** 2.58
+    # Edge-basis drag Re * Cbar_f = ratio * Re * Cbar_i(scale * Re) of the
+    # equivalent fully turbulent plate equals the laminar value at transition.
+    start = (
+        _schlichting_start(
+            transition * laminar_average * turbulent_scale / turbulent_ratio
+        )
+        / turbulent_scale
+    )
+    equivalent = start + 2e7 - transition
+    expected_average = (
+        turbulent_ratio
+        * _schlichting_average(turbulent_scale * equivalent)
+        * equivalent
+        / 2e7
     )
     average = np.asarray(result.average_skin_friction_coefficient)
     drag = np.asarray(result.drag_per_unit_width)
@@ -1107,9 +1216,7 @@ def test_wall_temperature_friction_and_momentum_integral(
     fc, _, fx, recovery = _van_driest_factors(2.0, 240.0, wall, 1.55e-5)
     weight = 1.0 if wall is None else (wall / recovery) ** 0.064
     re = 0.5 * 620.0 * x / 1.55e-5
-    average = weight / fc * 0.455 / np.log10(fx * re) ** 2.58
-    local = average * (1.0 - 2.58 / np.log(fx * re))
-    assert result.local_skin_friction_coefficient == pytest.approx(local, rel=1e-12)
+    friction_re = re
     if regime is BoundaryLayerRegime.TRANSITIONAL:
         laminar = flat_plate_boundary_layer(
             5e5 * 1.55e-5 / (0.5 * 620.0),
@@ -1122,14 +1229,13 @@ def test_wall_temperature_friction_and_momentum_integral(
             wall_temperature=wall,
             compressible=True,
         )
-        average += (
-            5e5
-            / re
-            * (
-                float(laminar.average_skin_friction_coefficient)
-                - weight / fc * 0.455 / np.log10(fx * 5e5) ** 2.58
-            )
-        )
+        # VD2 maps edge Re * Cbar_f to incompressible F_x Re * Cbar_i * F_C/w.
+        laminar_drag = 5e5 * float(laminar.average_skin_friction_coefficient)
+        start = _schlichting_start(laminar_drag * fx * fc / weight) / fx
+        friction_re = start + re - 5e5
+    average = weight / fc * _schlichting_average(fx * friction_re) * friction_re / re
+    local = weight / fc * _schlichting_local(fx * friction_re)
+    assert result.local_skin_friction_coefficient == pytest.approx(local, rel=1e-12)
     assert result.average_skin_friction_coefficient == pytest.approx(average, rel=1e-12)
     assert result.momentum_thickness == pytest.approx(x * average / 2.0, rel=1e-12)
     assert np.isfinite(result.boundary_layer_thickness)
