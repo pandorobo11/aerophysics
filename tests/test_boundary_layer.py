@@ -6,7 +6,6 @@ from typing import Any
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-
 from scipy.optimize import brentq
 
 from aerophysics.boundary_layer import (
@@ -658,7 +657,7 @@ def test_eckert_transition_mixes_edge_basis_average_friction() -> None:
     equivalent = start + 2e7 - transition
     expected_average = (
         turbulent_ratio
-        * _schlichting_average(turbulent_scale * equivalent)
+        * _schlichting_average(equivalent * turbulent_scale)
         * equivalent
         / 2e7
     )
