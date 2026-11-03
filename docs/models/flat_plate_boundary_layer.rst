@@ -998,6 +998,42 @@ are model minus reference, divided by reference:
   M14 with :math:`T_w/T_r=0.18`. The M14 result shows that the good M6
   agreement should not be extrapolated to higher Mach numbers.
 
+In-repository SA boundary-layer reference
++++++++++++++++++++++++++++++++++++++++++
+
+``docs/scripts/build_turbulent_sa_reference.py`` is an independent
+verification solver, not part of the package. It marches the compressible
+zero-pressure-gradient thin-layer equations from the leading edge with the
+:ref:`Spalart--Allmaras <ref-spalart-allmaras-1994>` model without the trip
+term (SA-noft2), in Levy--Lees
+variables, for a calorically perfect gas with constant :math:`Pr=0.72`,
+turbulent Prandtl number 0.9, :math:`\gamma=1.4` and the Sutherland law
+(:math:`S=110.4` K). The SA transport is density weighted, its edge value is
+:math:`\tilde\nu=3\nu_e`, and the modified vorticity uses the smooth limiter of
+:ref:`Allmaras, Johnson and Spalart (2012)
+<ref-allmaras-johnson-spalart-2012>`. It uses no correlation, fitted
+coefficient or package model. With :math:`\tilde\nu=0` it reproduces the
+compressible laminar similarity solution within 0.01%; halving the streamwise
+step or refining the wall-normal grid changes every tabulated quantity by less
+than 0.1%. Each condition takes about ten seconds to march.
+
+Its stored results are
+``tests/reference_data/viscous_flow/turbulent_sa_boundary_layer.csv``. The
+table compares them with this model at the same edge state and wall
+temperature. Displacement thickness is integrated through
+:math:`\delta_{99}` in both; momentum thickness is integrated to the edge.
+
+.. include:: ../_generated/turbulent_sa_comparison.rst
+
+These differences agree with the SU2 standard-SA summaries above: friction
+within 3% at :math:`Re_{x,e}\ge10^7`, and a :math:`\delta_{99}` difference that
+falls by about 5 percentage points per decade of :math:`Re_{x,e}`. At
+:math:`Re_{x,e}=10^6` this model, which is fully turbulent from the leading
+edge, gives 3--7% higher friction than SA, whose turbulence develops from the
+edge value of :math:`\tilde\nu`. The reference is a RANS model result, not a
+measurement: SA itself gives incompressible :math:`\delta_{99}` about 7--9%
+above the measurements cited above.
+
 The exponent **0.064** is fitted to SU2 solutions; DNS also exhibits lower
 cold-wall friction than VD2. The factor **0.978** is the SU2 mean ratio of
 momentum thickness through :math:`\delta_{99}` to full-edge momentum thickness

@@ -1,0 +1,28 @@
+{
+  "sources": [
+    "Spalart and Allmaras (1994), La Recherche Aerospatiale 1, 5-21",
+    "Allmaras, Johnson and Spalart (2012), ICCFD7-1902 (S-tilde limiter)",
+    "Levy (1954) and Lees (1956) boundary-layer transformation"
+  ],
+  "role": "independent numerical RANS boundary-layer solution with SA-noft2; not measurements and not an acceptance target for correlations",
+  "command": "uv run python docs/scripts/build_turbulent_sa_reference.py",
+  "flow": "smooth ZPG flat plate, calorically perfect gas, constant edge state",
+  "prandtl_number": 0.72,
+  "turbulent_prandtl_number": 0.9,
+  "heat_capacity_ratio": 1.4,
+  "transport": {
+    "model": "Sutherland",
+    "sutherland_temperature_K": 110.4,
+    "mu_over_mu_e": "g^1.5 (Te+S)/(g Te+S)"
+  },
+  "turbulence": "SA-noft2, density-weighted with rho inside diffusion; edge nu_tilde/nu_e = 3; marched from the leading edge",
+  "wall_temperature": "Tw = ratio * Tr with Tr = Te (1 + Pr^(1/3) (gamma-1)/2 Me^2), or Tw = 300 K for M5-TW300",
+  "normalization": "Re_x = rho_e U_e x/mu_e; cf uses edge dynamic pressure; delta99 at u/Ue = 0.99; displacement integrated through delta99; momentum thickness integrated to the edge",
+  "numerics": {
+    "eta_grid": "geometric, first point 7e-4, ratio 1.04, eta_max 90",
+    "streamwise": "BDF2, 300 geometric stations from x_end 1e-8 to x_end, output x inserted",
+    "unit_reynolds_per_m": 10000000.0,
+    "picard_tolerance": 1e-09
+  },
+  "verification": "laminar limit (edge nu_tilde = 0) matches the compressible similarity solution within 0.01%; halving the streamwise step or refining the eta grid changes cf and thicknesses by less than 0.1%"
+}

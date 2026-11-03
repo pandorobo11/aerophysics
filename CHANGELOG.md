@@ -5,6 +5,16 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Added
+
+- Add an independent compressible turbulent boundary-layer reference
+  (`docs/scripts/build_turbulent_sa_reference.py`) that marches the
+  zero-pressure-gradient thin-layer equations from the leading edge with the
+  Spalart--Allmaras model. Its stored results for six Mach and wall-temperature
+  conditions at Re_x = 1e6, 1e7 and 1e8 are compared with
+  `VAN_DRIEST_II_WALL_TEMPERATURE` in a generated documentation table. The
+  solver is a verification tool and is not part of the package.
+
 ### Changed
 
 - Solve the Spalding--Coles thickness closure of

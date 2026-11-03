@@ -405,6 +405,18 @@ Statistics at Very High Reynolds Number*. Journal of Fluid Mechanics, 779,
 
 https://doi.org/10.1017/jfm.2015.273
 
+.. _ref-spalart-allmaras-1994:
+
+Spalart, P. R., and Allmaras, S. R. *A One-Equation Turbulence Model for
+Aerodynamic Flows*. La Recherche Aérospatiale, 1, 5--21, 1994.
+
+.. _ref-allmaras-johnson-spalart-2012:
+
+Allmaras, S. R., Johnson, F. T., and Spalart, P. R. *Modifications and
+Clarifications for the Implementation of the Spalart-Allmaras Turbulence
+Model*. Seventh International Conference on Computational Fluid Dynamics,
+ICCFD7-1902, 2012.
+
 .. _ref-zhang-duan-choudhari-2018:
 
 Zhang, C., Duan, L., and Choudhari, M. M. *Direct Numerical Simulation

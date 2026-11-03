@@ -487,6 +487,65 @@ def _laminar_similarity_accuracy(api: tuple[object, ...]) -> str:
     return "\n".join(lines)
 
 
+def _turbulent_sa_comparison(api: tuple[object, ...]) -> str:
+    regime_enum, model_enum, _, flat_plate, _, _, viscosity_model, gas = api
+    with (REFERENCE / "turbulent_sa_boundary_layer.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        rows = list(csv.DictReader(stream))
+    lines = [
+        ".. list-table:: ``VAN_DRIEST_II_WALL_TEMPERATURE`` minus the in-repository "
+        "SA boundary-layer reference, divided by the reference",
+        "   :header-rows: 1",
+        "",
+        "   * - Case",
+        "     - :math:`T_w/T_r`",
+        "     - :math:`Re_{x,e}`",
+        "     - :math:`C_f`",
+        "     - :math:`\\delta_{99}`",
+        "     - :math:`\\delta^*`",
+        "     - :math:`\\theta`",
+    ]
+    for row in rows:
+        temperature = float(row["edge_temperature_K"])
+        reynolds = float(row["reynolds_number"])
+        viscosity = float(viscosity_model.dynamic_viscosity(temperature))
+        # The profile closure uses the edge velocity, so it must match Me.
+        velocity = float(row["mach"]) * np.sqrt(
+            gas.heat_capacity_ratio * gas.specific_gas_constant * temperature
+        )
+        result = flat_plate(
+            1.0,
+            velocity,
+            reynolds * viscosity / velocity,
+            viscosity,
+            regime=regime_enum.TURBULENT,
+            compressible=True,
+            turbulent_model=model_enum.VAN_DRIEST_II_WALL_TEMPERATURE,
+            mach=float(row["mach"]),
+            edge_temperature=temperature,
+            wall_temperature=float(row["wall_temperature_K"]),
+        )
+        differences = [
+            100.0 * (float(value) / float(row[key]) - 1.0)
+            for value, key in (
+                (result.local_skin_friction_coefficient, "cf"),
+                (result.boundary_layer_thickness, "delta99_over_x"),
+                (result.displacement_thickness, "displacement99_over_x"),
+                (result.momentum_thickness, "momentum_over_x"),
+            )
+        ]
+        lines.extend(
+            [
+                f"   * - {row['case']}",
+                f"     - {float(row['wall_to_recovery_temperature_ratio']):.2f}",
+                f"     - {reynolds:.0e}",
+                *(f"     - {value:+.1f}%" for value in differences),
+            ]
+        )
+    return "\n".join(lines)
+
+
 def generate(*, check: bool) -> bool:
     api = _api()
     source = _source_comparison(api)
@@ -530,6 +589,11 @@ def generate(*, check: bool) -> bool:
     current &= write_or_check(
         ROOT / "docs/_generated/laminar_similarity_accuracy.rst",
         _laminar_similarity_accuracy(api),
+        check=check,
+    )
+    current &= write_or_check(
+        ROOT / "docs/_generated/turbulent_sa_comparison.rst",
+        _turbulent_sa_comparison(api),
         check=check,
     )
     current &= write_or_check(TABLE_PATH, _rst(source, chart, invariants), check=check)
