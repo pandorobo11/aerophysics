@@ -1,5 +1,6 @@
 """Tests for smooth flat-plate boundary-layer correlations."""
 
+import time
 import warnings
 from typing import Any
 
@@ -346,6 +347,124 @@ def test_log_wake_returns_nan_where_wake_is_inadmissible() -> None:
     assert np.isfinite(thickness[0]) and np.isfinite(displacement[0])
     assert np.isnan(thickness[1]) and np.isnan(displacement[1])
     assert np.isfinite(np.asarray(result.momentum_thickness)[1])
+
+
+def test_vectorized_profile_closure_matches_converged_scalar_root() -> None:
+    from aerophysics.boundary_layer_profile import (
+        _incompressible_log_wake_profile,
+        _profile_closure_thicknesses,
+        _van_driest_walz_profile,
+    )
+
+    profiles = [
+        _incompressible_log_wake_profile(10.0, 1.0, 1e-5, 0.5 * cf * 100.0)
+        for cf in (0.0045, 0.003, 0.002)
+    ] + [
+        _van_driest_walz_profile(
+            1200.0,
+            0.1,
+            220.0,
+            wall,
+            40.0,
+            prandtl_number=0.72,
+            gas=AIR,
+            viscosity_model=AIR_VISCOSITY,
+        )
+        for wall in (400.0, 1400.0)
+    ]
+    reference = []
+    for profile in profiles:
+        # Interior wake parameters give targets with a bracketed root.
+        delta = profile.thickness_at_wake(0.4)
+        target = profile.integrals(delta)[0]
+        root = brentq(
+            lambda d, profile=profile, target=target: profile.integrals(d)[0] - target,
+            profile.thickness_at_wake(1.0),
+            profile.thickness_at_wake(0.0),
+            xtol=np.finfo(float).tiny,
+            rtol=4.0 * np.finfo(float).eps,
+        )
+        reference.append((target, root, profile.integrals(root)[1]))
+    targets, roots, displacements = map(np.array, zip(*reference, strict=True))
+    thickness, displacement, resolved = _profile_closure_thicknesses(targets, profiles)
+    assert np.all(resolved)
+    assert_allclose(thickness, roots, rtol=1e-12)
+    assert_allclose(displacement, displacements, rtol=1e-12)
+
+
+def test_vectorized_profile_closure_flags_unconverged_points() -> None:
+    from aerophysics.boundary_layer_profile import (
+        _CLOSURE_GRID,
+        _closure_state,
+        _incompressible_log_wake_profile,
+        _solve_profile_closure,
+    )
+
+    profile = _incompressible_log_wake_profile(10.0, 1.0, 1e-5, 0.15)
+    values = {
+        name: np.array([getattr(profile, name)])
+        for name in ("length_scale", "velocity_scale", "transformed_edge")
+    } | {
+        "temperature_edge_wall_ratio": np.ones(1),
+        "a": np.zeros(1),
+        "b": np.zeros(1),
+    }
+    lower = np.log([profile.thickness_at_wake(1.0) / profile.length_scale])
+    upper = np.log([profile.thickness_at_wake(0.0) / profile.length_scale])
+    target = np.array([profile.integrals(profile.thickness_at_wake(0.5))[0]])
+    # A negative tolerance never accepts a Newton step.
+    _, _, resolved = _solve_profile_closure(
+        _CLOSURE_GRID,
+        target,
+        values,
+        lower,
+        upper,
+        0.5 * (lower + upper),
+        np.ones(1, dtype=np.bool_),
+        -1.0,
+    )
+    assert not resolved[0]
+    with np.errstate(over="ignore", invalid="ignore"):
+        state = _closure_state(
+            _CLOSURE_GRID,
+            np.exp(lower),
+            np.full((1, _CLOSURE_GRID.height.size), np.inf),
+            values,
+        )
+    assert not state.resolved[0]
+
+
+def test_log_wake_returns_nan_where_wall_shear_is_not_positive() -> None:
+    # Schlichting's local coefficient is negative for ln(Re_x) < 2.58.
+    with pytest.warns(ApplicabilityWarning, match="at 1 turbulent point"):
+        result = flat_plate_boundary_layer(
+            [5e-6, 1.0],
+            10.0,
+            1.0,
+            1e-5,
+            regime=BoundaryLayerRegime.TURBULENT,
+            turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
+        )
+    thickness = np.asarray(result.boundary_layer_thickness)
+    assert np.isnan(thickness[0]) and np.isfinite(thickness[1])
+
+
+def test_log_wake_thickness_of_large_arrays_is_vectorized() -> None:
+    # The scalar Brent solve took about 5 ms per point; 5000 points now take
+    # well under one second, so this bound leaves margin on slow runners.
+    x = np.linspace(0.01, 2.0, 5000)
+    start = time.perf_counter()
+    result = flat_plate_boundary_layer(
+        x,
+        1.0,
+        1.0,
+        1.0 / 5e6,
+        regime=BoundaryLayerRegime.TURBULENT,
+        turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
+    )
+    assert time.perf_counter() - start < 8.0
+    assert np.all(np.isfinite(result.boundary_layer_thickness))
+    assert np.all(np.diff(result.boundary_layer_thickness) > 0.0)
 
 
 def test_array_inputs_broadcast_and_return_float64() -> None:
