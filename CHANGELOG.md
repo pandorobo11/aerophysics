@@ -5,6 +5,19 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ## [Unreleased]
 
+### Changed
+
+- Solve the Spalding--Coles thickness closure of
+  `TurbulentModel.SCHLICHTING_LOG_WAKE` and
+  `VAN_DRIEST_II_WALL_TEMPERATURE` for all points at once. A safeguarded
+  Newton iteration with the analytic derivative replaces the per-point Brent
+  solve on the same integration grid, making the closure about 15 to 30
+  times faster (about 0.17 ms instead of 4.8 ms per incompressible point).
+  delta99 and displacement thickness are now converged to about 1e-14
+  instead of the former 1e-6 root tolerance, so they change by up to about
+  3e-7 relative. Inadmissible points keep the previous NaN values, warnings,
+  and errors.
+
 ## [0.8.0] - 2026-11-02
 
 ### Added

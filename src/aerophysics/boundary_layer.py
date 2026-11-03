@@ -40,6 +40,7 @@ from aerophysics._array import FloatArray, FloatResult, as_float_array, return_f
 from aerophysics._laminar_similarity import similarity_coefficients
 from aerophysics.boundary_layer_profile import (
     _incompressible_log_wake_profile,
+    _profile_closure_thicknesses,
     _van_driest_walz_profile,
     _VanDriestWalzProfile,
 )
@@ -1051,14 +1052,15 @@ def flat_plate_boundary_layer(
         thickness = np.array(thickness, copy=True)
         displacement = np.array(displacement, copy=True)
         momentum = np.where(turbulent_mask, x * average_friction / 2.0, momentum)
-        unresolved = 0
-        for index in np.ndindex(reynolds.shape):
-            if not turbulent_mask[index]:
-                continue
+        indices = [
+            index for index in np.ndindex(reynolds.shape) if turbulent_mask[index]
+        ]
+        profiles: dict[tuple[int, ...], _VanDriestWalzProfile | ModelRangeError] = {}
+        for index in indices:
             try:
                 if wall_corrected:
                     assert used_wall_temperature is not None
-                    profile = _van_driest_walz_profile(
+                    profiles[index] = _van_driest_walz_profile(
                         float(velocity[index]),
                         float(density[index]),
                         float(broadcast[5][index]),
@@ -1069,12 +1071,41 @@ def flat_plate_boundary_layer(
                         viscosity_model=viscosity_model,
                     )
                 else:
-                    profile = _incompressible_log_wake_profile(
+                    profiles[index] = _incompressible_log_wake_profile(
                         float(velocity[index]),
                         float(density[index]),
                         float(viscosity[index]),
                         float(shear[index]),
                     )
+            except ModelRangeError as error:
+                profiles[index] = error
+        prepared = [
+            (index, profile)
+            for index, profile in profiles.items()
+            if isinstance(profile, _VanDriestWalzProfile)
+        ]
+        solved_thickness, solved_displacement, closed = _profile_closure_thicknesses(
+            np.array(
+                [_DELTA99_MOMENTUM_FRACTION * momentum[index] for index, _ in prepared]
+            ),
+            [profile for _, profile in prepared],
+        )
+        solutions = {
+            index: (solved_thickness[position], solved_displacement[position])
+            for position, (index, _) in enumerate(prepared)
+            if closed[position]
+        }
+        unresolved = 0
+        for index in indices:
+            if index in solutions:
+                thickness[index], displacement[index] = solutions[index]
+                continue
+            # Unbracketed or unconverged points repeat the scalar solve so
+            # that they keep its diagnostics.
+            try:
+                profile = profiles[index]
+                if isinstance(profile, ModelRangeError):
+                    raise profile
                 thickness[index], displacement[index] = _profile_closure_thickness(
                     float(momentum[index]), profile
                 )

@@ -25,11 +25,12 @@ Flows*, Journal of Fluid Mechanics, 739, 392--420, 2014.
 """
 
 import warnings
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, fields
 from enum import StrEnum
 
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from scipy.integrate import cumulative_trapezoid, quad, solve_ivp
 from scipy.optimize import brentq
 
@@ -537,6 +538,325 @@ def _incompressible_log_wake_profile(
         0.0,
         0.0,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _ClosureGrid:
+    """Unit-thickness trapezoid grid of ``_VanDriestWalzProfile.integrals``."""
+
+    height: FloatArray
+    weights: FloatArray
+    wake: FloatArray
+
+    @classmethod
+    def from_height(cls, height: FloatArray) -> "_ClosureGrid":
+        weights = np.zeros_like(height)
+        weights[:-1] += 0.5 * np.diff(height)
+        weights[1:] += 0.5 * np.diff(height)
+        return cls(height, weights, _wake_function(height))
+
+
+# Scaling the unit grid by delta99 differs from the grid of ``integrals``
+# only by rounding; coincident nodes have zero trapezoid width.
+_CLOSURE_GRID = _ClosureGrid.from_height(_integration_grid(np.array([0.0, 1.0]), 1.0))
+# The same construction with 1/8 of the nodes locates delta99 within about
+# 1e-4. It only supplies the starting point of the full-grid iteration.
+_CLOSURE_STARTING_GRID = _ClosureGrid.from_height(
+    np.unique(
+        np.concatenate((np.linspace(0.0, 1.0, 257), np.geomspace(1e-12, 1.0, 256)))
+    )
+)
+_CLOSURE_CHUNK_SIZE = 128
+# Accept the next Newton iterate once a step is this small in ln(delta99);
+# quadratic convergence leaves an error near the square of it.
+_CLOSURE_LOG_TOLERANCE = 1e-7
+_CLOSURE_STARTING_LOG_TOLERANCE = 1e-4
+# Pi=1 and Pi=0 bound ln(delta99); roots typically lie near this fraction.
+_CLOSURE_STARTING_FRACTION = 0.6
+# Initial Spalding inverses interpolate this ln(y+) table; Halley's
+# iteration then converges them exactly, so the table sets no accuracy.
+_SPALDING_TABLE_LOG_HEIGHT = np.linspace(-30.0, 30.0, 6001) * np.log(10.0)
+
+
+def _spalding_table() -> FloatArray:
+    height = np.exp(_SPALDING_TABLE_LOG_HEIGHT)
+    velocity = np.log1p(height * np.exp(0.41 * 5.2)) / 0.41
+    # Newton's iteration for the convex y+(u+) converges from this guess
+    # well within the fixed number of steps.
+    for _ in range(40):
+        scaled = 0.41 * velocity
+        velocity -= (
+            _spalding_wall_coordinate(velocity, von_karman_constant=0.41, intercept=5.2)
+            - height
+        ) / (
+            1.0
+            + np.exp(-0.41 * 5.2) * 0.41 * (np.expm1(scaled) - scaled - 0.5 * scaled**2)
+        )
+    return np.asarray(velocity, dtype=np.float64)
+
+
+_SPALDING_TABLE_VELOCITY = _spalding_table()
+
+
+@dataclass(frozen=True, slots=True)
+class _ClosureState:
+    """Integrals at trial thicknesses and the Spalding inverse behind them."""
+
+    momentum: FloatArray
+    momentum_log_slope: FloatArray
+    displacement: FloatArray
+    displacement_log_slope: FloatArray
+    wall_velocity: FloatArray
+    wall_slope: FloatArray
+    resolved: NDArray[np.bool_]
+
+
+def _closure_state(
+    grid: _ClosureGrid,
+    reynolds: FloatArray,
+    wall_velocity: FloatArray,
+    profiles: dict[str, FloatArray],
+) -> _ClosureState:
+    """Evaluate ``_VanDriestWalzProfile.integrals`` for rows of thicknesses.
+
+    ``wall_velocity`` is the initial Spalding inverse on the scaled grid. The
+    log slopes d ln(theta, delta*) / d ln(delta99) follow from
+    du+/dy+ = 1 / (dy+/du+).
+    """
+    height = reynolds[:, None] * grid.height
+    coefficient = np.exp(-0.41 * 5.2)
+    converged = np.zeros(reynolds.shape, dtype=np.bool_)
+    for _ in range(30):
+        scaled = 0.41 * wall_velocity
+        exponential = np.expm1(scaled)
+        linear = exponential - scaled
+        quadratic = linear - 0.5 * scaled * scaled
+        slope = 1.0 + coefficient * 0.41 * quadratic
+        residual = (
+            wall_velocity
+            + coefficient * (quadratic - scaled * scaled * scaled / 6.0)
+            - height
+        )
+        # Halley's step; y+(u+) is convex, so it stays globally convergent.
+        curvature = coefficient * 0.41**2 * linear
+        step = residual * slope / (slope * slope - 0.5 * residual * curvature)
+        wall_velocity = wall_velocity - step
+        # Halley's error after a step e is below (0.41**2 / 12) * e**3, so a
+        # 1e-6 step leaves less than the 1e-12 Newton test of ``integrals``.
+        converged = np.max(np.abs(step), axis=1) < 1e-6
+        if np.all(converged):
+            break
+    wake = 0.41 / 2.0 * (profiles["transformed_edge"] - wall_velocity[:, -1])
+    resolved = converged & (wake >= -1e-10) & (wake <= 1.0 + 1e-10)
+    wake = np.clip(wake, 0.0, 1.0)
+    transformed = wall_velocity + (wake / 0.41)[:, None] * grid.wake
+    transformed_slope = grid.height / slope - (0.5 / slope[:, -1])[:, None] * grid.wake
+    velocity_scale = profiles["velocity_scale"][:, None]
+    edge_wall_ratio = profiles["temperature_edge_wall_ratio"][:, None]
+    integral = transformed * velocity_scale
+    a = profiles["a"][:, None]
+    b = profiles["b"][:, None]
+    if np.any(a != 0.0) or np.any(b != 0.0):
+        angle = integral * np.sqrt(a)
+        sinc = np.sinc(angle / np.pi)
+        ratio = (
+            integral * sinc + b * (0.5 * integral * np.sinc(angle / (2.0 * np.pi))) ** 2
+        )
+        ratio_slope = (
+            (np.cos(angle) + 0.5 * b * integral * sinc)
+            * velocity_scale
+            * transformed_slope
+        )
+        temperature_ratio = 1.0 + b * ratio - a * ratio**2
+        mass_ratio = edge_wall_ratio * ratio / temperature_ratio
+        mass_slope = (
+            edge_wall_ratio * (1.0 + a * ratio**2) / temperature_ratio**2 * ratio_slope
+        )
+    else:
+        # Constant properties: the Walz inverse and temperature ratio are one.
+        ratio = integral
+        ratio_slope = velocity_scale * transformed_slope
+        mass_ratio = edge_wall_ratio * ratio
+        mass_slope = edge_wall_ratio * ratio_slope
+    unit_momentum = (mass_ratio * (1.0 - ratio)) @ grid.weights
+    unit_momentum_slope = (
+        mass_slope * (1.0 - ratio) - mass_ratio * ratio_slope
+    ) @ grid.weights
+    unit_displacement = (1.0 - mass_ratio) @ grid.weights
+    scale = profiles["length_scale"] * reynolds
+    return _ClosureState(
+        momentum=scale * unit_momentum,
+        momentum_log_slope=1.0 + reynolds * unit_momentum_slope / unit_momentum,
+        displacement=scale * unit_displacement,
+        displacement_log_slope=1.0
+        - reynolds * (mass_slope @ grid.weights) / unit_displacement,
+        wall_velocity=wall_velocity,
+        wall_slope=slope,
+        resolved=resolved & (unit_momentum > 0.0),
+    )
+
+
+def _profile_closure_thicknesses(
+    momentum_thickness: FloatArray,
+    profiles: Sequence[_VanDriestWalzProfile],
+) -> tuple[FloatArray, FloatArray, NDArray[np.bool_]]:
+    """Return delta99 and delta* whose integrals give ``momentum_thickness``.
+
+    This solves ``integrals(delta99)[0] = momentum_thickness`` for many
+    profiles at once by a safeguarded Newton iteration in ln(delta99) with
+    the analytic derivative, started from the same solve on a coarse grid.
+    Pi decreases with thickness, so the Pi=1 and Pi=0 thicknesses bracket
+    every admissible root. Points that are not bracketed or do not converge
+    are flagged unresolved so that the caller can repeat the scalar solve and
+    its diagnostics.
+    """
+    size = len(profiles)
+    thickness = np.full(size, np.nan)
+    displacement = np.full(size, np.nan)
+    resolved = np.zeros(size, dtype=np.bool_)
+    for start in range(0, size, _CLOSURE_CHUNK_SIZE):
+        chunk = slice(start, min(start + _CLOSURE_CHUNK_SIZE, size))
+        values = {
+            field.name: np.array(
+                [getattr(profile, field.name) for profile in profiles[chunk]]
+            )
+            for field in fields(_VanDriestWalzProfile)
+        }
+        lower_velocity = values["transformed_edge"] - 2.0 / 0.41
+        bracketed = lower_velocity > 0.0
+        with np.errstate(divide="ignore"):
+            lower = np.log(
+                _spalding_wall_coordinate(
+                    np.maximum(lower_velocity, 0.0),
+                    von_karman_constant=0.41,
+                    intercept=5.2,
+                )
+            )
+        upper = np.log(
+            _spalding_wall_coordinate(
+                values["transformed_edge"], von_karman_constant=0.41, intercept=5.2
+            )
+        )
+        target = momentum_thickness[chunk]
+        starting, _, started = _solve_profile_closure(
+            _CLOSURE_STARTING_GRID,
+            target,
+            values,
+            lower,
+            upper,
+            lower + _CLOSURE_STARTING_FRACTION * (upper - lower),
+            bracketed,
+            _CLOSURE_STARTING_LOG_TOLERANCE,
+        )
+        log_thickness, displacement[chunk], resolved[chunk] = _solve_profile_closure(
+            _CLOSURE_GRID,
+            target,
+            values,
+            lower,
+            upper,
+            np.where(
+                started,
+                np.clip(starting, lower, upper),
+                lower + _CLOSURE_STARTING_FRACTION * (upper - lower),
+            ),
+            bracketed,
+            _CLOSURE_LOG_TOLERANCE,
+        )
+        thickness[chunk] = values["length_scale"] * np.exp(log_thickness)
+    return thickness, displacement, resolved
+
+
+def _solve_profile_closure(
+    grid: _ClosureGrid,
+    momentum_thickness: FloatArray,
+    values: dict[str, FloatArray],
+    lower: FloatArray,
+    upper: FloatArray,
+    trial: FloatArray,
+    active: NDArray[np.bool_],
+    tolerance: float,
+) -> tuple[FloatArray, FloatArray, NDArray[np.bool_]]:
+    """Return ln(delta99 / length_scale), delta*, and the converged rows."""
+    size = trial.size
+    lower = lower.copy()
+    upper = upper.copy()
+    trial = trial.copy()
+    active = active.copy()
+    lower_known = np.zeros(size, dtype=np.bool_)
+    upper_known = np.zeros(size, dtype=np.bool_)
+    previous = np.exp(trial)
+    with np.errstate(divide="ignore"):
+        wall_velocity = np.interp(
+            np.log(previous[:, None] * grid.height),
+            _SPALDING_TABLE_LOG_HEIGHT,
+            _SPALDING_TABLE_VELOCITY,
+            left=0.0,
+        )
+    wall_slope = np.ones_like(wall_velocity)
+    log_thickness = np.full(size, np.nan)
+    displacement = np.full(size, np.nan)
+    resolved = np.zeros(size, dtype=np.bool_)
+    for _ in range(100):
+        rows = np.flatnonzero(active)
+        if rows.size == 0:
+            break
+        reynolds = np.exp(trial[rows])
+        # First-order warm start; Spalding's convex y+(u+) keeps the
+        # iteration convergent from any non-negative initial velocity.
+        guess = np.maximum(
+            wall_velocity[rows]
+            + (reynolds - previous[rows])[:, None] * grid.height / wall_slope[rows],
+            0.0,
+        )
+        state = _closure_state(
+            grid, reynolds, guess, {name: value[rows] for name, value in values.items()}
+        )
+        wall_velocity[rows] = state.wall_velocity
+        wall_slope[rows] = state.wall_slope
+        previous[rows] = reynolds
+        residual = np.log(state.momentum / momentum_thickness[rows])
+        step = -residual / state.momentum_log_slope
+        failed = ~state.resolved | ~np.isfinite(residual)
+        newton = trial[rows] + step
+        done = ~failed & (
+            (residual == 0.0)
+            | (
+                (np.abs(step) <= tolerance)
+                & (newton >= lower[rows])
+                & (newton <= upper[rows])
+            )
+        )
+        # Take the final Newton step and extrapolate delta* along it.
+        log_thickness[rows[done]] = newton[done]
+        displacement[rows[done]] = state.displacement[done] * np.exp(
+            state.displacement_log_slope[done] * step[done]
+        )
+        resolved[rows[done]] = True
+        below = residual < 0.0
+        lower[rows[below]] = trial[rows[below]]
+        lower_known[rows[below]] = True
+        above = residual > 0.0
+        upper[rows[above]] = trial[rows[above]]
+        upper_known[rows[above]] = True
+        low = lower[rows]
+        high = upper[rows]
+        # An empty bracket means the root lies beyond Pi=0 or Pi=1.
+        failed |= ~done & (high <= low)
+        candidate = np.where(
+            ~np.isfinite(newton)
+            | (state.momentum_log_slope <= 0.0)
+            | (newton <= low)
+            | (newton >= high),
+            0.5 * (low + high),
+            newton,
+        )
+        # Overshooting an unevaluated endpoint tests that endpoint next.
+        candidate = np.where((newton <= low) & ~lower_known[rows], low, candidate)
+        candidate = np.where((newton >= high) & ~upper_known[rows], high, candidate)
+        stopped = done | failed
+        trial[rows[~stopped]] = candidate[~stopped]
+        active[rows[stopped]] = False
+    return log_thickness, displacement, resolved
 
 
 def transform_compressible_velocity_profile(
