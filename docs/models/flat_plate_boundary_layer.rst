@@ -1095,8 +1095,15 @@ downstream: friction differs by +0.8% while :math:`\delta_{99}` differs by
 measurement: SA itself gives incompressible :math:`\delta_{99}` about 7--9%
 above the measurements cited above.
 
-The exponent **0.064** is fitted to SU2 solutions; DNS also exhibits lower
-cold-wall friction than VD2. The factor **0.978** is the SU2 mean ratio of
+The exponent **0.064** is an empirical fit to SU2 solutions; DNS also exhibits
+lower cold-wall friction than VD2. At the four
+:ref:`DNS <ref-zhang-duan-choudhari-2018>` conditions listed in the SU2 note above,
+with the same edge-temperature approximation and matched momentum-thickness
+Reynolds number, friction differs from DNS by :math:`-0.4`, :math:`-3.2`,
+:math:`+0.8` and :math:`+0.5\%` with this factor, and by :math:`-0.4`,
+:math:`+7.8`, :math:`+2.8` and :math:`+14.1\%` without it. These four conditions
+are the only DNS check of the exponent, and it was not fitted to them. The factor
+**0.978** is the SU2 mean ratio of
 momentum thickness through :math:`\delta_{99}` to full-edge momentum thickness
 (the truncation difference varies from **−5 to −1%**). Neither constant is
 universal. The nine-row independent-implementation regression fixture uses
