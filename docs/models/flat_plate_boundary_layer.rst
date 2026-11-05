@@ -933,7 +933,9 @@ assumption.
 
 The following summaries are externally supplied validation results dated
 2026-11-01, not simulations rerun by this package's test suite. Differences
-are model minus reference, divided by reference:
+are model minus reference, divided by reference. "Standard SA" below means
+``SA_OPTIONS=NONE`` in SU2 8.5.0, whose convection differs from the published
+model at high speed; see :ref:`the note on SU2 convection <su2-sa-convection>`.
 
 * Against SU2 8.5.0 standard SA, :math:`\delta_{99}` RMS differences are
   **2.5%** for the eight fitted conditions (343 sections), **2.3%** for six
@@ -997,6 +999,82 @@ are model minus reference, divided by reference:
   for M2.5, M6 with :math:`T_w/T_r=0.76`, M6 with :math:`T_w/T_r=0.25`, and
   M14 with :math:`T_w/T_r=0.18`. The M14 result shows that the good M6
   agreement should not be extrapolated to higher Mach numbers.
+
+In-repository SA boundary-layer reference
++++++++++++++++++++++++++++++++++++++++++
+
+``docs/scripts/build_turbulent_sa_reference.py`` is an independent
+verification solver, not part of the package. It marches the compressible
+zero-pressure-gradient thin-layer equations from the leading edge with the
+:ref:`Spalart--Allmaras <ref-spalart-allmaras-1994>` model without the trip
+term (SA-noft2), in Levy--Lees
+variables, for a calorically perfect gas with constant :math:`Pr=0.72`,
+turbulent Prandtl number 0.9, :math:`\gamma=1.4` and the Sutherland law
+(:math:`S=110.4` K). The SA transport is the standard form, in which density
+does not appear (:ref:`Allmaras, Johnson and Spalart, 2012
+<ref-allmaras-johnson-spalart-2012>`, section 2.2), its edge value is
+:math:`\tilde\nu=3\nu_e`, and the modified vorticity uses the smooth limiter of
+the same paper. It uses no correlation, fitted
+coefficient or package model. With :math:`\tilde\nu=0` it reproduces the
+compressible laminar similarity solution within 0.01%. Across all tabulated
+rows, the largest change in friction or a thickness is 0.03% with twice the
+streamwise stations, about 0.1% with :math:`\eta` grid ratio 1.02 instead of
+1.04, 0.07% with half the first spacing, and below 0.001% with twice the outer
+boundary :math:`\eta_{\max}=150`. Each condition takes about 1--1.5 seconds to march with the coupled Newton
+iteration and occasional Picard fallback (measured locally).
+
+Its stored results are
+``tests/reference_data/viscous_flow/turbulent_sa_boundary_layer.csv``. The
+table compares them with this model at the same edge state and wall
+temperature. Displacement thickness is integrated through
+:math:`\delta_{99}` in both; momentum thickness is integrated to the edge.
+
+.. include:: ../_generated/turbulent_sa_comparison.rst
+
+Friction agrees within 3% at :math:`Re_{x,e}\ge10^7`, as in the SU2 summaries
+above. At M0.3 the :math:`\delta_{99}` differences also fall within those
+summaries at :math:`Re_{x,e}=10^7` and :math:`10^8` and just above them at
+:math:`10^6`. On cold supersonic walls they are lower than the summaries at
+:math:`Re_{x,e}=10^7`: :math:`-3.0` to :math:`-3.5\%` here, against
+:math:`+0.2` to :math:`+1.1\%` for SU2, because the two solvers do not solve the
+same SA convection, as described next.
+
+.. _su2-sa-convection:
+
+**SU2 convection.** :ref:`SU2 8.5.0 <ref-su2-sa-convection>` discretizes SA
+convection as :math:`\nabla\cdot(\mathbf{u}\tilde\nu)` with the volume flux,
+whereas the published model has :math:`\mathbf{u}\cdot\nabla\tilde\nu`. The two
+differ by :math:`\tilde\nu\,\nabla\cdot\mathbf{u}`, which is not negligible in a
+high-speed boundary layer. Adding this term to a scratch copy of this reference
+reproduces the stored SU2 fields at matched local edge states: at
+:math:`M_e\approx9.8`, :math:`T_w=300` K, :math:`Re_{x,e}\approx10^7`, the peak
+:math:`\tilde\nu/\nu_e` is 343 against 345 in SU2 and 380 in the reference, and
+:math:`u/U_e` agrees within 0.001 through the layer. Over the eight SU2
+conditions at this :math:`Re_{x,e}`, the difference of the reference from SU2
+falls from :math:`+0.5` to :math:`+7.4\%` in friction to :math:`-0.1` to
+:math:`+2.0\%`, and from :math:`+0.5` to :math:`+5.0\%` in :math:`\delta_{99}` to
+:math:`-2.8` to :math:`-0.1\%`. SU2 itself was not modified and rerun, and the
+remaining differences at Mach 10 have not been separated from the viscous-
+interaction pressure history.
+
+At the :ref:`DNS <ref-zhang-duan-choudhari-2018>` momentum-thickness Reynolds
+numbers, friction from the published form differs from DNS by :math:`-5.9`,
+:math:`-8.3`, :math:`-1.5` and :math:`+1.2\%` for M2.5, M6 with
+:math:`T_w/T_r=0.25`, M6 with :math:`T_w/T_r=0.76` and M14 with
+:math:`T_w/T_r=0.18`; SU2 differs by :math:`-7.2`, :math:`-11.4`, :math:`-4.9`
+and :math:`-4.3\%`. These reference runs approximate the edge temperature by
+the freestream value. The constants below were fitted to the SU2 results and
+therefore include this convection difference; they have not been re-evaluated
+against the published form.
+
+At :math:`Re_{x,e}=10^6` this model, which is fully turbulent from the leading
+edge, gives 5.5--7.4% higher friction than SA, whose turbulence develops from
+the edge value of :math:`\tilde\nu`, except at M10. There SA stays nearly
+laminar up to about :math:`Re_{x,e}=10^5` and keeps that thicker layer
+downstream: friction differs by +0.8% while :math:`\delta_{99}` differs by
+:math:`-14.6\%`, narrowing to :math:`-3.2\%` at :math:`10^7`. The reference is a RANS model result, not a
+measurement: SA itself gives incompressible :math:`\delta_{99}` about 7--9%
+above the measurements cited above.
 
 The exponent **0.064** is fitted to SU2 solutions; DNS also exhibits lower
 cold-wall friction than VD2. The factor **0.978** is the SU2 mean ratio of
