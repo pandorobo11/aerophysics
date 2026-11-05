@@ -933,7 +933,9 @@ assumption.
 
 The following summaries are externally supplied validation results dated
 2026-11-01, not simulations rerun by this package's test suite. Differences
-are model minus reference, divided by reference:
+are model minus reference, divided by reference. "Standard SA" below means
+``SA_OPTIONS=NONE`` in SU2 8.5.0, whose convection differs from the published
+model at high speed; see :ref:`the note on SU2 convection <su2-sa-convection>`.
 
 * Against SU2 8.5.0 standard SA, :math:`\delta_{99}` RMS differences are
   **2.5%** for the eight fitted conditions (343 sections), **2.3%** for six
@@ -1029,14 +1031,41 @@ temperature. Displacement thickness is integrated through
 
 .. include:: ../_generated/turbulent_sa_comparison.rst
 
-Friction agrees within 3% at :math:`Re_{x,e}\ge10^7`, as in the SU2 standard-SA
-summaries above. At M0.3 the :math:`\delta_{99}` differences also fall within
-those summaries at :math:`Re_{x,e}=10^7` and :math:`10^8` and just above them
-at :math:`10^6`. On cold supersonic walls they are lower than the summaries at
+Friction agrees within 3% at :math:`Re_{x,e}\ge10^7`, as in the SU2 summaries
+above. At M0.3 the :math:`\delta_{99}` differences also fall within those
+summaries at :math:`Re_{x,e}=10^7` and :math:`10^8` and just above them at
+:math:`10^6`. On cold supersonic walls they are lower than the summaries at
 :math:`Re_{x,e}=10^7`: :math:`-3.0` to :math:`-3.5\%` here, against
-:math:`+0.2` to :math:`+1.1\%` for SU2 at different walls and unit Reynolds
-numbers. This gap has not been explained, so this reference does not replace
-the SU2 comparison.
+:math:`+0.2` to :math:`+1.1\%` for SU2, because the two solvers do not solve the
+same SA convection, as described next.
+
+.. _su2-sa-convection:
+
+**SU2 convection.** :ref:`SU2 8.5.0 <ref-su2-sa-convection>` discretizes SA
+convection as :math:`\nabla\cdot(\mathbf{u}\tilde\nu)` with the volume flux,
+whereas the published model has :math:`\mathbf{u}\cdot\nabla\tilde\nu`. The two
+differ by :math:`\tilde\nu\,\nabla\cdot\mathbf{u}`, which is not negligible in a
+high-speed boundary layer. Adding this term to a scratch copy of this reference
+reproduces the stored SU2 fields at matched local edge states: at
+:math:`M_e\approx9.8`, :math:`T_w=300` K, :math:`Re_{x,e}\approx10^7`, the peak
+:math:`\tilde\nu/\nu_e` is 343 against 345 in SU2 and 380 in the reference, and
+:math:`u/U_e` agrees within 0.001 through the layer. Over the eight SU2
+conditions at this :math:`Re_{x,e}`, the difference of the reference from SU2
+falls from :math:`+0.5` to :math:`+7.4\%` in friction to :math:`-0.1` to
+:math:`+2.0\%`, and from :math:`+0.5` to :math:`+5.0\%` in :math:`\delta_{99}` to
+:math:`-2.8` to :math:`-0.1\%`. SU2 itself was not modified and rerun, and the
+remaining differences at Mach 10 have not been separated from the viscous-
+interaction pressure history.
+
+At the :ref:`DNS <ref-zhang-duan-choudhari-2018>` momentum-thickness Reynolds
+numbers, friction from the published form differs from DNS by :math:`-5.9`,
+:math:`-8.3`, :math:`-1.5` and :math:`+1.2\%` for M2.5, M6 with
+:math:`T_w/T_r=0.25`, M6 with :math:`T_w/T_r=0.76` and M14 with
+:math:`T_w/T_r=0.18`; SU2 differs by :math:`-7.2`, :math:`-11.4`, :math:`-4.9`
+and :math:`-4.3\%`. These reference runs approximate the edge temperature by
+the freestream value. The constants below were fitted to the SU2 results and
+therefore include this convection difference; they have not been re-evaluated
+against the published form.
 
 At :math:`Re_{x,e}=10^6` this model, which is fully turbulent from the leading
 edge, gives 5.5--7.4% higher friction than SA, whose turbulence develops from
