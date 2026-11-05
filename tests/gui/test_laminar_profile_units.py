@@ -3,6 +3,7 @@
 from typing import cast
 
 import pytest
+import streamlit as st
 
 from aerophysics.gui import components
 from aerophysics.gui.units import QuantityKind, UnitPreferences, to_si
@@ -35,7 +36,7 @@ def test_laminar_profile_input_units_preserve_physical_values(
         "laminar_profile_points": 51,
         **{key: value for key, (_, value) in inputs.items()},
     }
-    monkeypatch.setattr(components.st, "session_state", state)
+    monkeypatch.setattr(st, "session_state", state)
 
     components._convert_display_input_state()
     converted = UnitPreferences.from_dict(state["_gui_display_units"])
