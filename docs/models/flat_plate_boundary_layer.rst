@@ -1111,12 +1111,12 @@ rather than a constant of the model.
 
 The :math:`q_w` column of the table in the SA reference section compares
 ``VAN_DRIEST_II_WALL_TEMPERATURE`` with :math:`s=1.14`. The difference is
-:math:`-5.5` to :math:`+3.8\%` at :math:`Re_{x,e}\ge10^7` on the walls tested
-(:math:`M_e=5`--10, :math:`T_w/T_r=0.20`--0.76). It reaches :math:`+18\%` at
+:math:`-5.4` to :math:`+5.4\%` at :math:`Re_{x,e}\ge10^7` on the walls tested
+(:math:`M_e=5`--10, :math:`T_w/T_r=0.20`--0.76). It reaches :math:`+20\%` at
 :math:`Re_{x,e}=10^6`, :math:`T_w/T_r=0.76`, where SA is still developing and
 :math:`T_r-T_w` is sensitive to the recovery factor. SA's own recovery factor
-falls from about 0.91 at Mach 0.3 to 0.85 at Mach 10 instead of staying at
-:math:`Pr^{1/3}=0.896`, so ``St`` should not be compared near :math:`T_w=T_r`.
+falls from about 0.91 at Mach 0.3 to 0.84--0.87 at Mach 10 for
+:math:`Re_{x,e}\ge10^7` instead of staying at :math:`Pr^{1/3}=0.896`, so ``St`` should not be compared near :math:`T_w=T_r`.
 ``ECKERT`` and ``VAN_DRIEST_II`` friction also produce heat-transfer values, but
 they carry their own friction differences and have not been compared in this
 way. All of this assumes a perfect gas, constant :math:`c_p` and :math:`Pr`, an
@@ -1140,9 +1140,9 @@ boundary-layer profiles <../api/viscous_flow>` for that model. The thickness
 closure uses the Walz relation, while the profile defaults to the generalized
 Reynolds analogy so that its wall gradient matches :math:`s`. Measured locally
 against the SA reference on the same :math:`y/\delta_{99}` coordinate, the
-largest differences at :math:`Re_{x,e}\ge10^7` are 3.5--9% of :math:`U_e` in
-velocity and 2.5--8% of the peak temperature. They grow to about 11% at
-:math:`Re_{x,e}=10^6` and :math:`M_e=10`.
+largest differences at :math:`Re_{x,e}\ge10^7` are 4--8% of :math:`U_e` in
+velocity and 1--7% of the peak temperature. At :math:`Re_{x,e}=10^6` they are
+7--9% and 5--9%.
 
 Worked friction example
 ^^^^^^^^^^^^^^^^^^^^^^^
