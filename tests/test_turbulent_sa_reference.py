@@ -35,7 +35,13 @@ REFERENCE = (
     Path(__file__).parent
     / "reference_data/viscous_flow/turbulent_sa_boundary_layer.csv"
 )
-QUANTITIES = ("cf", "delta99_over_x", "displacement99_over_x", "momentum_over_x")
+QUANTITIES = (
+    "cf",
+    "delta99_over_x",
+    "displacement99_over_x",
+    "momentum_over_x",
+    "wall_heat_flux_coefficient",
+)
 
 
 def reference_rows() -> list[dict[str, str]]:
@@ -89,6 +95,60 @@ def test_van_driest_wall_temperature_stays_within_sa_reference_bands() -> None:
         # Fully turbulent VD2 versus SA developing from the leading edge.
         assert abs(friction - 1) < (0.03 if reynolds >= 1e7 else 0.08), label
         assert abs(thickness - 1) < 0.12, label
+        # Fully developed and away from the near-adiabatic St singularity.
+        if reynolds >= 1e7 and float(row["wall_to_recovery_temperature_ratio"]) < 1.0:
+            assert result.wall_heat_flux is not None
+            coefficient = float(result.wall_heat_flux) / (
+                reynolds * viscosity * AIR.cp * temperature
+            )
+            heat_flux = coefficient / float(row["wall_heat_flux_coefficient"])
+            assert abs(heat_flux - 1) < 0.06, label
+
+
+@pytest.mark.parametrize(
+    ("mach", "edge_temperature", "wall_ratio"),
+    [(0.3, 288.15, 1.2), (2.0, 220.0, 0.5), (5.0, 220.0, 0.25), (10.0, 60.0, 0.2)],
+)
+def test_laminar_heat_flux_matches_sa_solver_laminar_limit(
+    mach: float, edge_temperature: float, wall_ratio: float
+) -> None:
+    viscosity = float(AIR_VISCOSITY.dynamic_viscosity(edge_temperature))
+    velocity = mach * np.sqrt(
+        AIR.heat_capacity_ratio * AIR.specific_gas_constant * edge_temperature
+    )
+    recovery = flat_plate_boundary_layer(
+        1.0,
+        velocity,
+        1e6 * viscosity / velocity,
+        viscosity,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressible=True,
+        mach=mach,
+        edge_temperature=edge_temperature,
+    ).recovery_temperature
+    assert recovery is not None
+    wall = wall_ratio * float(recovery)
+    result = flat_plate_boundary_layer(
+        1.0,
+        velocity,
+        1e6 * viscosity / velocity,
+        viscosity,
+        regime=BoundaryLayerRegime.LAMINAR,
+        compressible=True,
+        mach=mach,
+        edge_temperature=edge_temperature,
+        wall_temperature=wall,
+    )
+    solver = TurbulentSABoundaryLayer(mach, edge_temperature, wall, edge_sa_ratio=0.0)
+    positions, history = solver.march(0.1, steps=30)
+    expected = solver.quantities(
+        float(positions[-1]), history[-1]
+    ).wall_heat_flux_coefficient
+    assert result.wall_heat_flux is not None
+    actual = float(result.wall_heat_flux) / (
+        1e6 * viscosity * AIR.cp * edge_temperature
+    )
+    assert_allclose(actual, expected, rtol=0.01)
 
 
 @pytest.mark.generated_assets

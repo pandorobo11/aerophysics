@@ -133,6 +133,7 @@ class Quantities:
     delta99_over_x: float
     displacement99_over_x: float
     momentum_over_x: float
+    wall_heat_flux_coefficient: float
 
 
 class TurbulentSABoundaryLayer:
@@ -519,15 +520,17 @@ class TurbulentSABoundaryLayer:
         return positions, history
 
     def quantities(self, x: float, station: Station) -> Quantities:
-        """cf, delta99, displacement through delta99, and full momentum thickness."""
+        """cf, delta99, delta* through delta99, full theta, and q_w/(rho U cp Te)."""
         eta, u, g = self.eta, station.u, station.g
         reynolds = self.unit_reynolds * x
         h1, h2 = eta[1], eta[2]
-        wall_slope = (
-            -(h1 + h2) / (h1 * h2) * u[0]
-            + h2 / (h1 * (h2 - h1)) * u[1]
-            - h1 / (h2 * (h2 - h1)) * u[2]
+        wall_weights = (
+            -(h1 + h2) / (h1 * h2),
+            h2 / (h1 * (h2 - h1)),
+            -h1 / (h2 * (h2 - h1)),
         )
+        wall_slope = float(np.dot(wall_weights, u[:3]))
+        temperature_slope = float(np.dot(wall_weights, g[:3]))
         wall_c = float(self.chapman_rubesin(g[:1])[0])
         scale = math.sqrt(2.0 / reynolds)
         edge99 = float(np.interp(0.99, u, eta))
@@ -538,6 +541,9 @@ class TurbulentSABoundaryLayer:
             delta99_over_x=float(np.interp(edge99, eta, _cumulative(g, eta))) * scale,
             displacement99_over_x=float(np.trapezoid(inner_g - inner_u, fine)) * scale,
             momentum_over_x=float(np.trapezoid(u * (1.0 - u), eta)) * scale,
+            wall_heat_flux_coefficient=wall_c
+            * temperature_slope
+            / (PRANDTL * math.sqrt(2.0 * reynolds)),
         )
 
 
@@ -573,6 +579,7 @@ def reference_solutions() -> list[dict[str, float | str]]:
                     "delta99_over_x": result.delta99_over_x,
                     "displacement99_over_x": result.displacement99_over_x,
                     "momentum_over_x": result.momentum_over_x,
+                    "wall_heat_flux_coefficient": result.wall_heat_flux_coefficient,
                 }
             )
     return rows
@@ -622,7 +629,8 @@ def main() -> None:
         "normalization": (
             "Re_x = rho_e U_e x/mu_e; cf uses edge dynamic pressure; delta99 at "
             "u/Ue = 0.99; displacement integrated through delta99; momentum "
-            "thickness integrated to the edge"
+            "thickness integrated to the edge; wall_heat_flux_coefficient is "
+            "q_w/(rho_e U_e cp Te), positive into the wall"
         ),
         "numerics": {
             "eta_grid": "geometric, first point 7e-4, ratio 1.04, eta_max 90",

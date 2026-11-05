@@ -14,6 +14,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
   conditions at Re_x = 1e6, 1e7 and 1e8 are compared with
   `VAN_DRIEST_II_WALL_TEMPERATURE` in a generated documentation table. The
   solver is a verification tool and is not part of the package.
+- Add flat-plate wall heat transfer to `flat_plate_boundary_layer`: compressible
+  results now include `stanton_number`, `heat_transfer_coefficient` and
+  `wall_heat_flux` from the Reynolds analogy, with
+  `reynolds_analogy_factor` selecting the turbulent factor (default 1.14).
+- Add `flat_plate_boundary_layer_profile`, which returns laminar or turbulent
+  velocity and temperature profiles at one flat-plate station. Laminar profiles
+  come from the compressible similarity solution.
 
 ### Changed
 

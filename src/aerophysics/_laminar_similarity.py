@@ -427,6 +427,45 @@ def _collocation(state: FloatArray, model: DynamicViscosityModel) -> FloatArray:
     raise _ConvergenceError("far-field domain or momentum balance did not converge")
 
 
+def similarity_profile(
+    state: FloatArray, model: DynamicViscosityModel, thickness_fraction: FloatArray
+) -> tuple[FloatArray, FloatArray]:
+    """Return u/Ue and T/Te at y/delta99 for one state row.
+
+    The row is defined as in ``similarity_coefficients``. The profile is the
+    641-node finite-difference solution, without Richardson extrapolation or
+    the collocation fallback.
+    """
+    states = np.array(state, dtype=np.float64, ndmin=2)
+    try:
+        coarse = _finite_difference(states, 321, model)
+        fine = _finite_difference(states, 641, model, previous=coarse)
+    except (_ConvergenceError, np.linalg.LinAlgError) as error:
+        raise ModelRangeError(
+            f"laminar similarity profile at {states[0].tolist()}: {error}"
+        ) from error
+    if not (coarse.valid[0] and fine.valid[0]):
+        raise ModelRangeError(
+            f"laminar similarity profile at {states[0].tolist()}: "
+            "finite-difference convergence failed"
+        )
+    z, u, g = fine.z, fine.y[:, 0, 1], fine.y[:, 0, 2]
+    velocity, temperature = CubicSpline(z, u), CubicSpline(z, g)
+    stretched = temperature.antiderivative()
+    # u is monotonic below 0.99, so one bracketed root gives the 99% coordinate.
+    above = int(np.argmax(u >= 0.99))
+    edge = brentq(lambda value: float(velocity(value)) - 0.99, z[above - 1], z[above])
+    # g > 0 makes the stretched wall distance strictly increasing.
+    nodes = np.concatenate((z[z < edge], [edge]))
+    position = CubicSpline(stretched(nodes), nodes)(
+        thickness_fraction * stretched(edge)
+    )
+    return (
+        np.asarray(velocity(position), dtype=np.float64),
+        np.asarray(temperature(position), dtype=np.float64),
+    )
+
+
 def similarity_coefficients(
     states: FloatArray,
     model: DynamicViscosityModel,
