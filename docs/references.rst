@@ -442,6 +442,10 @@ Flows*. AIAA Paper 2014-0243, 2014.
 
 https://github.com/su2code/SU2/blob/v8.5.0/SU2_CFD/include/numerics/turbulent/turb_convection.hpp
 
+The ``BOUNDED_SCALAR`` rerun used development commit ``f4b67d2``:
+
+https://github.com/su2code/SU2/blob/f4b67d23deaac22948cc8d2a2c0da3138ae804f6/SU2_CFD/include/solvers/CScalarSolver.hpp
+
 .. _ref-allmaras-johnson-spalart-2012:
 
 Allmaras, S. R., Johnson, F. T., and Spalart, P. R. *Modifications and

@@ -1053,9 +1053,28 @@ reproduces the stored SU2 fields at matched local edge states: at
 conditions at this :math:`Re_{x,e}`, the difference of the reference from SU2
 falls from :math:`+0.5` to :math:`+7.4\%` in friction to :math:`-0.1` to
 :math:`+2.0\%`, and from :math:`+0.5` to :math:`+5.0\%` in :math:`\delta_{99}` to
-:math:`-2.8` to :math:`-0.1\%`. SU2 itself was not modified and rerun, and the
-remaining differences at Mach 10 have not been separated from the viscous-
-interaction pressure history.
+:math:`-2.8` to :math:`-0.1\%`.
+
+SU2 itself confirms the cause. The same :math:`M_\infty=10`, :math:`T_w=300` K
+case was rerun on the same grid with development commit ``f4b67d2``, starting
+from the converged 8.5.0 solution. With the default ``SCALAR_UPWIND`` that commit
+holds the 8.5.0 solution. ``CONV_NUM_METHOD_TURB= BOUNDED_SCALAR`` subtracts the
+face-flux divergence from the convection, leaving
+:math:`\mathbf{u}\cdot\nabla\tilde\nu`, and also takes its upwind weights from
+the flow solver's mass flux; these two changes were not run separately. At
+:math:`x=0.5` m, where :math:`Re_{x,e}\approx10^7`, friction rises 3.4%,
+:math:`\delta_{99}` 6.8%, momentum thickness 4.2% and wall heat flux 3.6%, and the
+peak :math:`\tilde\nu/\nu_e` rises from 346 to 385. The scratch-copy comparison
+above predicts 3.2%, 6.1% and 3.8% for the first three, and 343 to 380 for the
+peak.
+
+Over :math:`Re_{x,e}\approx10^6` to :math:`2\times10^7`, the reference then
+differs from this rerun by :math:`+1.7` to :math:`+4.0\%` in friction and
+:math:`-4.6` to :math:`-1.3\%` in :math:`\delta_{99}`, close to the
+:math:`+1.7` to :math:`+4.3\%` and :math:`-3.6` to :math:`-0.8\%` between the
+scratch copy and SU2 8.5.0. Convection therefore does not explain this remainder,
+which has not been separated from the viscous-interaction pressure history, the
+grid or the leading-edge development. Only this one condition was rerun.
 
 At the :ref:`DNS <ref-zhang-duan-choudhari-2018>` momentum-thickness Reynolds
 numbers, friction from the published form differs from DNS by :math:`-5.9`,
