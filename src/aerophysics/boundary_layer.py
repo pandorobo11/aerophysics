@@ -147,9 +147,9 @@ class FlatPlateBoundaryLayerResult:
     drag_per_unit_width: FloatResult
     recovery_temperature: FloatResult | None
     wall_temperature: FloatResult | None
-    stanton_number: FloatResult | None
-    heat_transfer_coefficient: FloatResult | None
-    wall_heat_flux: FloatResult | None
+    stanton_number: FloatResult | None = None
+    heat_transfer_coefficient: FloatResult | None = None
+    wall_heat_flux: FloatResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
