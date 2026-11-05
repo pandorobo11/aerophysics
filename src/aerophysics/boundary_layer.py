@@ -26,6 +26,12 @@ Transition on a Flat Plate at Mach 6*, EUCASS 2013, equation (7).
 von Kármán, T., *Über laminare und turbulente Reibung*, ZAMM, 1(4), 1921.
 Coles, D., *The Law of the Wake in the Turbulent Boundary Layer*, Journal of
 Fluid Mechanics, 1(2), 1956.
+Cary, A. M., Jr., *Summary of Available Information on Reynolds Analogy for
+Zero-Pressure-Gradient, Compressible, Turbulent-Boundary-Layer Flow*, NASA
+TN D-5560, 1970.
+Zhang, Y.-S., Bi, W.-T., Hussain, F., and She, Z.-S., *A Generalized Reynolds
+Analogy for Compressible Wall-Bounded Turbulent Flows*, Journal of Fluid
+Mechanics, 739, 392--420, 2014.
 """
 
 import warnings
@@ -37,12 +43,21 @@ from numpy.typing import ArrayLike
 from scipy.optimize import brentq
 
 from aerophysics._array import FloatArray, FloatResult, as_float_array, return_float
-from aerophysics._laminar_similarity import similarity_coefficients
+from aerophysics._laminar_similarity import (
+    similarity_coefficients,
+    similarity_profile,
+)
 from aerophysics.boundary_layer_profile import (
+    CompressibleVelocityTransformation,
+    TemperatureVelocityRelation,
     _incompressible_log_wake_profile,
+    _positive_scalar,
+    _profile_array,
     _profile_closure_thicknesses,
+    _validate_wall_grid,
     _van_driest_walz_profile,
     _VanDriestWalzProfile,
+    compressible_turbulent_boundary_layer_profile,
 )
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
 from aerophysics.gas import AIR, PerfectGas
@@ -105,7 +120,11 @@ class FlatPlateBoundaryLayerResult:
     dynamic pressure ``rho_e U_e**2/2`` for every model,
     so ``wall_shear_stress`` is the local coefficient multiplied by the edge
     dynamic pressure, while ``drag_per_unit_width`` is the average coefficient
-    multiplied by the edge dynamic pressure and ``distance``. With
+    multiplied by the edge dynamic pressure and ``distance``. The Stanton
+    number uses ``rho_e U_e cp``, and ``heat_transfer_coefficient`` and
+    ``wall_heat_flux`` refer to ``recovery_temperature - wall_temperature``;
+    heat flux into the wall is positive. All three are None for
+    ``compressible=False``. With
     ECKERT turbulent portions,
     ``effective_reynolds_number`` is the
     reference Reynolds number ``Re*`` at which the incompressible friction
@@ -128,6 +147,29 @@ class FlatPlateBoundaryLayerResult:
     drag_per_unit_width: FloatResult
     recovery_temperature: FloatResult | None
     wall_temperature: FloatResult | None
+    stanton_number: FloatResult | None = None
+    heat_transfer_coefficient: FloatResult | None = None
+    wall_heat_flux: FloatResult | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FlatPlateBoundaryLayerProfileResult:
+    """Mean properties through ``delta_99`` at one flat-plate station.
+
+    ``regime`` is the local laminar or turbulent state. ``wall_distance`` is in
+    m, ``velocity`` in m/s, ``temperature`` in K, ``density`` in kg/m³, and
+    ``dynamic_viscosity`` in Pa s. ``boundary_layer`` holds the local friction,
+    thicknesses and wall heat transfer.
+    """
+
+    regime: BoundaryLayerRegime
+    wall_distance: FloatArray
+    velocity: FloatArray
+    temperature: FloatArray
+    density: FloatArray
+    dynamic_viscosity: FloatArray
+    local_mach_number: FloatArray
+    boundary_layer: FlatPlateBoundaryLayerResult
 
 
 def _laminar_correlations(
@@ -637,6 +679,7 @@ def flat_plate_boundary_layer(
     edge_temperature: ArrayLike | None = None,
     wall_temperature: ArrayLike | None = None,
     prandtl_number: float = 0.72,
+    reynolds_analogy_factor: float = 1.14,
     gas: PerfectGas = AIR,
     viscosity_model: DynamicViscosityModel = AIR_VISCOSITY,
 ) -> FlatPlateBoundaryLayerResult:
@@ -676,7 +719,12 @@ def flat_plate_boundary_layer(
         an adiabatic wall at the regime-appropriate recovery temperature is
         used.
     prandtl_number:
-        Constant Prandtl number used for the recovery factors.
+        Constant Prandtl number used for the recovery factors and for the
+        laminar Reynolds analogy.
+    reynolds_analogy_factor:
+        Turbulent ``s = 2 St / cf``. The default matches
+        ``compressible_turbulent_boundary_layer_profile``. It is ignored at
+        laminar points.
     gas, viscosity_model:
         Perfect-gas and dynamic-viscosity models used by compressibility
         corrections. ``viscosity_model`` evaluates reference or wall
@@ -762,12 +810,24 @@ def flat_plate_boundary_layer(
     where Cw=(Te/Tw)*mu(Tw)/mu_e uses the laminar wall temperature and the
     selected viscosity model. The warning reports the maximum and point count.
     Turbulent points and compressible=False are excluded from this warning.
+
+    With compressible=True, wall heat transfer follows the Reynolds analogy on
+    the local edge-basis friction: ``St = Pr**(-2/3) * cf/2`` at laminar points
+    and ``St = s * cf/2`` at turbulent points. Then
+    ``h = St * rho_e * U_e * cp`` and ``q_w = h * (T_r - T_w)``, positive into
+    the wall, with the returned recovery temperature, so an omitted wall
+    temperature gives zero flux. The laminar relation is within about 1% of the
+    similarity wall flux over Me=0.3--10. Experimental support for ``s`` is
+    weak above Mach 5 and on strongly cooled walls, and ``St`` becomes sensitive
+    to ``T_r`` as ``T_w`` approaches it.
     """
     turbulent_model = _resolve_turbulent_model(regime, compressible, turbulent_model)
     transition = _validate_model_choices(regime, transition_reynolds)
     eckert = turbulent_model is TurbulentModel.ECKERT
     if not np.isfinite(prandtl_number) or prandtl_number <= 0.0:
         raise ValueError("prandtl_number must be finite and greater than zero")
+    if not np.isfinite(reynolds_analogy_factor) or reynolds_analogy_factor <= 0.0:
+        raise ValueError("reynolds_analogy_factor must be finite and greater than zero")
     raw_values = (
         ("distance", distance),
         ("edge_velocity", edge_velocity),
@@ -1126,6 +1186,17 @@ def flat_plate_boundary_layer(
                 stacklevel=2,
             )
 
+    stanton: FloatArray | None = None
+    heat_coefficient: FloatArray | None = None
+    heat_flux: FloatArray | None = None
+    if recovery_temperature is not None and used_wall_temperature is not None:
+        analogy = np.where(
+            turbulent_mask, reynolds_analogy_factor, prandtl_number ** (-2.0 / 3.0)
+        )
+        stanton = analogy * local_friction / 2.0
+        heat_coefficient = stanton * density * velocity * gas.cp
+        heat_flux = heat_coefficient * (recovery_temperature - used_wall_temperature)
+
     def output(values: FloatArray) -> FloatResult:
         return return_float(np.asarray(values, dtype=np.float64), scalar=scalar)
 
@@ -1146,12 +1217,181 @@ def flat_plate_boundary_layer(
         wall_temperature=(
             output(used_wall_temperature) if used_wall_temperature is not None else None
         ),
+        stanton_number=output(stanton) if stanton is not None else None,
+        heat_transfer_coefficient=(
+            output(heat_coefficient) if heat_coefficient is not None else None
+        ),
+        wall_heat_flux=output(heat_flux) if heat_flux is not None else None,
+    )
+
+
+def flat_plate_boundary_layer_profile(
+    distance: float,
+    edge_velocity: float,
+    edge_density: float,
+    edge_temperature: float,
+    *,
+    regime: BoundaryLayerRegime,
+    transition_reynolds: float | None = None,
+    wall_temperature: float | None = None,
+    wall_distance_ratio: ArrayLike | None = None,
+    transformation: CompressibleVelocityTransformation = (
+        CompressibleVelocityTransformation.VAN_DRIEST
+    ),
+    temperature_velocity_relation: TemperatureVelocityRelation = (
+        TemperatureVelocityRelation.GENERALIZED_REYNOLDS_ANALOGY
+    ),
+    prandtl_number: float = 0.72,
+    reynolds_analogy_factor: float = 1.14,
+    gas: PerfectGas = AIR,
+    viscosity_model: DynamicViscosityModel = AIR_VISCOSITY,
+) -> FlatPlateBoundaryLayerProfileResult:
+    """Return velocity and temperature profiles at one flat-plate station.
+
+    Parameters
+    ----------
+    distance:
+        Distance from the leading edge in m.
+    edge_velocity, edge_density, edge_temperature:
+        Boundary-layer-edge velocity in m/s, density in kg/m³, and temperature
+        in K. The edge Mach number and viscosity follow from ``gas`` and
+        ``viscosity_model``.
+    regime, transition_reynolds:
+        Regime selection as in ``flat_plate_boundary_layer``. A transitional
+        station uses the laminar profile up to ``transition_reynolds``.
+    wall_temperature:
+        Wall temperature in K. If omitted, the wall is adiabatic.
+    wall_distance_ratio:
+        Strictly increasing ``y/delta_99`` from 0 to at most 1. Defaults to
+        201 uniform points; refine it near the wall for a turbulent station.
+    transformation, temperature_velocity_relation:
+        Turbulent profile model choices. They are ignored at laminar stations.
+    prandtl_number, reynolds_analogy_factor, gas, viscosity_model:
+        As in ``flat_plate_boundary_layer``.
+
+    Notes
+    -----
+    Laminar stations use the compressible similarity solution. Turbulent
+    stations pass the ``VAN_DRIEST_II_WALL_TEMPERATURE`` shear stress and
+    ``delta_99`` to ``compressible_turbulent_boundary_layer_profile``. The
+    default turbulent temperature relation has the wall gradient implied by
+    ``reynolds_analogy_factor``, so it agrees with the returned heat flux.
+    Applicability is that of the two underlying models.
+    """
+    x = _positive_scalar(distance, name="distance")
+    velocity = _positive_scalar(edge_velocity, name="edge_velocity")
+    density = _positive_scalar(edge_density, name="edge_density")
+    temperature_edge = _positive_scalar(edge_temperature, name="edge_temperature")
+    ratio = (
+        np.linspace(0.0, 1.0, 201)
+        if wall_distance_ratio is None
+        else _profile_array(wall_distance_ratio, name="wall_distance_ratio")
+    )
+    _validate_wall_grid(ratio)
+    if ratio[-1] > 1.0:
+        raise ValueError("wall_distance_ratio must not exceed 1")
+    viscosity = float(viscosity_model.dynamic_viscosity(temperature_edge))
+    sound_speed = np.sqrt(
+        gas.heat_capacity_ratio * gas.specific_gas_constant * temperature_edge
+    )
+    mach = velocity / float(sound_speed)
+    # flat_plate_boundary_layer rejects a transition Reynolds number or
+    # turbulent model that does not match the regime.
+    plate = flat_plate_boundary_layer(
+        x,
+        velocity,
+        density,
+        viscosity,
+        regime=regime,
+        compressible=True,
+        turbulent_model=(
+            None
+            if regime is BoundaryLayerRegime.LAMINAR
+            else TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE
+        ),
+        transition_reynolds=transition_reynolds,
+        mach=mach,
+        edge_temperature=temperature_edge,
+        wall_temperature=wall_temperature,
+        prandtl_number=prandtl_number,
+        reynolds_analogy_factor=reynolds_analogy_factor,
+        gas=gas,
+        viscosity_model=viscosity_model,
+    )
+    assert plate.wall_temperature is not None
+    reynolds = float(plate.reynolds_number)
+    laminar = regime is BoundaryLayerRegime.LAMINAR or (
+        regime is BoundaryLayerRegime.TRANSITIONAL
+        and transition_reynolds is not None
+        and reynolds <= transition_reynolds
+    )
+    thickness = float(plate.boundary_layer_thickness)
+    height = ratio * thickness
+    if laminar:
+        velocity_ratio, temperature_ratio = similarity_profile(
+            np.array(
+                [
+                    mach,
+                    temperature_edge,
+                    np.nan
+                    if wall_temperature is None
+                    else float(wall_temperature) / temperature_edge,
+                    prandtl_number,
+                    gas.heat_capacity_ratio,
+                ]
+            ),
+            viscosity_model,
+            ratio,
+        )
+        speed = velocity * velocity_ratio
+        temperature = temperature_edge * temperature_ratio
+        return FlatPlateBoundaryLayerProfileResult(
+            regime=BoundaryLayerRegime.LAMINAR,
+            wall_distance=height,
+            velocity=speed,
+            temperature=temperature,
+            density=density / temperature_ratio,
+            dynamic_viscosity=np.asarray(
+                viscosity_model.dynamic_viscosity(temperature), dtype=np.float64
+            ),
+            local_mach_number=speed
+            / np.sqrt(
+                gas.heat_capacity_ratio * gas.specific_gas_constant * temperature
+            ),
+            boundary_layer=plate,
+        )
+    profile = compressible_turbulent_boundary_layer_profile(
+        height,
+        velocity,
+        density,
+        temperature_edge,
+        thickness,
+        float(plate.wall_shear_stress),
+        transformation=transformation,
+        wall_temperature=float(plate.wall_temperature),
+        temperature_velocity_relation=temperature_velocity_relation,
+        prandtl_number=prandtl_number,
+        reynolds_analogy_factor=reynolds_analogy_factor,
+        gas=gas,
+        viscosity_model=viscosity_model,
+    )
+    return FlatPlateBoundaryLayerProfileResult(
+        regime=BoundaryLayerRegime.TURBULENT,
+        wall_distance=profile.wall_distance,
+        velocity=profile.velocity,
+        temperature=profile.temperature,
+        density=profile.density,
+        dynamic_viscosity=profile.dynamic_viscosity,
+        local_mach_number=profile.local_mach_number,
+        boundary_layer=plate,
     )
 
 
 __all__ = [
     "BoundaryLayerRegime",
+    "FlatPlateBoundaryLayerProfileResult",
     "FlatPlateBoundaryLayerResult",
     "TurbulentModel",
     "flat_plate_boundary_layer",
+    "flat_plate_boundary_layer_profile",
 ]

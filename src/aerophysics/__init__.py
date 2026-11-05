@@ -9,6 +9,7 @@ from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     TurbulentModel,
     flat_plate_boundary_layer,
+    flat_plate_boundary_layer_profile,
 )
 from aerophysics.boundary_layer_profile import (
     CompressibleBoundaryLayerProfileResult,
@@ -123,6 +124,7 @@ __all__ = [
     "compressible_turbulent_boundary_layer_profile",
     "conical_shock",
     "flat_plate_boundary_layer",
+    "flat_plate_boundary_layer_profile",
     "normal_shock",
     "oblique_shock",
     "prandtl_meyer_expansion",

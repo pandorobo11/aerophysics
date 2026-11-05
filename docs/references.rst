@@ -381,6 +381,29 @@ Mechanics, 739, 392--420, 2014.
 
 https://doi.org/10.1017/jfm.2013.620
 
+.. _ref-chi-spalding-1966:
+
+Chi, S. W. and Spalding, D. B. *Influence of Temperature Ratio on Heat Transfer
+to a Flat Plate through a Turbulent Boundary Layer in Air*. Proceedings of the
+Third International Heat Transfer Conference, Chicago, 41--49, 1966. Consulted
+through the summaries of Cary (1970) and Fu et al. (2021).
+
+.. _ref-cary-1970:
+
+Cary, A. M., Jr. *Summary of Available Information on Reynolds Analogy for
+Zero-Pressure-Gradient, Compressible, Turbulent-Boundary-Layer Flow*. NASA
+TN D-5560, 1970.
+
+https://ntrs.nasa.gov/citations/19700006441
+
+.. _ref-fu-et-al-2021:
+
+Fu, L., Karp, M., Bose, S. T., Moin, P., and Urzay, J. *Shock-Induced Heating
+and Transition to Turbulence in a Hypersonic Boundary Layer*. Journal of Fluid
+Mechanics, 909, A8, 2021.
+
+https://arxiv.org/abs/2010.10571
+
 .. _ref-osterlund-2000:
 
 Österlund, J. M., Johansson, A. V., Nagib, H. M., and Hites, M. H. *A Note
