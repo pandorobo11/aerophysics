@@ -410,6 +410,15 @@ https://doi.org/10.1017/jfm.2015.273
 Spalart, P. R., and Allmaras, S. R. *A One-Equation Turbulence Model for
 Aerodynamic Flows*. La Recherche Aérospatiale, 1, 5--21, 1994.
 
+.. _ref-su2-sa-convection:
+
+SU2 8.5.0 source code, ``CUpwSca_TurbSA`` and ``CUpwScalar``, and the transport
+form :math:`\mathbf{F}^c=\mathbf{v}\hat\nu` in Palacios, F., et al. *Stanford
+University Unstructured (SU2): Analysis and Design Technology for Turbulent
+Flows*. AIAA Paper 2014-0243, 2014.
+
+https://github.com/su2code/SU2/blob/v8.5.0/SU2_CFD/include/numerics/turbulent/turb_convection.hpp
+
 .. _ref-allmaras-johnson-spalart-2012:
 
 Allmaras, S. R., Johnson, F. T., and Spalart, P. R. *Modifications and
