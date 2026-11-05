@@ -1422,6 +1422,108 @@ render_boundary_layer(UnitPreferences())
     assert replay.session_state["boundary_payload"][0] == result
 
 
+def test_boundary_page_shows_heat_transfer_only_when_compressible() -> None:
+    script = """
+from aerophysics.gui.pages import render_boundary_layer
+from aerophysics.gui.units import UnitPreferences
+render_boundary_layer(UnitPreferences(heat_flux="kW/m²"))
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception and not app.error
+    assert len(app.metric) == 4
+    assert (
+        app.dataframe[0].value["壁面熱流束 q_w\uff08壁へ正\uff09 [kW/m²]"].isna().all()
+    )
+
+    app.checkbox(key="boundary_compressible").check().run()
+    app.checkbox(key="boundary_adiabatic").uncheck().run()
+    app.number_input(key="boundary_velocity").set_value(620.0).run()
+    app.number_input(key="boundary_mach").set_value(2.0).run()
+    app.number_input(key="boundary_temperature").set_value(240.0).run()
+    app.number_input(key="boundary_wall_temperature").set_value(300.0).run()
+    app.button(key="FormSubmitter:boundary_form-計算").click().run()
+    assert not app.exception and not app.error
+    labels = [metric.label for metric in app.metric]
+    assert labels[4:] == [
+        "Stanton数 St",
+        "熱伝達率 h [W/(m²·K)]",
+        "壁面熱流束 q_w [kW/m²]",
+    ]
+    result, _ = app.session_state["boundary_payload"]
+    flux = next(m for m in app.metric if m.label.startswith("壁面熱流束"))
+    assert float(flux.value) == pytest.approx(
+        result.rows[0]["wall_heat_flux"] / 1000.0, rel=1e-3
+    )
+
+
+def test_laminar_profile_page_calculates_and_replays() -> None:
+    from aerophysics.gui.config import load_configuration
+
+    script = """
+from aerophysics.gui.analysis_pages import render_laminar_boundary_layer_profile
+from aerophysics.gui.units import UnitPreferences
+render_laminar_boundary_layer_profile(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    assert not app.exception
+    app.checkbox(key="laminar_profile_adiabatic").uncheck().run()
+    app.number_input(key="laminar_profile_wall_temperature").set_value(250.0).run()
+    app.number_input(key="laminar_profile_points").set_value(51).run()
+    app.button(key="FormSubmitter:laminar_profile_form-計算").click().run()
+    assert not app.exception and not app.error
+    result, configuration = app.session_state["laminar_profile_payload"]
+    assert len(app.dataframe[0].value) == 51
+    assert len(app.metric) == 8
+    assert app.get("plotly_chart") and app.download_button
+    assert configuration["inputs_si"]["wall_temperature"] == 250.0
+
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_laminar_boundary_layer_profile_configuration"] = (
+        load_configuration(dump_configuration(configuration))
+    )
+    replay.run()
+    replay.button(key="FormSubmitter:laminar_profile_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert replay.session_state["laminar_profile_payload"][0] == result
+
+
+def test_laminar_profile_page_uses_the_flight_case() -> None:
+    script = """
+import streamlit as st
+from aerophysics.gui.adapters import FlightCase
+from aerophysics.gui.analysis_pages import render_laminar_boundary_layer_profile
+from aerophysics.gui.units import UnitPreferences
+st.session_state["current_flight_case"] = FlightCase(
+    10000.0, 2.0, 600.0, 0.41, 1.45e-5, 223.0
+)
+render_laminar_boundary_layer_profile(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.radio(key="laminar_profile_source").set_value("現在の飛行ケース").run()
+    assert app.number_input(key="laminar_profile_velocity").value == 600.0
+    assert app.number_input(key="laminar_profile_velocity").disabled
+    app.button(key="FormSubmitter:laminar_profile_form-計算").click().run()
+    assert not app.exception and not app.error
+    _, configuration = app.session_state["laminar_profile_payload"]
+    assert configuration["models"]["source"] == "flight"
+    assert configuration["inputs_si"]["edge_temperature"] == 223.0
+
+
+def test_laminar_profile_page_reports_invalid_input() -> None:
+    script = """
+from aerophysics.gui.analysis_pages import render_laminar_boundary_layer_profile
+from aerophysics.gui.units import UnitPreferences
+render_laminar_boundary_layer_profile(UnitPreferences())
+"""
+    app = AppTest.from_string(script, default_timeout=30).run()
+    app.number_input(key="laminar_profile_temperature").set_value(-10.0).run()
+    app.button(key="FormSubmitter:laminar_profile_form-計算").click().run()
+    assert not app.exception
+    assert app.error
+    assert "laminar_profile_payload" not in app.session_state
+
+
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
 def test_metric_nonfinite_displays_dash(value: float) -> None:
     app = AppTest.from_string(

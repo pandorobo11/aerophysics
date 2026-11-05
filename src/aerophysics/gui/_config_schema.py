@@ -327,6 +327,18 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
         },
         sweep_variables=None,
     ),
+    "laminar_boundary_layer_profile": _CalculatorSchema(
+        inputs={
+            "distance": _POSITIVE,
+            "edge_velocity": _POSITIVE,
+            "edge_density": _POSITIVE,
+            "edge_temperature": _POSITIVE,
+            "wall_temperature": _NULLABLE_POSITIVE,
+            "points": _integer(minimum=51, maximum=501),
+        },
+        models={"source": _choice("manual", "flight")},
+        sweep_variables=None,
+    ),
     "protrusion_drag": _CalculatorSchema(
         inputs={
             "drag_coefficient": _NON_NEGATIVE,

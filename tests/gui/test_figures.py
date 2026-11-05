@@ -1,5 +1,7 @@
 """Tests for GUI Plotly figures."""
 
+from typing import cast
+
 import numpy as np
 import pytest
 
@@ -29,6 +31,7 @@ from aerophysics.gui.adapters import (
 )
 from aerophysics.gui.advanced_adapters import (
     boundary_layer_profiles,
+    laminar_boundary_layer_profile,
     protrusion_sweep,
     thermochemistry_sweep,
     viscosity_sweep,
@@ -44,6 +47,7 @@ from aerophysics.gui.figures import (
     expansion_geometry,
     flight_figures,
     isentropic_figures,
+    laminar_boundary_layer_profile_figures,
     normal_shock_figures,
     normal_shock_geometry,
     protrusion_figures,
@@ -368,9 +372,17 @@ def test_boundary_layer_figures_include_transition_and_thermal() -> None:
     figures = boundary_layer_figures(
         result.rows, UnitPreferences(), transition_distance=0.3
     )
-    assert set(figures) == {"厚さ", "摩擦係数", "せん断・抗力", "温度"}
+    assert set(figures) == {"厚さ", "摩擦係数", "せん断・抗力", "熱伝達", "温度"}
     assert len(figures["厚さ"].layout.shapes) == 1
     assert len(figures["温度"].data) == 2
+    assert len(figures["熱伝達"].data) == 3
+    assert figures["熱伝達"].layout.shapes
+    in_kilowatts = boundary_layer_figures(
+        result.rows, UnitPreferences(heat_flux="kW/m²")
+    )["熱伝達"]
+    assert in_kilowatts.data[2].y[-1] == pytest.approx(
+        cast(float, result.rows[-1]["wall_heat_flux"]) / 1000.0
+    )
 
 
 def test_additional_compressible_flow_figures() -> None:
@@ -524,6 +536,45 @@ def test_detached_geometry_dimensions_and_upstream_coordinates(
         if geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE
         else "円柱頭部"
     ) in text
+
+
+def test_incompressible_boundary_layer_has_no_heat_transfer_figure() -> None:
+    result = flat_plate_sweep(
+        start=0.1,
+        stop=1.0,
+        points=3,
+        logarithmic=False,
+        edge_velocity=10.0,
+        edge_density=1.0,
+        edge_dynamic_viscosity=1e-5,
+        regime=BoundaryLayerRegime.LAMINAR,
+        transition_reynolds=None,
+        compressible=False,
+        turbulent_model=None,
+        mach=None,
+        edge_temperature=None,
+        wall_temperature=None,
+    )
+    assert "熱伝達" not in boundary_layer_figures(result.rows, UnitPreferences())
+
+
+def test_laminar_boundary_layer_profile_figures() -> None:
+    rows = laminar_boundary_layer_profile(
+        distance=0.1,
+        edge_velocity=1200.0,
+        edge_density=0.5,
+        edge_temperature=225.0,
+        wall_temperature=300.0,
+        points=51,
+    ).rows
+    figures = laminar_boundary_layer_profile_figures(
+        rows, UnitPreferences(temperature="°C")
+    )
+    assert set(figures) == {"速度分布", "温度分布", "熱物性", "局所Mach"}
+    assert figures["速度分布"].data[0].x[-1] == pytest.approx(0.99)
+    assert figures["速度分布"].data[0].y[-1] == pytest.approx(1.0)
+    assert figures["温度分布"].data[0].x[0] == pytest.approx(26.85, rel=1e-5)
+    assert len(figures["熱物性"].data) == 2
 
 
 def test_boundary_profile_and_protrusion_figures() -> None:

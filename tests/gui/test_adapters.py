@@ -1,5 +1,7 @@
 """Tests for pure GUI calculation adapters."""
 
+from typing import Any, cast
+
 import numpy as np
 import pytest
 
@@ -7,6 +9,7 @@ from aerophysics import FlightCondition
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     TurbulentModel,
+    flat_plate_boundary_layer,
 )
 from aerophysics.detached_shock import DetachedShockGeometry
 from aerophysics.gui.adapters import (
@@ -585,6 +588,44 @@ def test_flat_plate_compressible_distance_sweep() -> None:
     assert len(result.rows) == 3
     assert result.rows[-1]["wall_temperature"] is not None
     assert result.rows[-1]["distance"] == pytest.approx(1.0)
+
+
+def test_flat_plate_rows_include_heat_transfer_when_compressible() -> None:
+    settings: dict[str, Any] = {
+        "edge_velocity": 600.0,
+        "edge_density": 0.5,
+        "edge_dynamic_viscosity": 1.6e-5,
+        "regime": BoundaryLayerRegime.TURBULENT,
+        "turbulent_model": TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
+        "mach": 2.0,
+        "edge_temperature": 225.0,
+        "wall_temperature": 300.0,
+    }
+    row = flat_plate(
+        distance=1.0, transition_reynolds=None, compressible=True, **settings
+    ).rows[0]
+    direct = flat_plate_boundary_layer(1.0, compressible=True, **settings)
+    assert row["stanton_number"] == direct.stanton_number
+    assert row["heat_transfer_coefficient"] == direct.heat_transfer_coefficient
+    assert row["wall_heat_flux"] == direct.wall_heat_flux
+    assert cast(float, row["wall_heat_flux"]) > 0.0
+
+    incompressible = flat_plate(
+        distance=1.0,
+        edge_velocity=10.0,
+        edge_density=1.0,
+        edge_dynamic_viscosity=1e-5,
+        regime=BoundaryLayerRegime.LAMINAR,
+        turbulent_model=None,
+        transition_reynolds=None,
+        compressible=False,
+        mach=None,
+        edge_temperature=None,
+        wall_temperature=None,
+    ).rows[0]
+    assert incompressible["stanton_number"] is None
+    assert incompressible["heat_transfer_coefficient"] is None
+    assert incompressible["wall_heat_flux"] is None
 
 
 def test_thermal_oblique_adapter_and_sweep() -> None:

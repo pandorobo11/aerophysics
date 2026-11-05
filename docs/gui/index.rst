@@ -73,6 +73,9 @@ page of this manual directly.
      - 圧縮性境界層プロファイル (compressible boundary-layer profile)
      - :doc:`../models/compressible_velocity_transformations`
    * -
+     - 層流境界層プロファイル (laminar boundary-layer profile)
+     - :doc:`../models/flat_plate_boundary_layer`
+   * -
      - 突起抗力 (protrusion drag)
      - :doc:`../models/protrusion_drag`
    * - 熱物性 (thermophysical properties)
@@ -117,8 +120,9 @@ Related pages can pass a result to the next page in the same browser session,
 at full precision rather than the rounded displayed values:
 
 1. Run a single-point calculation on **大気・飛行条件** and save the flight
-   case. The **平板境界層** (flat-plate boundary layer) page can then use it
-   as the edge condition.
+   case. The **平板境界層** (flat-plate boundary layer) and
+   **層流境界層プロファイル** (laminar boundary-layer profile) pages can then
+   use it as the edge condition.
 2. Run a single-point, fully turbulent flat-plate case and save the
    boundary-layer case. The **圧縮性境界層プロファイル** page can then use its
    edge state, thickness, and wall shear stress.

@@ -1262,6 +1262,36 @@ def boundary_layer_figures(
         "摩擦係数": _style(friction, "表面摩擦"),
         "せん断・抗力": _style(loads, "壁面荷重"),
     }
+    if np.any(np.isfinite(_numeric(rows, "wall_heat_flux"))):
+        heat = make_subplots(
+            rows=1,
+            cols=3,
+            subplot_titles=("Stanton数 St", "熱伝達率 h", "壁面熱流束 q_w（壁へ正）"),
+        )
+        heat.add_trace(
+            go.Scatter(x=x, y=_numeric(rows, "stanton_number"), name="St"),
+            row=1,
+            col=1,
+        )
+        heat.add_trace(
+            go.Scatter(x=x, y=_numeric(rows, "heat_transfer_coefficient"), name="h"),
+            row=1,
+            col=2,
+        )
+        heat.add_trace(
+            go.Scatter(
+                x=x,
+                y=_converted(rows, "wall_heat_flux", "heat_flux", preferences),
+                name="q_w",
+            ),
+            row=1,
+            col=3,
+        )
+        heat.update_xaxes(title_text=x_title)
+        heat.update_yaxes(title_text="St", row=1, col=1)
+        heat.update_yaxes(title_text="W/(m²·K)", row=1, col=2)
+        heat.update_yaxes(title_text=preferences.heat_flux, row=1, col=3)
+        figures["熱伝達"] = _style(heat, "壁面熱伝達").update_layout(showlegend=False)
     if transition_distance is not None:
         transition = float(from_si(transition_distance, "length", preferences.length))
         for figure in figures.values():
@@ -1366,6 +1396,59 @@ def boundary_layer_profile_figures(
         "熱物性": _style(properties, "温度・密度・粘性係数"),
         "局所流れ": _style(local, "Mach数と動圧"),
     }
+
+
+def laminar_boundary_layer_profile_figures(
+    rows: tuple[Row, ...], preferences: UnitPreferences
+) -> dict[str, go.Figure]:
+    """Create velocity, temperature, property, and Mach figures against y/delta_99."""
+    outer = _numeric(rows, "outer_coordinate")
+
+    def against_height(
+        key: str, name: str, values: np.ndarray | None = None
+    ) -> go.Scatter:
+        return go.Scatter(
+            x=_numeric(rows, key) if values is None else values, y=outer, name=name
+        )
+
+    velocity = go.Figure(against_height("velocity_ratio", "U/U_e"))
+    velocity.update_xaxes(title_text="U/U_e")
+    temperature = go.Figure(
+        against_height(
+            "temperature",
+            "T",
+            _converted(rows, "temperature", "temperature", preferences),
+        )
+    )
+    temperature.update_xaxes(title_text=f"T [{preferences.temperature}]")
+    properties = make_subplots(
+        rows=1, cols=2, subplot_titles=("密度 ρ", "粘性係数 μ"), shared_yaxes=True
+    )
+    properties.add_trace(
+        against_height(
+            "density", "ρ", _converted(rows, "density", "density", preferences)
+        ),
+        row=1,
+        col=1,
+    )
+    properties.add_trace(against_height("dynamic_viscosity", "μ"), row=1, col=2)
+    properties.update_xaxes(title_text=preferences.density, row=1, col=1)
+    properties.update_xaxes(title_text="Pa·s", row=1, col=2)
+    mach = go.Figure(against_height("local_mach_number", "M"))
+    mach.update_xaxes(title_text="局所 Mach")
+    figures = {
+        "速度分布": _style(velocity, "層流境界層の速度分布"),
+        "温度分布": _style(temperature, "層流境界層の温度分布"),
+        "熱物性": _style(properties, "密度・粘性係数"),
+        "局所Mach": _style(mach, "局所Mach数"),
+    }
+    for figure in (velocity, temperature, mach):
+        figure.update_yaxes(title_text="y/δ₉₉")
+    properties.update_yaxes(title_text="y/δ₉₉", row=1, col=1)
+    properties.update_layout(showlegend=False)
+    for figure in figures.values():
+        figure.update_layout(hovermode="y unified")
+    return figures
 
 
 def protrusion_shape_figure(

@@ -7,6 +7,24 @@ These notes cover pages in the **粘性流れ** (viscous flow) and **熱物性**
 they pass results to each other and to **突起抗力** is described in
 :doc:`index`.
 
+Flat-plate heat transfer and laminar profiles
+---------------------------------------------
+
+With **圧縮性を考慮** selected, the **平板境界層** page also reports the Stanton
+number, the heat-transfer coefficient, and the wall heat flux, with heat flux
+into the wall positive. The page uses the default Reynolds-analogy factors
+described in :doc:`../models/flat_plate_boundary_layer`; they cannot be changed
+in the GUI.
+
+The **層流境界層プロファイル** page gives the velocity, temperature, density,
+viscosity, and local Mach number through :math:`\delta_{99}` at one station, with
+the same wall quantities. It takes only the edge velocity, density, and
+temperature: the Mach number and edge viscosity follow from them, using air and
+the Sutherland law. The **平板境界層** page takes those two values as separate
+inputs, so it matches this page only if they agree. The profile page assumes a
+laminar layer at the given position and does not test for transition. It has no
+sweep mode.
+
 Aerodynamic heating
 -------------------
 

@@ -460,10 +460,10 @@ def similarity_profile(
     position = CubicSpline(stretched(nodes), nodes)(
         thickness_fraction * stretched(edge)
     )
-    return (
-        np.asarray(velocity(position), dtype=np.float64),
-        np.asarray(temperature(position), dtype=np.float64),
-    )
+    velocity_ratio = np.asarray(velocity(position), dtype=np.float64)
+    # No slip holds exactly; the spline only reproduces it to round-off.
+    velocity_ratio[thickness_fraction == 0.0] = 0.0
+    return velocity_ratio, np.asarray(temperature(position), dtype=np.float64)
 
 
 def similarity_coefficients(
