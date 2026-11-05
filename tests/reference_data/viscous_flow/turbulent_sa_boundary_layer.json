@@ -17,7 +17,7 @@
   },
   "turbulence": "standard SA-noft2, in which density does not appear; edge nu_tilde/nu_e = 3; marched from the leading edge",
   "wall_temperature": "Tw = ratio * Tr with Tr = Te (1 + Pr^(1/3) (gamma-1)/2 Me^2), or Tw = 300 K for M5-TW300",
-  "normalization": "Re_x = rho_e U_e x/mu_e; cf uses edge dynamic pressure; delta99 at u/Ue = 0.99; displacement integrated through delta99; momentum thickness integrated to the edge",
+  "normalization": "Re_x = rho_e U_e x/mu_e; cf uses edge dynamic pressure; delta99 at u/Ue = 0.99; displacement integrated through delta99; momentum thickness integrated to the edge; wall_heat_flux_coefficient is q_w/(rho_e U_e cp Te), positive into the wall",
   "numerics": {
     "eta_grid": "geometric, first point 7e-4, ratio 1.04, eta_max 150",
     "streamwise": "BDF2, 300 geometric stations from x_end 1e-8 to x_end, output x inserted",

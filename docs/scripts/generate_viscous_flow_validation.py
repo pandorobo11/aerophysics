@@ -505,6 +505,7 @@ def _turbulent_sa_comparison(api: tuple[object, ...]) -> str:
         "     - :math:`\\delta_{99}`",
         "     - :math:`\\delta^*`",
         "     - :math:`\\theta`",
+        "     - :math:`q_w`",
     ]
     for row in rows:
         temperature = float(row["edge_temperature_K"])
@@ -535,12 +536,22 @@ def _turbulent_sa_comparison(api: tuple[object, ...]) -> str:
                 (result.momentum_thickness, "momentum_over_x"),
             )
         ]
+        ratio = float(row["wall_to_recovery_temperature_ratio"])
+        # An adiabatic correlation wall has no flux to compare.
+        heat_flux = "n/a"
+        if ratio != 1.0:
+            coefficient = float(result.wall_heat_flux) / (
+                reynolds * viscosity * gas.cp * temperature
+            )
+            expected = float(row["wall_heat_flux_coefficient"])
+            heat_flux = f"{100.0 * (coefficient / expected - 1.0):+.1f}%"
         lines.extend(
             [
                 f"   * - {row['case']}",
-                f"     - {float(row['wall_to_recovery_temperature_ratio']):.2f}",
+                f"     - {ratio:.2f}",
                 f"     - {reynolds:.0e}",
                 *(f"     - {value:+.1f}%" for value in differences),
+                f"     - {heat_flux}",
             ]
         )
     return "\n".join(lines)
