@@ -18,6 +18,13 @@ rho inside the diffusion term, the trip term ft2 is omitted, and the edge value
 is nu_tilde = 3 nu_e. At x = 0 every streamwise term vanishes, so the leading
 edge is a regular starting profile in these variables.
 
+A damped, fully coupled Newton iteration solves the same discrete transport
+system as the original Picard iteration. Local trapezoidal constraints for f
+and Y give five unknowns per node and a block-tridiagonal Jacobian, evaluated
+by three-color finite differences and solved with banded LAPACK. Stations
+that fail Newton (including positivity-clipped SA fixed points) restart with
+the original relaxed Picard iteration.
+
 No production boundary-layer correlation, fitted thickness coefficient or
 package model is used in this solver; the Sutherland law is evaluated here.
 """
@@ -129,7 +136,12 @@ class Quantities:
 
 
 class TurbulentSABoundaryLayer:
-    """Downstream march for one constant edge state and wall temperature."""
+    """Downstream march for one constant edge state and wall temperature.
+
+    Set use_newton=False for the original Picard-only march. The counters
+    newton_iterations (including failed attempts) and picard_fallbacks reset
+    at the beginning of each march.
+    """
 
     def __init__(
         self,
@@ -140,6 +152,7 @@ class TurbulentSABoundaryLayer:
         unit_reynolds: float = UNIT_REYNOLDS,
         edge_sa_ratio: float = EDGE_SA_RATIO,
         eta: Array | None = None,
+        use_newton: bool = True,
     ) -> None:
         self.mach = mach
         self.edge_temperature = edge_temperature
@@ -148,6 +161,28 @@ class TurbulentSABoundaryLayer:
         self.edge_sa_ratio = edge_sa_ratio
         self.eta = grid() if eta is None else eta
         self.heating = (GAMMA - 1.0) * mach**2
+        self.use_newton = use_newton
+        self.newton_iterations = 0
+        self.picard_fallbacks = 0
+        self._h = np.diff(self.eta)
+        left, right = self._h[:-1], self._h[1:]
+        self._width = (left + right) / 2.0
+        self._gradient = np.array(
+            [
+                -right / (left * (left + right)),
+                (right - left) / (left * right),
+                left / (right * (left + right)),
+            ]
+        )
+        node, offset, equation, variable = np.indices((len(self.eta), 3, 5, 5))
+        neighbor = node + offset - 1
+        valid = (neighbor >= 0) & (neighbor < len(self.eta))
+        self._band_indices = (
+            node[valid],
+            neighbor[valid],
+            equation[valid],
+            variable[valid],
+        )
 
     def chapman_rubesin(self, g: Array) -> Array:
         """C = rho mu/(rho_e mu_e) for the Sutherland law."""
@@ -161,6 +196,194 @@ class TurbulentSABoundaryLayer:
         n = np.full_like(u, self.edge_sa_ratio)
         n[0] = 0.0
         return Station(u, g, n, _cumulative(u, self.eta))
+
+    def _streamwise(
+        self, history: list[Station], positions: list[float], x: float
+    ) -> tuple[float, Array]:
+        """The same variable-step BDF coefficients as the Picard iteration."""
+        last = history[-1]
+        old = np.array([last.f, last.u, last.g, last.n])
+        if len(positions) >= 2:
+            a1, a2 = x - positions[-1], x - positions[-2]
+            c0 = 1.0 / a1 + 1.0 / a2
+            c1, c2 = -a2 / (a1 * (a2 - a1)), a1 / (a2 * (a2 - a1))
+            previous = history[-2]
+            old = c1 * old + c2 * np.array(
+                [previous.f, previous.u, previous.g, previous.n]
+            )
+        else:
+            c0 = 1.0 / (x - positions[-1])
+            old *= -c0
+        return c0, old
+
+    def _residual(self, state: Array, x: float, c0: float, old: Array) -> Array:
+        """Unclipped Picard equations for (..., 5, N) arrays (f, u, g, n, Y).
+
+        f and Y have local trapezoidal constraints, including at the edge.
+        All transport rows depend only on the adjacent nodes. In particular,
+        the cb2 term multiplies the nonuniform three-point gradient by the
+        distinct centered difference used in the Picard convection operator.
+        """
+        f, u, g, n, distance = np.moveaxis(state, -2, 0)
+        h, width = self._h, self._width
+        c = self.chapman_rubesin(g)
+        chi = n / (c * g**2)
+        eddy = chi * _fv1(chi)
+        effective = c * (1.0 + eddy)
+        conductivity = c / PRANDTL * (1.0 + eddy * PRANDTL / TURBULENT_PRANDTL)
+        convection = f[..., 1:-1] + 2.0 * x * (c0 * f[..., 1:-1] + old[0, 1:-1])
+
+        def transport(value: Array, coefficient: Array, lagged: Array) -> Array:
+            flux = (
+                (coefficient[..., 1:] + coefficient[..., :-1])
+                / 2.0
+                * np.diff(value)
+                / h
+            )
+            return (
+                np.diff(flux) / width
+                + convection * (value[..., 2:] - value[..., :-2]) / (2.0 * width)
+                - 2.0 * x * u[..., 1:-1] * (c0 * value[..., 1:-1] + lagged[1:-1])
+            )
+
+        def gradient(value: Array) -> Array:
+            return (
+                self._gradient[0] * value[..., :-2]
+                + self._gradient[1] * value[..., 1:-1]
+                + self._gradient[2] * value[..., 2:]
+            )
+
+        slope = gradient(u)
+        nk, gk, ck = np.maximum(n[..., 1:-1], 0.0), g[..., 1:-1], c[..., 1:-1]
+        distance = distance[..., 1:-1]
+        chik = nk / (ck * gk**2)
+        fv2 = 1.0 - chik / (1.0 + chik * _fv1(chik))
+        vorticity = math.sqrt(2.0 * self.unit_reynolds * x) * np.abs(slope) / gk
+        extra = nk * fv2 / (KAPPA**2 * distance**2)
+        limited = vorticity + vorticity * (
+            CV2**2 * vorticity + CV3 * extra
+        ) / np.maximum((CV3 - 2.0 * CV2) * vorticity - extra, 1e-30)
+        modified = np.maximum(
+            np.where(extra >= -CV2 * vorticity, vorticity + extra, limited), 1e-12
+        )
+        r = np.minimum(nk / np.maximum(modified * KAPPA**2 * distance**2, 1e-30), 10.0)
+        r6 = r + CW2 * (r**6 - r)
+        fw = r6 * ((1.0 + CW3**6) / (r6**6 + CW3**6)) ** (1.0 / 6.0)
+        residual = np.empty_like(state)
+        residual[..., 0, 0] = f[..., 0]
+        residual[..., 0, 1:] = np.diff(f) - h / 2.0 * (u[..., 1:] + u[..., :-1])
+        residual[..., 4, 0] = state[..., 4, 0]
+        residual[..., 4, 1:] = np.diff(state[..., 4, :]) - h / 2.0 * (
+            g[..., 1:] + g[..., :-1]
+        )
+        residual[..., 1, 1:-1] = transport(u, effective, old[1])
+        residual[..., 2, 1:-1] = (
+            transport(g, conductivity, old[2])
+            + self.heating * effective[..., 1:-1] * slope**2
+        )
+        residual[..., 3, 1:-1] = (
+            transport(n, (c + n / g**2) / SIGMA, old[3])
+            + CB2
+            / SIGMA
+            * gradient(n)
+            * (n[..., 2:] - n[..., :-2])
+            / (2.0 * width)
+            / gk**2
+            + CB1 * modified * nk
+            - CW1 * fw * nk**2 / distance**2
+        )
+        residual[..., 1:4, 0] = state[..., 1:4, 0] - np.array(
+            [0.0, self.wall_ratio, 0.0]
+        )
+        residual[..., 1:4, -1] = state[..., 1:4, -1] - np.array(
+            [1.0, 1.0, self.edge_sa_ratio]
+        )
+        return residual
+
+    def _jacobian(
+        self, state: Array, residual: Array, x: float, c0: float, old: Array
+    ) -> Array:
+        """Three-color finite differences, assembled directly into LAPACK bands."""
+        step = np.sqrt(np.finfo(float).eps) * np.maximum(np.abs(state), 1.0)
+        perturbed = np.broadcast_to(state, (15, *state.shape)).copy()
+        variables, nodes = np.indices(state.shape)
+        perturbed[5 * (nodes % 3) + variables, variables, nodes] += step
+        difference = self._residual(perturbed, x, c0, old) - residual
+        row, col, equation, variable = self._band_indices
+        bands = np.zeros((19, state.size))
+        bands[9 + 5 * (row - col) + equation - variable, 5 * col + variable] = (
+            difference[5 * (col % 3) + variable, equation, row] / step[variable, col]
+        )
+        return bands
+
+    def _solve_newton(
+        self, history: list[Station], positions: list[float], x: float
+    ) -> Station | None:
+        """Damped coupled Newton solve; None requests a fresh Picard solve."""
+        c0, old = self._streamwise(history, positions, x)
+        last = history[-1]
+        state = np.array(
+            [last.f, last.u, last.g, last.n, _cumulative(last.g, self.eta)]
+        )
+        for _ in range(50):
+            self.newton_iterations += 1
+            residual = self._residual(state, x, c0, old)
+            bands = self._jacobian(state, residual, x, c0, old)
+            try:
+                update = (
+                    solve_banded((9, 9), bands, -residual.T.ravel(), check_finite=False)
+                    .reshape(-1, 5)
+                    .T
+                )
+            except np.linalg.LinAlgError:
+                return None
+            if not np.all(np.isfinite(update)):
+                return None
+            change = max(
+                float(np.max(np.abs(update[1]))),
+                float(np.max(np.abs(update[2]))) / max(1.0, float(state[2].max())),
+                float(np.max(np.abs(update[3]))) / max(1.0, float(state[3].max())),
+            )
+            damping = min(
+                1.0,
+                0.7 / max(float(np.max(np.abs(update[2]) / state[2])), 1e-30),
+                0.5 / max(float(np.max(np.abs(update[1]))), 1e-30),
+            )
+            negative = update[3, 1:-1] < 0.0
+            if np.any(negative):
+                damping = min(
+                    damping,
+                    float(
+                        np.min(
+                            -0.9 * state[3, 1:-1][negative] / update[3, 1:-1][negative]
+                        )
+                    ),
+                )
+            # Picard can converge to a clipped n=0 fixed point at the outer
+            # turbulent front; the unclipped transport equation then has no
+            # admissible Newton step. Do not spend 50 iterations at that bound.
+            if damping < 1e-4:
+                return None
+            state += damping * update
+            # Enforce exact Dirichlet values to avoid boundary roundoff.
+            state[:4, 0] = (0.0, 0.0, self.wall_ratio, 0.0)
+            state[4, 0] = 0.0
+            state[1:4, -1] = (1.0, 1.0, self.edge_sa_ratio)
+            if change < TOLERANCE:
+                return Station(
+                    state[1], state[2], state[3], _cumulative(state[1], self.eta)
+                )
+        return None
+
+    def _station(
+        self, history: list[Station], positions: list[float], x: float
+    ) -> Station:
+        if self.use_newton:
+            result = self._solve_newton(history, positions, x)
+            if result is not None:
+                return result
+            self.picard_fallbacks += 1
+        return self._solve(history, positions, x)
 
     def _solve(
         self, history: list[Station], positions: list[float], x: float
@@ -281,7 +504,9 @@ class TurbulentSABoundaryLayer:
         self, x_end: float, *, steps: int = STEPS, include: tuple[float, ...] = ()
     ) -> tuple[Array, list[Station]]:
         """Return stations from x = 0 to x_end, with the requested x inserted."""
-        start = self._solve([self._initial()], [-1.0], 0.0)
+        self.newton_iterations = 0
+        self.picard_fallbacks = 0
+        start = self._station([self._initial()], [-1.0], 0.0)
         positions = np.unique(
             np.concatenate(
                 ([0.0], np.geomspace(x_end * 1e-8, x_end, steps - 1), include)
@@ -289,7 +514,7 @@ class TurbulentSABoundaryLayer:
         )
         history, done = [start], [0.0]
         for x in positions[1:]:
-            history.append(self._solve(history, done, float(x)))
+            history.append(self._station(history, done, float(x)))
             done.append(float(x))
         return positions, history
 
@@ -406,6 +631,12 @@ def main() -> None:
                 "output x inserted"
             ),
             "unit_reynolds_per_m": UNIT_REYNOLDS,
+            "solver": (
+                "damped coupled Newton, five unknowns per node (f, u, g, n, Y), "
+                "three-color finite-difference Jacobian and banded LAPACK; "
+                "relaxed Picard fallback, including positivity-clipped SA stations"
+            ),
+            "newton_tolerance": TOLERANCE,
             "picard_tolerance": TOLERANCE,
         },
         "verification": (

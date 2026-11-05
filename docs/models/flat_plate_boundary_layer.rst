@@ -1015,7 +1015,8 @@ turbulent Prandtl number 0.9, :math:`\gamma=1.4` and the Sutherland law
 coefficient or package model. With :math:`\tilde\nu=0` it reproduces the
 compressible laminar similarity solution within 0.01%; halving the streamwise
 step or refining the wall-normal grid changes every tabulated quantity by less
-than 0.1%. Each condition takes about ten seconds to march.
+than 0.1%. Each condition takes about 1--1.5 seconds to march with the coupled Newton
+iteration and occasional Picard fallback (measured locally).
 
 Its stored results are
 ``tests/reference_data/viscous_flow/turbulent_sa_boundary_layer.csv``. The
