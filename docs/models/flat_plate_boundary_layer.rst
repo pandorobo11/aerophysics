@@ -1008,14 +1008,17 @@ zero-pressure-gradient thin-layer equations from the leading edge with the
 term (SA-noft2), in Levy--Lees
 variables, for a calorically perfect gas with constant :math:`Pr=0.72`,
 turbulent Prandtl number 0.9, :math:`\gamma=1.4` and the Sutherland law
-(:math:`S=110.4` K). The SA transport is density weighted, its edge value is
+(:math:`S=110.4` K). The SA transport is the standard form, in which density
+does not appear (:ref:`Allmaras, Johnson and Spalart, 2012
+<ref-allmaras-johnson-spalart-2012>`, section 2.2), its edge value is
 :math:`\tilde\nu=3\nu_e`, and the modified vorticity uses the smooth limiter of
-:ref:`Allmaras, Johnson and Spalart (2012)
-<ref-allmaras-johnson-spalart-2012>`. It uses no correlation, fitted
+the same paper. It uses no correlation, fitted
 coefficient or package model. With :math:`\tilde\nu=0` it reproduces the
-compressible laminar similarity solution within 0.01%; halving the streamwise
-step or refining the wall-normal grid changes every tabulated quantity by less
-than 0.1%. Each condition takes about 1--1.5 seconds to march with the coupled Newton
+compressible laminar similarity solution within 0.01%. Across all tabulated
+rows, the largest change in friction or a thickness is 0.03% with twice the
+streamwise stations, about 0.1% with :math:`\eta` grid ratio 1.02 instead of
+1.04, 0.07% with half the first spacing, and below 0.001% with twice the outer
+boundary :math:`\eta_{\max}=150`. Each condition takes about 1--1.5 seconds to march with the coupled Newton
 iteration and occasional Picard fallback (measured locally).
 
 Its stored results are
@@ -1026,12 +1029,21 @@ temperature. Displacement thickness is integrated through
 
 .. include:: ../_generated/turbulent_sa_comparison.rst
 
-These differences agree with the SU2 standard-SA summaries above: friction
-within 3% at :math:`Re_{x,e}\ge10^7`, and a :math:`\delta_{99}` difference that
-falls by about 5 percentage points per decade of :math:`Re_{x,e}`. At
-:math:`Re_{x,e}=10^6` this model, which is fully turbulent from the leading
-edge, gives 3--7% higher friction than SA, whose turbulence develops from the
-edge value of :math:`\tilde\nu`. The reference is a RANS model result, not a
+Friction agrees within 3% at :math:`Re_{x,e}\ge10^7`, as in the SU2 standard-SA
+summaries above. At M0.3 the :math:`\delta_{99}` differences also fall within
+those summaries at :math:`Re_{x,e}=10^7` and :math:`10^8` and just above them
+at :math:`10^6`. On cold supersonic walls they are lower than the summaries at
+:math:`Re_{x,e}=10^7`: :math:`-3.0` to :math:`-3.5\%` here, against
+:math:`+0.2` to :math:`+1.1\%` for SU2 at different walls and unit Reynolds
+numbers. This gap has not been explained, so this reference does not replace
+the SU2 comparison.
+
+At :math:`Re_{x,e}=10^6` this model, which is fully turbulent from the leading
+edge, gives 5.5--7.4% higher friction than SA, whose turbulence develops from
+the edge value of :math:`\tilde\nu`, except at M10. There SA stays nearly
+laminar up to about :math:`Re_{x,e}=10^5` and keeps that thicker layer
+downstream: friction differs by +0.8% while :math:`\delta_{99}` differs by
+:math:`-14.6\%`, narrowing to :math:`-3.2\%` at :math:`10^7`. The reference is a RANS model result, not a
 measurement: SA itself gives incompressible :math:`\delta_{99}` about 7--9%
 above the measurements cited above.
 

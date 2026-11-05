@@ -9,14 +9,16 @@ so that y = x sqrt(2/Re_x) Y:
   (C(1+eps) f'')' + f f''                         = 2x (f' f'_x - f'' f_x)
   (C/Pr (1 + eps Pr/Prt) g')' + f g'
       + (gamma-1) Me^2 C (1+eps) f''^2            = 2x (f' g_x - g' f_x)
-  ((C + n/g^2) n')'/sigma + cb2 n'^2/(sigma g^2) + f n'
+  ((C g + n/g) n')'/(sigma g) + cb2 n'^2/(sigma g^2) + f n'
       + cb1 St n - cw1 fw n^2/Y^2                 = 2x (f' n_x - n' f_x)
 
 with St = sqrt(2 Re_x)|f''|/g + n fv2/(kappa^2 Y^2), chi = n/(C g^2), and
-eps = mu_t/mu = chi fv1. The SA transport is the density-weighted form with
-rho inside the diffusion term, the trip term ft2 is omitted, and the edge value
-is nu_tilde = 3 nu_e. At x = 0 every streamwise term vanishes, so the leading
-edge is a regular starting profile in these variables.
+eps = mu_t/mu = chi fv1. The SA transport is the standard form, in which density
+does not appear (Allmaras, Johnson and Spalart 2012, section 2.2). Its diffusion
+is discretized as ((C + n/g^2) n')'/sigma + (C + n/g^2)(g'/g) n'/sigma. The trip
+term ft2 is omitted, and the edge value is nu_tilde = 3 nu_e. At x = 0 every
+streamwise term vanishes, so the leading edge is a regular starting profile in
+these variables.
 
 A damped, fully coupled Newton iteration solves the same discrete transport
 system as the original Picard iteration. Local trapezoidal constraints for f
@@ -83,7 +85,7 @@ def recovery_temperature(mach: float, edge_temperature: float) -> float:
     )
 
 
-def grid(ratio: float = 1.04, eta_max: float = 90.0, first: float = 7e-4) -> Array:
+def grid(ratio: float = 1.04, eta_max: float = 150.0, first: float = 7e-4) -> Array:
     """Geometric eta grid; the first point lies well inside y+ = 1."""
     count = math.ceil(math.log(eta_max / first) / math.log(ratio)) + 2
     eta = np.concatenate(([0.0], first * ratio ** np.arange(count)))
@@ -221,8 +223,9 @@ class TurbulentSABoundaryLayer:
 
         f and Y have local trapezoidal constraints, including at the edge.
         All transport rows depend only on the adjacent nodes. In particular,
-        the cb2 term multiplies the nonuniform three-point gradient by the
-        distinct centered difference used in the Picard convection operator.
+        the cb2 and density-gradient terms multiply nonuniform three-point
+        gradients by the distinct centered difference used in the Picard
+        convection operator.
         """
         f, u, g, n, distance = np.moveaxis(state, -2, 0)
         h, width = self._h, self._width
@@ -283,12 +286,12 @@ class TurbulentSABoundaryLayer:
         )
         residual[..., 3, 1:-1] = (
             transport(n, (c + n / g**2) / SIGMA, old[3])
-            + CB2
-            / SIGMA
-            * gradient(n)
+            + (
+                CB2 / SIGMA * gradient(n) / gk**2
+                + (ck + n[..., 1:-1] / gk**2) / SIGMA * gradient(g) / gk
+            )
             * (n[..., 2:] - n[..., :-2])
             / (2.0 * width)
-            / gk**2
             + CB1 * modified * nk
             - CW1 * fw * nk**2 / distance**2
         )
@@ -474,7 +477,11 @@ class TurbulentSABoundaryLayer:
             )
             diffusivity = c + n / g**2
             face = (diffusivity[1:] + diffusivity[:-1]) / 2.0
-            sa_convection = convection + CB2 / SIGMA * np.gradient(n, eta)[1:-1] / gk**2
+            sa_convection = (
+                convection
+                + CB2 / SIGMA * np.gradient(n, eta)[1:-1] / gk**2
+                + diffusivity[1:-1] / SIGMA * np.gradient(g, eta)[1:-1] / gk
+            )
             n_new = _tridiagonal(
                 face[:-1] / SIGMA / h[:-1] / width - sa_convection / (2.0 * width),
                 -(face[:-1] / h[:-1] + face[1:] / h[1:]) / SIGMA / width
@@ -612,7 +619,7 @@ def main() -> None:
             "mu_over_mu_e": "g^1.5 (Te+S)/(g Te+S)",
         },
         "turbulence": (
-            "SA-noft2, density-weighted with rho inside diffusion; "
+            "standard SA-noft2, in which density does not appear; "
             f"edge nu_tilde/nu_e = {EDGE_SA_RATIO:g}; marched from the leading edge"
         ),
         "wall_temperature": (
@@ -625,7 +632,7 @@ def main() -> None:
             "thickness integrated to the edge"
         ),
         "numerics": {
-            "eta_grid": "geometric, first point 7e-4, ratio 1.04, eta_max 90",
+            "eta_grid": "geometric, first point 7e-4, ratio 1.04, eta_max 150",
             "streamwise": (
                 f"BDF2, {STEPS} geometric stations from x_end 1e-8 to x_end, "
                 "output x inserted"
@@ -641,8 +648,10 @@ def main() -> None:
         },
         "verification": (
             "laminar limit (edge nu_tilde = 0) matches the compressible similarity "
-            "solution within 0.01%; halving the streamwise step or refining the "
-            "eta grid changes cf and thicknesses by less than 0.1%"
+            "solution within 0.01%. Across all stored rows, the largest change in "
+            "cf and the thicknesses was 0.03% with 600 streamwise stations, about "
+            "0.1% with eta ratio 1.02, 0.07% with half the first spacing, and "
+            "below 0.001% with eta_max 300"
         ),
     }
     (DIRECTORY / f"{STEM}.json").write_text(

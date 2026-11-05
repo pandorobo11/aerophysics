@@ -15,16 +15,16 @@
     "sutherland_temperature_K": 110.4,
     "mu_over_mu_e": "g^1.5 (Te+S)/(g Te+S)"
   },
-  "turbulence": "SA-noft2, density-weighted with rho inside diffusion; edge nu_tilde/nu_e = 3; marched from the leading edge",
+  "turbulence": "standard SA-noft2, in which density does not appear; edge nu_tilde/nu_e = 3; marched from the leading edge",
   "wall_temperature": "Tw = ratio * Tr with Tr = Te (1 + Pr^(1/3) (gamma-1)/2 Me^2), or Tw = 300 K for M5-TW300",
   "normalization": "Re_x = rho_e U_e x/mu_e; cf uses edge dynamic pressure; delta99 at u/Ue = 0.99; displacement integrated through delta99; momentum thickness integrated to the edge",
   "numerics": {
-    "eta_grid": "geometric, first point 7e-4, ratio 1.04, eta_max 90",
+    "eta_grid": "geometric, first point 7e-4, ratio 1.04, eta_max 150",
     "streamwise": "BDF2, 300 geometric stations from x_end 1e-8 to x_end, output x inserted",
     "unit_reynolds_per_m": 10000000.0,
     "solver": "damped coupled Newton, five unknowns per node (f, u, g, n, Y), three-color finite-difference Jacobian and banded LAPACK; relaxed Picard fallback, including positivity-clipped SA stations",
     "newton_tolerance": 1e-09,
     "picard_tolerance": 1e-09
   },
-  "verification": "laminar limit (edge nu_tilde = 0) matches the compressible similarity solution within 0.01%; halving the streamwise step or refining the eta grid changes cf and thicknesses by less than 0.1%"
+  "verification": "laminar limit (edge nu_tilde = 0) matches the compressible similarity solution within 0.01%. Across all stored rows, the largest change in cf and the thicknesses was 0.03% with 600 streamwise stations, about 0.1% with eta ratio 1.02, 0.07% with half the first spacing, and below 0.001% with eta_max 300"
 }

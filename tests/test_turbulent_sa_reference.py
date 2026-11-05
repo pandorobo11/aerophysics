@@ -88,7 +88,55 @@ def test_van_driest_wall_temperature_stays_within_sa_reference_bands() -> None:
         label = f"{row['case']} Re_x={reynolds:g}"
         # Fully turbulent VD2 versus SA developing from the leading edge.
         assert abs(friction - 1) < (0.03 if reynolds >= 1e7 else 0.08), label
-        assert abs(thickness - 1) < 0.12, label
+        # At Re_x = 1e6 SA can still carry the thick laminar run from the edge.
+        assert abs(thickness - 1) < (0.12 if reynolds >= 1e7 else 0.16), label
+
+
+def test_sa_diffusion_matches_standard_operator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # With C = 1, standard SA diffusion in Levy--Lees variables is
+    # ((g + n/g) n')'/(sigma g) + cb2 n'^2/(sigma g^2). Other SA terms are removed.
+    namespace = TurbulentSABoundaryLayer._residual.__globals__
+    monkeypatch.setitem(namespace, "CB1", 0.0)
+    monkeypatch.setitem(namespace, "CW1", 0.0)
+    errors = []
+    for nodes in (401, 801):
+        eta = np.linspace(0.0, 4.0, nodes)
+        solver = TurbulentSABoundaryLayer(5.0, 220.0, 300.0, eta=eta)
+        monkeypatch.setattr(solver, "chapman_rubesin", np.ones_like)
+        decay = np.exp(-eta)
+        g, dg = 1.0 + 3.0 * decay, -3.0 * decay
+        n, dn, ddn = 5.0 * (1.0 - decay), 5.0 * decay, -5.0 * decay
+        coefficient = g + n / g
+        slope = dg + dn / g - n * dg / g**2
+        expected = (slope * dn + coefficient * ddn) / (namespace["SIGMA"] * g) + (
+            namespace["CB2"] * dn**2 / (namespace["SIGMA"] * g**2)
+        )
+        state = np.array([0.0 * eta, 0.0 * eta, g, n, 1.0 + eta])
+        residual = solver._residual(state, 0.0, 0.0, np.zeros_like(state))
+        errors.append(np.max(np.abs(residual[3, 1:-1] - expected[1:-1])))
+    assert errors[0] < 2e-3
+    assert errors[0] / errors[1] > 3.5
+
+
+@pytest.mark.generated_assets
+def test_sa_reference_is_insensitive_to_outer_boundary() -> None:
+    # Low Mach and high Reynolds number put delta99 closest to the outer boundary.
+    label, mach, edge_temperature, ratio = _SOLVER["CASES"][0]
+    wall = _SOLVER["wall_temperature"](mach, edge_temperature, ratio)
+    results = []
+    for eta in (None, _SOLVER["grid"](eta_max=300.0)):
+        solver = TurbulentSABoundaryLayer(mach, edge_temperature, wall, eta=eta)
+        positions, history = solver.march(10.0)
+        results.append(solver.quantities(float(positions[-1]), history[-1]))
+    for name in QUANTITIES:
+        assert_allclose(
+            getattr(results[0], name),
+            getattr(results[1], name),
+            rtol=1e-4,
+            err_msg=f"{label}: {name}",
+        )
 
 
 @pytest.mark.generated_assets
