@@ -113,6 +113,8 @@ Assumptions and range
   noses are not represented.
 * No transition, roughness, suction, blowing, wall curvature, or chemical
   reactions, and no interaction with the outer flow.
+* Wall temperature changes over distances much longer than the boundary-layer
+  thickness. Unlike a pressure change, a shorter change does not raise a warning.
 
 ``BoundaryLayerRegime.TURBULENT`` and ``TRANSITIONAL`` raise
 ``ModelRangeError``.

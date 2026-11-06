@@ -680,6 +680,8 @@ def _marching_laminar_verification(api: tuple[object, ...]) -> str:
     from aerophysics.exceptions import BoundaryLayerSeparationError
     from aerophysics.marching_boundary_layer import (
         BoundaryLayerEdge,
+        _EdgeInterpolant,
+        _result,
         marching_boundary_layer,
     )
 
@@ -785,6 +787,39 @@ def _marching_laminar_verification(api: tuple[object, ...]) -> str:
                 float(plate.momentum_thickness),
             )
         )
+    wall_change = np.array([0.0, 0.5, 0.51, 1.0])
+    wall_edge = BoundaryLayerEdge.from_pressure(
+        wall_change,
+        np.full(4, 2e4),
+        total_pressure=1.6e5,
+        total_temperature=500.0,
+    )
+    wall = np.array([300.0, 300.0, 400.0, 400.0])
+    wall_result = marching_boundary_layer(
+        wall_edge, regime=regime.LAMINAR, wall_temperature=wall
+    )
+    interpolant = _EdgeInterpolant(wall_edge, wall)
+    stations = np.unique(np.concatenate((wall_change[1:], np.linspace(0.5, 0.51, 161))))
+    refined = _result(
+        wall_edge,
+        interpolant,
+        march(
+            interpolant.state,
+            stations,
+            eta=eta,
+            prandtl_number=0.72,
+            viscosity_model=wall_edge.viscosity_model,
+        ),
+        0.72,
+    )
+    rows.append(
+        (
+            "Wall rises 100 K over 1 cm, s = 0.51 m",
+            "q_w",
+            float(wall_result.wall_heat_flux[1]),
+            float(refined.wall_heat_flux[np.argmin(np.abs(stations - 0.51))]),
+        )
+    )
     momentum, energy = _integral_balances(marching)
     lines = [
         ".. list-table:: Marching laminar boundary-layer verification",

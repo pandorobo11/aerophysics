@@ -35,8 +35,10 @@ _STEP_GROWTH = 1.25
 _MAX_STEP_RATIO = 2.0
 _MERGE_WITH_TARGET = 1.3
 _RELATIVE_STEP = 0.03
-_MAX_LOG_VELOCITY_CHANGE = 0.01
-_MAX_LOG_SHEAR_CHANGE = 0.05
+_MAX_LOG_VELOCITY_CHANGE = 0.000625
+_MAX_LOG_SHEAR_CHANGE = 0.0125
+_MAX_HEAT_TRANSFER_CHANGE = 0.02
+_HEAT_TRANSFER_FLOOR = 0.1
 
 _SEPARATION_SHEAR_FRACTION = 0.25
 _SEPARATION_FIT_POINTS = 6
@@ -353,6 +355,25 @@ def _build_solution(
     )
 
 
+def _step_is_resolved(previous: _Station, station: _Station, edge: StationEdge) -> bool:
+    """Reject a converged step that changes the wall shear or heat flux too much."""
+    shear = station.wall_velocity_slope
+    if shear <= 0.0:
+        return False
+    if abs(np.log(shear / previous.wall_velocity_slope)) > _MAX_LOG_SHEAR_CHANGE:
+        return False
+    if edge.wall_ratio is None:
+        return True
+    # The heat flux can pass through zero, so a relative change needs a floor: the
+    # scale of the wall temperature gradient for a wall-to-recovery difference of
+    # the order of the edge total temperature.
+    slope, earlier = station.wall_temperature_slope, previous.wall_temperature_slope
+    floor = _HEAT_TRANSFER_FLOOR * shear * (1.0 + edge.heating / 2.0)
+    return abs(slope - earlier) <= _MAX_HEAT_TRANSFER_CHANGE * max(
+        abs(slope), abs(earlier), floor
+    )
+
+
 def _separation_position(positions: list[float], shear: list[float]) -> float:
     """Extrapolate the square-root collapse of the wall shear to zero."""
     position = np.asarray(positions[-_SEPARATION_FIT_POINTS:], dtype=np.float64)
@@ -417,10 +438,8 @@ def march(
                 if edge.wall_ratio is not None:
                     guess[2, 0] = edge.wall_ratio
                 station = discretization.solve(guess, edge, coefficient, lagged)
-            if station is not None and not (
-                station.wall_velocity_slope > 0.0
-                and abs(np.log(station.wall_velocity_slope / accepted_shear[-1]))
-                <= _MAX_LOG_SHEAR_CHANGE
+            if station is not None and not _step_is_resolved(
+                history[-1], station, edge
             ):
                 station = None
             if station is None:

@@ -150,6 +150,11 @@ class BoundaryLayerEdge:
         total_pressure = pressure[0] * (total_temperature / temperature[0]) ** (
             gamma / (gamma - 1.0)
         )
+        if np.any(pressure >= total_pressure):
+            raise ValueError(
+                "pressure must stay below the total pressure of the first station; "
+                "the edge state must be isentropic with constant total enthalpy"
+            )
         expected_temperature, expected_velocity = _isentropic_state(
             pressure, total_pressure, total_temperature, self.gas
         )

@@ -76,7 +76,7 @@
      - ``x_sep/L``
      - 0.1198
      - 0.1199
-     - -0.07
+     - -0.06
    * - Howarth image, M0 = 3
      - ``x_sep/L``
      - 0.1198
@@ -102,6 +102,11 @@
      - 2.926e-05
      - 2.926e-05
      - -0.02
+   * - Wall rises 100 K over 1 cm, s = 0.51 m
+     - ``q_w``
+     - -1.205e+04
+     - -1.205e+04
+     - +0.06
    * - Momentum integral, M = 2 to 3, T_w = 300 K
      - median residual
      - --
@@ -111,4 +116,4 @@
      - median residual
      - --
      - --
-     - 0.07
+     - 0.06

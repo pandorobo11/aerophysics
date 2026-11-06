@@ -45,7 +45,10 @@ is Hartree's ``x_s = 0.9589`` for ``U = 1 - x/8`` (:ref:`Hartree, 1939
 solution of ``flat_plate_boundary_layer``. The compressible Howarth case maps
 the linearly retarded flow through the Illingworth--Stewartson transformation,
 which is exact for ``C = Pr = 1`` and an adiabatic wall, so it must separate at
-the same transformed position as the incompressible flow. The integral balances
+the same transformed position as the incompressible flow. The wall-temperature
+row raises the wall by 100 K over 1 cm and compares the heat flux at the end of
+that change with a march through 160 extra stations inside it, on the same
+interpolated wall temperature. The integral balances
 use only the solver's own output and need no reference.
 
 .. include:: ../_generated/marching_laminar_verification.rst
