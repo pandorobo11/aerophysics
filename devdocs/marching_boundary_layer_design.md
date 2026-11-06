@@ -132,8 +132,9 @@ def marching_boundary_layer(
   dataclass で、配列は呼び出し元と共有しません（`tests/test_array_ownership.py` の規約）。
 - **`TRANSITIONAL`:** 第1段階では `ModelRangeError` とします。
 - **許容誤差:** 0.2 の設計決定どおり内部に固定し、引数にしません。
-- **格子:** `eta` は既存の検証で確認済みの幾何格子（比 1.04、`eta_max=150`）を初期値に
-  します。流れ方向は `ln p_e` の PCHIP 補間と、`ln xi`・`ln U_e` の刻み上限で内部的に
+- **格子:** 層流の `eta` は、初回の比 1.015、最大間隔 0.05、`eta_max=16`（519節点）です。
+  比 1.04 では基準の 0.05% を満たせませんでした。SA は既存の検証で確認済みの幾何格子
+  （比 1.04、`eta_max=150`）を初期値に再評価します。流れ方向は `ln p_e` の PCHIP 補間と、`ln xi`・`ln U_e` の刻み上限で内部的に
   細分し、結果は利用者の `distance` で返します。上限値は検証で決めます。
 
 ```python
@@ -200,15 +201,28 @@ class MarchingBoundaryLayerResult:
 | --- | --- | --- | --- |
 | V1 | ZPG 極限と `turbulent_sa_boundary_layer.csv` | 既存の格子不確かさ 0.1% 以内 | 継承のため差0（検証としては自明） |
 | V2 | Falkner–Skan（`beta = -0.15, 0.1, 0.5`）と独立 BVP | `f''(0)` が 0.05% 以内 | 最大 0.017% |
-| V3 | Howarth の線形減速流の剥離位置 | 文献値（約 0.12）と 0.5% 以内。文献値は要照合 | `x/L = 0.1195–0.1196` |
+| V3 | Howarth の線形減速流の剥離位置 | Hartree (ARC R&M 2426) の `x_s = 0.9589`、すなわち `x/L = 0.1199` と 0.5% 以内 | `x/L = 0.1195–0.1196` |
 | V4 | Illingworth–Stewartson 変換（`M0=3`、`Pr=1`、`C=1`、断熱） | V3 の位置と一致。`g` が厳密解 `1+m(1-u^2)` と一致 | V3 と4桁一致、`max abs(dg) = 4.4e-4` |
-| V5 | Cohen–Reshotko の相似解（壁面加熱あり） | NACA TR 1293 の表および独立 BVP と 0.1% 以内 | 未実施 |
+| V5 | Cohen–Reshotko の相似解（壁面加熱あり） | 独立 BVP と 0.05% 以内。NACA TR 1293 Table II は `beta >= 0` の行で 0.2% 以内（表の精度の限界のため） | 未実施 |
 | V6 | 圧縮性層流の ZPG 極限と `_laminar_similarity` | 0.05% 以内 | 未実施（既存スクリプトの記録では 0.01% 以内） |
 | V7 | 運動量積分式（SA、変動外縁） | 中央値 0.05% 以内。上限は実装で設定 | 600分割の中央値 0.004–0.015% |
 | V8 | 全エンタルピー積分式（SA、壁面冷却） | 刻み細分で頭打ちの原因を説明できること | 中央値 0.15–0.23%、下記参照 |
 | V9 | 流れ方向の格子収束 | 300→600 の `Cf` 差 0.3% 以内 | 最大 0.21%（M2→3、幅 0.1） |
 | V10 | 壁法線方向の格子収束 | 比 1.04→1.02 の `Cf` 差 0.3% 以内 | 未実施 |
-| V11 | 圧力勾配つき SA の外部比較 | SU2 の超音速膨張ケース、NASA TMR の bump 系ケースなど | 未実施。データ確認後に基準を設定 |
+| V11 | 圧力勾配つき SA の外部比較 | SU2 の超音速膨張ケース、NASA TMR の 2D bump（`M=0.2`、CFD どうしの比較）、ARC R&M 3633（`M=0.6–2.8` の局所 `Cf` 実験、精度は約 ±0.0002） | 未実施。データ確認後に基準を設定 |
+
+**層流の正式実装（[#81](https://github.com/pandorobo11/aerophysics/pull/81)）の結果:** V2 は
+最大 0.03%、V3 は −0.07%、V4 は 0.01% 未満、V5 は BVP と最大 0.01%、Table II と最大
+0.07%、V6 は最大 0.02%、V7 と V8 は M2→3 の中央値がそれぞれ 0.02% と 0.07% でした。
+V10 は2次精度で収束し、Richardson 推定の誤差は壁面せん断で約 0.01%、熱流束で約 0.08% です。
+
+**V3 の基準値について:** 二次資料には `x/L = 0.125` とするものがありますが、根拠が
+確認できないので使いません。
+
+**V11 の注意点:** TMR は [tmbwg.github.io/turbmodels](https://tmbwg.github.io/turbmodels/index.html)
+へ移転しました。2D bump の `Cf` は無次元の `x` に対する値で、最大壁面傾斜が 12.8° あるので
+`s` と `x` を区別します。`Cf` の正規化は要確認です。円錐–円柱の肩を挟む `Cf(s)` の計測データは
+今回の調査では見つかりませんでした。R&M 3633 の物体は、円錐状の先端を持つ細長い軸対称物体です。
 
 **V8 の注意点:** エネルギー収支の中央値は流れ方向に細分してもほとんど減りません
 （例: 0.227%→0.152%、0.167%→0.186%）。壁法線方向の格子、または非保存形の離散化が
@@ -222,8 +236,8 @@ class MarchingBoundaryLayerResult:
 
 ### テストの配置
 
-- 通常の pytest: API、例外、配列の非共有、V2、V4、V6、V7、V9 の高速版
-- `scripts/check-generated.sh`: V1、V5、V10、V11 と文書用の表・図
+- 通常の pytest: API、例外、配列の非共有、V2〜V10。SA の V1 と V7〜V10 は高速版
+- `scripts/check-generated.sh`: 文書用の検証表と、計算量の大きい SA の V1、V11
 - フォールバックと失敗経路も分岐カバレッジ 95% の対象とする
 
 ## 7. 実装の順序と第2段階
@@ -234,8 +248,10 @@ class MarchingBoundaryLayerResult:
 
 第2段階では `xi`、`R`、`y` に `r_w` が入るだけで、薄い層の近似のもとでは
 変換後の方程式の形は変わりません。解析的な検証として、層流の鋭い円錐の `Cf` が同じ `s`
-の平板の `sqrt(3)` 倍になる Mangler の関係を使えます。長い円柱では `delta/r_w` が
-大きくなり得るので、横曲率の無視には `ApplicabilityWarning` を設けます。
+の平板の `sqrt(3)` 倍になる Mangler の関係を使えます（局所値の比で、物体全体の平均 `Cf`
+の比は `2/sqrt(3)` です）。長い円柱では `delta/r_w` が
+大きくなり得るので、横曲率の無視には `ApplicabilityWarning` を設けます。NASA CR-4668 も
+細長い物体では曲率項が効く可能性を指摘しています。
 
 円錐–円柱の形状と外縁条件を組み立てる処理はパッケージに入れず、docs の例として
 示します。円錐部は既存の Taylor–Maccoll 解で求められますが、肩より下流の外縁条件は
@@ -266,9 +282,12 @@ class MarchingBoundaryLayerResult:
 
 ## 10. 参考文献の状態
 
-- `Allmaras, Johnson and Spalart (2012)`、`Levy (1954)`、`Lees (1956)` は既存スクリプトで
-  参照済み。
-- 次は実装前に入手して照合が必要です（`literature/` に未収録）: Howarth (1938)、
-  Cohen and Reshotko (1956, NACA TR 1293)、Harris and Blanchard (1982, NASA TM-83207)、
-  Iyer (1995, NASA CR-4668)。
-- BL2D は方程式と検証ケースの参考にとどめ、名称は使いません。配布条件は未確認です。
+| 状態 | 文献 |
+| --- | --- |
+| 内容を確認済み | Hartree (ARC R&M 2426)、Curle (ARC R&M 3164)、Cohen and Reshotko (NACA TR 1293)、Harris and Blanchard (NASA TM-83207)、Iyer (NASA CR-4668)、Tauber (NASA TP-2914)、Seiff (NACA TN 3284)、Moore (NACA TN 2521) |
+| 書誌情報のみ確認（本文は未入手） | Howarth (1938)、Stewartson (1949)、Illingworth (1949)、Mangler (1948)、Smith and Clutter (1963) |
+
+- Howarth の値は Hartree と Curle の引用で確認しました。Mangler の関係は Tauber、Seiff、Moore で
+  確認しました。原論文との直接の照合は残っています。
+- BL2D は方程式と検証ケースの参考にとどめ、名称は使いません。NASA のカタログではコードは
+  U.S. Release Only ですが、報告書 CR-4668 は NTRS で公開されています。
