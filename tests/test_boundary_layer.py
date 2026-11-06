@@ -1,6 +1,5 @@
 """Tests for smooth flat-plate boundary-layer correlations."""
 
-import time
 import warnings
 from typing import Any
 
@@ -9,6 +8,7 @@ import pytest
 from numpy.testing import assert_allclose
 from scipy.optimize import brentq
 
+import aerophysics.boundary_layer as boundary_layer
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
     TurbulentModel,
@@ -449,11 +449,16 @@ def test_log_wake_returns_nan_where_wall_shear_is_not_positive() -> None:
     assert np.isnan(thickness[0]) and np.isfinite(thickness[1])
 
 
-def test_log_wake_thickness_of_large_arrays_is_vectorized() -> None:
-    # The scalar Brent solve took about 5 ms per point; 5000 points now take
-    # well under one second, so this bound leaves margin on slow runners.
+def test_log_wake_thickness_of_large_arrays_is_vectorized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The scalar Brent solve takes about 5 ms per point. Counting its calls keeps
+    # this check independent of the speed of the machine.
+    def scalar_solve(*_: object) -> tuple[float, float]:
+        raise AssertionError("a point fell back to the scalar closure solve")
+
+    monkeypatch.setattr(boundary_layer, "_profile_closure_thickness", scalar_solve)
     x = np.linspace(0.01, 2.0, 5000)
-    start = time.perf_counter()
     result = flat_plate_boundary_layer(
         x,
         1.0,
@@ -462,7 +467,6 @@ def test_log_wake_thickness_of_large_arrays_is_vectorized() -> None:
         regime=BoundaryLayerRegime.TURBULENT,
         turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
     )
-    assert time.perf_counter() - start < 8.0
     assert np.all(np.isfinite(result.boundary_layer_thickness))
     assert np.all(np.diff(result.boundary_layer_thickness) > 0.0)
 
