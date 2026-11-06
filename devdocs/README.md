@@ -10,6 +10,9 @@ explain how the numerical solvers, range checks, and GUI internals behave.
   safeguards used by the calculation core.
 - [GUI internals](gui_internals.md): settings JSON fields, settings
   validation, and how GUI pages classify and display solver failures.
+- [Marching boundary-layer design](marching_boundary_layer_design.md): proposed
+  design and verification plan for a variable-edge boundary-layer solver
+  (not implemented yet; written in Japanese).
 
 The contributor workflow, validation gate, and release process are described
 in [`DEVELOPMENT.md`](../DEVELOPMENT.md).
