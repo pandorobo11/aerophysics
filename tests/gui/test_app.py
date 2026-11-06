@@ -1488,6 +1488,108 @@ render_laminar_boundary_layer_profile(UnitPreferences())
     assert replay.session_state["laminar_profile_payload"][0] == result
 
 
+_REPLAY_HEADER = """
+import streamlit as st
+from aerophysics.gui.adapters import FlightCase
+from aerophysics.gui.advanced_adapters import BoundaryLayerCase
+from aerophysics.gui.analysis_pages import (
+    render_boundary_layer_profile,
+    render_laminar_boundary_layer_profile,
+)
+from aerophysics.gui.units import UnitPreferences
+if st.session_state.get("linked_case_present"):
+    st.session_state["current_flight_case"] = FlightCase(
+        0.0, 0.86, 300.0, 1.0, 1.85e-5, 300.0
+    )
+    st.session_state["current_boundary_layer_case"] = BoundaryLayerCase(
+        300.0, 1.0, 300.0, 0.05, 85.0
+    )
+"""
+_LAMINAR_INPUTS: dict[str, object] = {
+    "distance": 0.1,
+    "edge_velocity": 600.0,
+    "edge_density": 0.41,
+    "edge_temperature": 223.0,
+    "wall_temperature": 300.0,
+    "points": 51,
+}
+_TURBULENT_INPUTS: dict[str, object] = {
+    "edge_velocity": 350.0,
+    "edge_density": 1.1,
+    "edge_temperature": 290.0,
+    "boundary_layer_thickness": 0.05,
+    "wall_shear_stress": 115.0,
+    "wall_temperature": None,
+    "wake_parameter": None,
+    "points": 101,
+}
+_REPLAY_CASES: dict[
+    str, tuple[str, str, str, dict[str, object], dict[str, object], str]
+] = {
+    "laminar": (
+        "laminar_boundary_layer_profile",
+        "render_laminar_boundary_layer_profile",
+        "laminar_profile",
+        _LAMINAR_INPUTS,
+        {"source": "flight"},
+        "現在の飛行ケース",
+    ),
+    "turbulent": (
+        "boundary_layer_profile",
+        "render_boundary_layer_profile",
+        "profile",
+        _TURBULENT_INPUTS,
+        {
+            "source": "boundary",
+            "transformation": "van_driest",
+            "temperature_velocity_relation": "generalized_reynolds_analogy",
+        },
+        "現在の乱流平板境界層ケース",
+    ),
+}
+
+
+@pytest.mark.parametrize("linked_case_present", [False, True])
+@pytest.mark.parametrize("case", list(_REPLAY_CASES))
+def test_loaded_profile_configuration_keeps_saved_inputs(
+    case: str, linked_case_present: bool
+) -> None:
+    from aerophysics.gui.config import load_configuration
+
+    calculator, render, prefix, inputs, models, linked_label = _REPLAY_CASES[case]
+    configuration = make_configuration(
+        calculator=calculator,
+        mode="single",
+        inputs_si=inputs,
+        models=models,
+        units=UnitPreferences(),
+    )
+    app = AppTest.from_string(
+        f"{_REPLAY_HEADER}{render}(UnitPreferences())\n", default_timeout=30
+    )
+    app.session_state["linked_case_present"] = linked_case_present
+    app.session_state[f"pending_{calculator}_configuration"] = load_configuration(
+        dump_configuration(configuration)
+    )
+    app.run()
+    assert app.radio(key=f"{prefix}_source").value == "manual"
+    app.run()
+    calculate = f"FormSubmitter:{prefix}_form-計算"
+    app.button(key=calculate).click().run()
+    assert not app.exception and not app.error
+    _, exported = app.session_state[f"{prefix}_payload"]
+    assert exported["inputs_si"] == inputs
+    assert exported["models"]["source"] == "manual"
+
+    if linked_case_present:
+        app.radio(key=f"{prefix}_source").set_value(linked_label).run()
+        app.button(key=calculate).click().run()
+        assert not app.exception and not app.error
+        _, linked = app.session_state[f"{prefix}_payload"]
+        assert linked["inputs_si"]["edge_velocity"] == 300.0
+        assert linked["inputs_si"]["edge_density"] == 1.0
+
+
 def test_laminar_profile_page_uses_the_flight_case() -> None:
     script = """
 import streamlit as st

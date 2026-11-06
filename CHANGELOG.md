@@ -38,6 +38,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
   3e-7 relative. Inadmissible points keep the previous NaN values, warnings,
   and errors.
 
+### Fixed
+
+- Keep the saved inputs when a settings JSON is loaded on the GUI compressible
+  boundary-layer profile page. A file saved from a boundary-layer case was
+  recalculated with whichever case the session held instead. The input source
+  now starts as manual input after loading.
+
 ## [0.8.0] - 2026-11-02
 
 ### Added

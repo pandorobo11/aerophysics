@@ -142,12 +142,12 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
     has_linked = isinstance(linked, BoundaryLayerCase)
 
     with st.container():
+        # A loaded configuration restores its saved inputs, so the source starts as
+        # manual even if the file came from a linked case.
         sources = ("manual", "boundary") if has_linked else ("manual",)
-        default_source = str(models.get("source", "manual"))
         source = st.radio(
             "入力元",
             sources,
-            index=sources.index(default_source) if default_source in sources else 0,
             format_func=lambda value: (
                 "手入力" if value == "manual" else "現在の乱流平板境界層ケース"
             ),
@@ -419,19 +419,19 @@ def render_laminar_boundary_layer_profile(preferences: UnitPreferences) -> None:
     )
     render_documentation_link("models/flat_plate_boundary_layer.html")
     imported = pop_pending_configuration("laminar_boundary_layer_profile")
-    inputs, models, _ = _defaults(imported)
+    inputs, _, _ = _defaults(imported)
     render_configuration_import("laminar_boundary_layer_profile", "laminar_profile")
     render_reset_button("laminar_profile", "laminar_profile_payload")
     flight = st.session_state.get("current_flight_case")
     has_flight = isinstance(flight, FlightCase)
 
     with st.container():
+        # A loaded configuration restores its saved inputs, so the source starts as
+        # manual even if the file came from the flight case.
         sources = ("manual", "flight") if has_flight else ("manual",)
-        default_source = str(models.get("source", "manual"))
         source = st.radio(
             "外縁条件の入力元",
             sources,
-            index=sources.index(default_source) if default_source in sources else 0,
             format_func=lambda value: (
                 "手入力" if value == "manual" else "現在の飛行ケース"
             ),

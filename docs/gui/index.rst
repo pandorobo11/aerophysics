@@ -142,8 +142,11 @@ Every completed calculation offers two downloads:
   spreadsheet programs read it correctly.
 * **Settings JSON** stores the page's model choices, inputs (in SI), sweep
   range, and display units. Load it on the same page to repeat the
-  calculation. A file from a different page or an unsupported format version
-  is rejected, and the current inputs are left unchanged.
+  calculation. A loaded file restores its saved inputs as manual input, even if
+  they came from a saved case and that page has a different case saved now;
+  select the case again to use it. A file from a different page or an
+  unsupported format version is rejected, and the current inputs are left
+  unchanged.
 
 Loading a settings file checks its structure and number ranges, but not
 whether the physics will succeed; a calculation can still fail with the usual
