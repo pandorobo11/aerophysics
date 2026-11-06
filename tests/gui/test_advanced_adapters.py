@@ -1,15 +1,23 @@
 """Tests for advanced GUI calculation adapters."""
 
+from typing import Any, cast
+
 import numpy as np
 import pytest
 
 from aerophysics import AIR_NASA9, protrusion_drag
+from aerophysics.boundary_layer import (
+    BoundaryLayerRegime,
+    flat_plate_boundary_layer_profile,
+)
 from aerophysics.boundary_layer_profile import (
     CompressibleVelocityTransformation,
     TemperatureVelocityRelation,
 )
+from aerophysics.gas import AIR
 from aerophysics.gui.advanced_adapters import (
     boundary_layer_profiles,
+    laminar_boundary_layer_profile,
     protrusion_condition,
     protrusion_sweep,
     thermochemistry_condition,
@@ -58,6 +66,79 @@ def test_profile_adapter_preserves_compared_and_saved_profiles() -> None:
         # Constant pressure gives rho_w = rho_e * T_e / T_w.
         assert rows[0]["density"] == pytest.approx(1.2)
         assert rows[-1]["velocity"] == pytest.approx(297.0)
+
+
+def test_laminar_profile_adapter_matches_the_package_function() -> None:
+    settings: dict[str, Any] = {
+        "distance": 0.1,
+        "edge_velocity": 1200.0,
+        "edge_density": 0.5,
+        "edge_temperature": 225.0,
+        "wall_temperature": 300.0,
+    }
+    result = laminar_boundary_layer_profile(points=51, **settings)
+    direct = flat_plate_boundary_layer_profile(
+        settings["distance"],
+        settings["edge_velocity"],
+        settings["edge_density"],
+        settings["edge_temperature"],
+        regime=BoundaryLayerRegime.LAMINAR,
+        wall_temperature=settings["wall_temperature"],
+        wall_distance_ratio=np.linspace(0.0, 1.0, 51),
+    )
+    rows = result.rows
+    assert len(rows) == 51
+    assert [row["temperature"] for row in rows] == pytest.approx(direct.temperature)
+    assert [row["wall_distance"] for row in rows] == pytest.approx(direct.wall_distance)
+    assert all(
+        row["wall_heat_flux"] == direct.boundary_layer.wall_heat_flux for row in rows
+    )
+    # No slip, wall temperature, and the delta_99 definition.
+    assert rows[0]["velocity"] == 0.0
+    assert rows[0]["local_mach_number"] == 0.0
+    assert rows[0]["temperature"] == pytest.approx(300.0, rel=1e-6)
+    assert rows[-1]["velocity_ratio"] == pytest.approx(0.99)
+    # Constant pressure gives rho = rho_e * T_e / T, and the wall is colder than T_r.
+    for row in rows:
+        assert row["density"] == pytest.approx(
+            0.5 * 225.0 / cast(float, row["temperature"])
+        )
+    assert cast(float, rows[0]["wall_heat_flux"]) > 0.0
+    sound_speed = float(np.sqrt(1.4 * AIR.specific_gas_constant * 225.0))
+    assert rows[0]["edge_mach_number"] == pytest.approx(1200.0 / sound_speed)
+
+
+def test_laminar_profile_adapter_low_mach_blasius_limit() -> None:
+    row = laminar_boundary_layer_profile(
+        distance=1.0,
+        edge_velocity=3.0,
+        edge_density=1.2,
+        edge_temperature=288.15,
+        wall_temperature=None,
+        points=51,
+    ).rows[0]
+    root = float(np.sqrt(cast(float, row["reynolds_number"])))
+    assert row["local_skin_friction_coefficient"] == pytest.approx(
+        0.664 / root, rel=2e-3
+    )
+    assert row["boundary_layer_thickness"] == pytest.approx(4.91 / root, rel=2e-3)
+    assert row["stanton_number"] == pytest.approx(
+        0.72 ** (-2.0 / 3.0) * 0.332 / root, rel=2e-3
+    )
+    assert row["wall_heat_flux"] == 0.0
+
+
+@pytest.mark.parametrize("points", [50, 502])
+def test_laminar_profile_adapter_rejects_point_count(points: int) -> None:
+    with pytest.raises(ValueError, match="between"):
+        laminar_boundary_layer_profile(
+            distance=1.0,
+            edge_velocity=3.0,
+            edge_density=1.2,
+            edge_temperature=288.15,
+            wall_temperature=None,
+            points=points,
+        )
 
 
 def test_profile_grid_and_model_validation() -> None:

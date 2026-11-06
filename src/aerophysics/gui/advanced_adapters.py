@@ -9,11 +9,16 @@ from dataclasses import dataclass
 import numpy as np
 
 from aerophysics import AIR_NASA7, AIR_NASA9
+from aerophysics.boundary_layer import (
+    BoundaryLayerRegime,
+    flat_plate_boundary_layer_profile,
+)
 from aerophysics.boundary_layer_profile import (
     CompressibleVelocityTransformation,
     TemperatureVelocityRelation,
     compressible_turbulent_boundary_layer_profile,
 )
+from aerophysics.gas import AIR
 from aerophysics.gui._flow_outputs import (
     VISCOSITY_MODELS as _VISCOSITY_MODELS,
 )
@@ -158,6 +163,77 @@ def boundary_layer_profiles(
     return ProfileCalculation(
         CalculationResult(tuple(rows), tuple(dict.fromkeys(messages))),
         tuple(profiles),
+    )
+
+
+def laminar_boundary_layer_profile(
+    *,
+    distance: float,
+    edge_velocity: float,
+    edge_density: float,
+    edge_temperature: float,
+    wall_temperature: float | None,
+    points: int,
+) -> CalculationResult:
+    """Tabulate the compressible laminar similarity profile at one station."""
+    if not 51 <= points <= 501:
+        raise ValueError("profile points must be between 51 and 501")
+    ratio = np.linspace(0.0, 1.0, points, dtype=np.float64)
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        output = flat_plate_boundary_layer_profile(
+            distance,
+            edge_velocity,
+            edge_density,
+            edge_temperature,
+            regime=BoundaryLayerRegime.LAMINAR,
+            wall_temperature=wall_temperature,
+            wall_distance_ratio=ratio,
+        )
+    plate = output.boundary_layer
+    edge_sound_speed = np.sqrt(
+        AIR.heat_capacity_ratio * AIR.specific_gas_constant * edge_temperature
+    )
+
+    def scalar(value: object) -> float:
+        return float(value)  # type: ignore[arg-type]
+
+    station: Row = {
+        "distance": scalar(plate.distance),
+        "reynolds_number": scalar(plate.reynolds_number),
+        "edge_mach_number": float(edge_velocity / edge_sound_speed),
+        "boundary_layer_thickness": scalar(plate.boundary_layer_thickness),
+        "displacement_thickness": scalar(plate.displacement_thickness),
+        "momentum_thickness": scalar(plate.momentum_thickness),
+        "local_skin_friction_coefficient": scalar(
+            plate.local_skin_friction_coefficient
+        ),
+        "wall_shear_stress": scalar(plate.wall_shear_stress),
+        "recovery_temperature": scalar(plate.recovery_temperature),
+        "wall_temperature": scalar(plate.wall_temperature),
+        "stanton_number": scalar(plate.stanton_number),
+        "heat_transfer_coefficient": scalar(plate.heat_transfer_coefficient),
+        "wall_heat_flux": scalar(plate.wall_heat_flux),
+        "status": "ok",
+        "message": "",
+    }
+    rows: list[Row] = [
+        {
+            "wall_distance": float(output.wall_distance[index]),
+            "outer_coordinate": float(ratio[index]),
+            "velocity": float(output.velocity[index]),
+            "velocity_ratio": float(output.velocity[index] / edge_velocity),
+            "temperature": float(output.temperature[index]),
+            "temperature_ratio": float(output.temperature[index] / edge_temperature),
+            "density": float(output.density[index]),
+            "dynamic_viscosity": float(output.dynamic_viscosity[index]),
+            "local_mach_number": float(output.local_mach_number[index]),
+            **station,
+        }
+        for index in range(points)
+    ]
+    return CalculationResult(
+        tuple(rows), tuple(dict.fromkeys(str(item.message) for item in captured))
     )
 
 

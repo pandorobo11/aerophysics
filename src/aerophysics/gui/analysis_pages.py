@@ -12,12 +12,13 @@ from aerophysics.boundary_layer_profile import (
     CompressibleVelocityTransformation,
     TemperatureVelocityRelation,
 )
-from aerophysics.gui.adapters import CalculationResult
+from aerophysics.gui.adapters import CalculationResult, FlightCase
 from aerophysics.gui.advanced_adapters import (
     BoundaryLayerCase,
     BoundaryProfileCase,
     ProfileCalculation,
     boundary_layer_profiles,
+    laminar_boundary_layer_profile,
     protrusion_condition,
     protrusion_sweep,
     thermochemistry_condition,
@@ -46,6 +47,7 @@ from aerophysics.gui.csv_inputs import (
 from aerophysics.gui.documentation import render_documentation_link
 from aerophysics.gui.figures import (
     boundary_layer_profile_figures,
+    laminar_boundary_layer_profile_figures,
     protrusion_figures,
     protrusion_shape_figure,
     thermochemistry_figures,
@@ -140,12 +142,12 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
     has_linked = isinstance(linked, BoundaryLayerCase)
 
     with st.container():
+        # A loaded configuration restores its saved inputs, so the source starts as
+        # manual even if the file came from a linked case.
         sources = ("manual", "boundary") if has_linked else ("manual",)
-        default_source = str(models.get("source", "manual"))
         source = st.radio(
             "入力元",
             sources,
-            index=sources.index(default_source) if default_source in sources else 0,
             format_func=lambda value: (
                 "手入力" if value == "manual" else "現在の乱流平板境界層ケース"
             ),
@@ -407,6 +409,200 @@ def render_boundary_layer_profile(preferences: UnitPreferences) -> None:
             "Re_τ < 500では尺度分離が弱い旨を警告します。粗面、遷移、圧力勾配、"
             "実在気体効果は含みません。"
         )
+
+
+def render_laminar_boundary_layer_profile(preferences: UnitPreferences) -> None:
+    """Render the compressible laminar flat-plate similarity profile."""
+    st.title("層流境界層プロファイル")
+    st.caption(
+        "滑面・ゼロ圧力勾配の平板層流の速度と温度の分布を圧縮性相似解で求めます。"
+    )
+    render_documentation_link("models/flat_plate_boundary_layer.html")
+    imported = pop_pending_configuration("laminar_boundary_layer_profile")
+    inputs, _, _ = _defaults(imported)
+    render_configuration_import("laminar_boundary_layer_profile", "laminar_profile")
+    render_reset_button("laminar_profile", "laminar_profile_payload")
+    flight = st.session_state.get("current_flight_case")
+    has_flight = isinstance(flight, FlightCase)
+
+    with st.container():
+        # A loaded configuration restores its saved inputs, so the source starts as
+        # manual even if the file came from the flight case.
+        sources = ("manual", "flight") if has_flight else ("manual",)
+        source = st.radio(
+            "外縁条件の入力元",
+            sources,
+            format_func=lambda value: (
+                "手入力" if value == "manual" else "現在の飛行ケース"
+            ),
+            horizontal=True,
+            key="laminar_profile_source",
+            on_change=clear_widget_state,
+            args=(
+                (
+                    "laminar_profile_velocity",
+                    "laminar_profile_density",
+                    "laminar_profile_temperature",
+                ),
+            ),
+        )
+        case = flight if source == "flight" and isinstance(flight, FlightCase) else None
+        distance = finite_number(
+            f"前縁からの距離 x [{preferences.length}]",
+            _display(_number(inputs, "distance", 0.1), "length", preferences.length),
+            key="laminar_profile_distance",
+            min_value=1.0e-12,
+        )
+        edge_velocity = finite_number(
+            f"外縁速度 U_e [{preferences.speed}]",
+            _display(
+                case.velocity if case else _number(inputs, "edge_velocity", 300.0),
+                "speed",
+                preferences.speed,
+            ),
+            key="laminar_profile_velocity",
+            min_value=1.0e-12,
+            disabled=case is not None,
+        )
+        edge_density = finite_number(
+            f"外縁密度 ρ_e [{preferences.density}]",
+            _display(
+                case.density if case else _number(inputs, "edge_density", 1.0),
+                "density",
+                preferences.density,
+            ),
+            key="laminar_profile_density",
+            min_value=1.0e-12,
+            disabled=case is not None,
+        )
+        edge_temperature = finite_number(
+            f"外縁温度 T_e [{preferences.temperature}]",
+            _display(
+                case.temperature
+                if case
+                else _number(inputs, "edge_temperature", 300.0),
+                "temperature",
+                preferences.temperature,
+            ),
+            key="laminar_profile_temperature",
+            disabled=case is not None,
+        )
+        adiabatic = st.checkbox(
+            "断熱壁（壁温を自動計算）",
+            value=inputs.get("wall_temperature") is None,
+            key="laminar_profile_adiabatic",
+        )
+        wall_temperature = None
+        if not adiabatic:
+            wall_temperature = finite_number(
+                f"壁温 T_w [{preferences.temperature}]",
+                _display(
+                    _number(inputs, "wall_temperature", 300.0),
+                    "temperature",
+                    preferences.temperature,
+                ),
+                key="laminar_profile_wall_temperature",
+            )
+        points = int(
+            st.number_input(
+                "壁面方向点数",
+                51,
+                501,
+                int(inputs.get("points", 201)),
+                1,
+                key="laminar_profile_points",
+            )
+        )
+        submitted = calculation_button("laminar_profile_form")
+
+    if submitted:
+        st.session_state.pop("laminar_profile_payload", None)
+        try:
+            distance_si = _si(distance, "length", preferences.length)
+            velocity_si = _si(edge_velocity, "speed", preferences.speed)
+            density_si = _si(edge_density, "density", preferences.density)
+            temperature_si = _si(
+                edge_temperature, "temperature", preferences.temperature
+            )
+            wall_si = (
+                None
+                if wall_temperature is None
+                else _si(wall_temperature, "temperature", preferences.temperature)
+            )
+            result = laminar_boundary_layer_profile(
+                distance=distance_si,
+                edge_velocity=velocity_si,
+                edge_density=density_si,
+                edge_temperature=temperature_si,
+                wall_temperature=wall_si,
+                points=points,
+            )
+            configuration = make_configuration(
+                calculator="laminar_boundary_layer_profile",
+                mode="single",
+                inputs_si={
+                    "distance": distance_si,
+                    "edge_velocity": velocity_si,
+                    "edge_density": density_si,
+                    "edge_temperature": temperature_si,
+                    "wall_temperature": wall_si,
+                    "points": points,
+                },
+                models={"source": source},
+                units=preferences,
+            )
+        except ValueError as error:
+            st.error(str(error), icon="🚫")
+        else:
+            st.session_state["laminar_profile_payload"] = (result, configuration)
+
+    assumptions = (
+        "滑面、層流、ゼロ圧力勾配、一定外縁条件、熱量的完全気体AIRを仮定します。"
+        "粘性係数は外縁も含めて温度から Sutherland の式で求め、Mach数は U_e と T_e から"
+        "求めます。遷移は判定しません。Pr=0.72 で、Reynolds アナロジー係数は Pr^(-2/3) "
+        "です。q_w は壁へ向かう向きを正とします。"
+    )
+    payload = _result_payload("laminar_profile_payload")
+    if payload is None:
+        if not has_flight:
+            st.info(
+                "大気・飛行条件画面で単点ケースを保存すると外縁条件を引き継げます。"
+            )
+        with st.expander("モデルの前提・適用範囲"):
+            st.write(assumptions)
+        return
+    result, configuration = payload
+
+    def metrics(row: Mapping[str, object]) -> None:
+        for items in (
+            (
+                ("Re_x", "Re_x"),
+                ("外縁 Mach M_e", "外縁 Mach"),
+                (f"δ₉₉ [{preferences.length}]", "境界層厚さ"),
+                ("局所摩擦係数 C_f", "局所摩擦係数"),
+            ),
+            (
+                ("Stanton数 St", "Stanton数"),
+                ("熱伝達率 h [W/(m²·K)]", "熱伝達率"),
+                (f"壁面熱流束 q_w [{preferences.heat_flux}]", "壁面熱流束"),
+                (f"壁温 T_w [{preferences.temperature}]", "壁温"),
+            ),
+        ):
+            for column, item in zip(st.columns(4), items, strict=True):
+                with column:
+                    _metric(row, *item)
+
+    render_result_bundle(
+        calculator="laminar_boundary_layer_profile",
+        result=result,
+        configuration=configuration,
+        preferences=preferences,
+        figures=laminar_boundary_layer_profile_figures(result.rows, preferences),
+        filename_prefix="aerophysics-laminar-boundary-layer-profile",
+        metrics=metrics,
+    )
+    with st.expander("モデルの前提・適用範囲"):
+        st.write(assumptions)
 
 
 _SHAPE_LABELS = {

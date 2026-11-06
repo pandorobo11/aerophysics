@@ -6,6 +6,7 @@ import streamlit as st
 
 from aerophysics.gui.analysis_pages import (
     render_boundary_layer_profile,
+    render_laminar_boundary_layer_profile,
     render_protrusion_drag,
     render_thermochemistry,
     render_viscosity,
@@ -80,6 +81,10 @@ def boundary_layer_profile_page() -> None:
     render_boundary_layer_profile(preferences)
 
 
+def laminar_boundary_layer_profile_page() -> None:
+    render_laminar_boundary_layer_profile(preferences)
+
+
 def protrusion_drag_page() -> None:
     render_protrusion_drag(preferences)
 
@@ -149,6 +154,11 @@ pages = {
             boundary_layer_profile_page,
             title="圧縮性境界層プロファイル",
             icon="📈",
+        ),
+        st.Page(
+            laminar_boundary_layer_profile_page,
+            title="層流境界層プロファイル",
+            icon="📉",
         ),
         st.Page(
             protrusion_drag_page,

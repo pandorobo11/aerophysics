@@ -21,6 +21,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
 - Add `flat_plate_boundary_layer_profile`, which returns laminar or turbulent
   velocity and temperature profiles at one flat-plate station. Laminar profiles
   come from the compressible similarity solution.
+- Show the Stanton number, heat-transfer coefficient and wall heat flux on the
+  GUI flat-plate page for compressible calculations, and add a GUI laminar
+  boundary-layer profile page.
 
 ### Changed
 
@@ -34,6 +37,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
   instead of the former 1e-6 root tolerance, so they change by up to about
   3e-7 relative. Inadmissible points keep the previous NaN values, warnings,
   and errors.
+
+### Fixed
+
+- Keep the saved inputs when a settings JSON is loaded on the GUI compressible
+  boundary-layer profile page. A file saved from a boundary-layer case was
+  recalculated with whichever case the session held instead. The input source
+  now starts as manual input after loading.
 
 ## [0.8.0] - 2026-11-02
 

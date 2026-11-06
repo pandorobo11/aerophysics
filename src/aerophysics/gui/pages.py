@@ -1261,6 +1261,16 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
         for column, label in zip(columns, wanted, strict=True):
             with column:
                 _metric(label, row, next(x for x in headings if label in x))
+        flux = next(x for x in headings if "壁面熱流束" in x)
+        if isinstance(row.get(flux), float):
+            columns = st.columns(3)
+            for column, label, contains in (
+                (columns[0], "Stanton数 St", "Stanton数"),
+                (columns[1], "熱伝達率 h [W/(m²·K)]", "熱伝達率"),
+                (columns[2], f"壁面熱流束 q_w [{preferences.heat_flux}]", "壁面熱流束"),
+            ):
+                with column:
+                    _metric(label, row, next(x for x in headings if contains in x))
 
     render_result_bundle(
         calculator="boundary_layer",
@@ -1304,4 +1314,10 @@ def render_boundary_layer(preferences: UnitPreferences) -> None:
         st.write(
             "乱流相関の公称範囲は 5e5 ≤ Re_x ≤ 1e9です。"
             "表面粗さ、圧力勾配、剥離、自然遷移予測は含みません。"
+        )
+        st.write(
+            "熱伝達は圧縮性を考慮した場合のみ、Reynolds アナロジーで計算します。"
+            "係数は層流が Pr^(-2/3)（Pr=0.72）、乱流が 1.14 です。"
+            "St は ρ_e U_e c_p、h と q_w は T_r − T_w を基準とし、壁へ向かう熱流束を"
+            "正とします。"
         )

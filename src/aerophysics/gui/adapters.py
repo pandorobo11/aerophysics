@@ -1296,6 +1296,11 @@ def flat_plate(
                     result.recovery_temperature, index
                 ),
                 "wall_temperature": _optional_at(result.wall_temperature, index),
+                "stanton_number": _optional_at(result.stanton_number, index),
+                "heat_transfer_coefficient": _optional_at(
+                    result.heat_transfer_coefficient, index
+                ),
+                "wall_heat_flux": _optional_at(result.wall_heat_flux, index),
                 "status": "ok",
                 "message": "",
             }

@@ -73,6 +73,9 @@ page of this manual directly.
      - 圧縮性境界層プロファイル (compressible boundary-layer profile)
      - :doc:`../models/compressible_velocity_transformations`
    * -
+     - 層流境界層プロファイル (laminar boundary-layer profile)
+     - :doc:`../models/flat_plate_boundary_layer`
+   * -
      - 突起抗力 (protrusion drag)
      - :doc:`../models/protrusion_drag`
    * - 熱物性 (thermophysical properties)
@@ -117,8 +120,9 @@ Related pages can pass a result to the next page in the same browser session,
 at full precision rather than the rounded displayed values:
 
 1. Run a single-point calculation on **大気・飛行条件** and save the flight
-   case. The **平板境界層** (flat-plate boundary layer) page can then use it
-   as the edge condition.
+   case. The **平板境界層** (flat-plate boundary layer) and
+   **層流境界層プロファイル** (laminar boundary-layer profile) pages can then
+   use it as the edge condition.
 2. Run a single-point, fully turbulent flat-plate case and save the
    boundary-layer case. The **圧縮性境界層プロファイル** page can then use its
    edge state, thickness, and wall shear stress.
@@ -138,8 +142,11 @@ Every completed calculation offers two downloads:
   spreadsheet programs read it correctly.
 * **Settings JSON** stores the page's model choices, inputs (in SI), sweep
   range, and display units. Load it on the same page to repeat the
-  calculation. A file from a different page or an unsupported format version
-  is rejected, and the current inputs are left unchanged.
+  calculation. A loaded file restores its saved inputs as manual input, even if
+  they came from a saved case and that page has a different case saved now;
+  select the case again to use it. A file from a different page or an
+  unsupported format version is rejected, and the current inputs are left
+  unchanged.
 
 Loading a settings file checks its structure and number ranges, but not
 whether the physics will succeed; a calculation can still fail with the usual

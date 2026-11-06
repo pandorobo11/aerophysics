@@ -85,6 +85,7 @@ def _convert_display_input_state() -> None:
             "flight_length",
             "detached_shock_radius",
             "boundary_distance",
+            "laminar_profile_distance",
             "profile_thickness",
             "protrusion_thickness",
             "protrusion_height",
@@ -96,6 +97,7 @@ def _convert_display_input_state() -> None:
         ),
         "speed": (
             "boundary_velocity",
+            "laminar_profile_velocity",
             "profile_velocity",
             "protrusion_velocity",
         ),
@@ -117,7 +119,9 @@ def _convert_display_input_state() -> None:
             "expansion_temperature",
             "isentropic_total_temperature",
             "boundary_temperature",
+            "laminar_profile_temperature",
             "boundary_wall_temperature",
+            "laminar_profile_wall_temperature",
             "profile_temperature",
             "profile_wall_temperature",
             "protrusion_temperature",
@@ -132,6 +136,7 @@ def _convert_display_input_state() -> None:
         ),
         "density": (
             "boundary_density",
+            "laminar_profile_density",
             "profile_density",
             "protrusion_density",
         ),
