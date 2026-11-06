@@ -717,8 +717,19 @@ def _marching_laminar_verification(api: tuple[object, ...]) -> str:
         label = f"Similar, beta = {beta:g}, g_w = {wall_ratio:g}"
         rows.append((label, "f''(0)", shear, reference_shear))
         rows.append((label, "g'(0)", heat, reference_heat))
+    for beta, wall_enthalpy, published_shear, published_heat in (
+        (1.0, 0.0, 1.2326, None),
+        (2.0, 0.0, 1.6870, None),
+        (0.5, 1.0, 1.2351, -0.5725),
+        (2.0, 1.0, 2.4878, -0.6613),
+    ):
+        shear, heat = wedge(beta, 1.0 + wall_enthalpy)
+        label = f"NACA 1293 Table II, beta = {beta:g}, S_w = {wall_enthalpy:g}"
+        rows.append((label, "f''(0)", shear, published_shear))
+        if published_heat is not None:
+            rows.append((label, "g'(0)", heat, published_heat))
     incompressible = _howarth_separation(0.01, marching)
-    rows.append(("Howarth flow, M = 0.01", "x_sep/L", incompressible, 0.1199))
+    rows.append(("Howarth flow, M = 0.01", "x_sep/L", incompressible, 0.9589 / 8.0))
     rows.append(
         (
             "Howarth image, M0 = 3",

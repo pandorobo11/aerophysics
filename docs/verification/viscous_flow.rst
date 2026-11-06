@@ -37,7 +37,11 @@ Marching laminar boundary layer
 
 ``marching_boundary_layer`` is compared with solutions that do not share its
 numerics. The wedge and heat-transfer references solve the similarity equations
-with SciPy's ``solve_bvp``. The plate reference is the compressible similarity
+with SciPy's ``solve_bvp``, and the published rows are NACA Report 1293, Table II
+(:ref:`Cohen and Reshotko, 1956 <ref-cohen-reshotko-1956>`), where
+``S_w = g_w - 1`` without dissipation. The Howarth reference ``x_sep/L = 0.1199``
+is Hartree's ``x_s = 0.9589`` for ``U = 1 - x/8`` (:ref:`Hartree, 1939
+<ref-hartree-1939>`). The plate reference is the compressible similarity
 solution of ``flat_plate_boundary_layer``. The compressible Howarth case maps
 the linearly retarded flow through the Illingworth--Stewartson transformation,
 which is exact for ``C = Pr = 1`` and an adiabatic wall, so it must separate at

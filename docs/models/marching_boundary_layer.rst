@@ -145,9 +145,10 @@ Verification
 :doc:`../verification/viscous_flow` records the comparisons. They use the
 Falkner--Skan wedge flows (:ref:`Falkner and Skan, 1931
 <ref-falkner-skan-1931>`), similar solutions with wall heat transfer in the form
-of :ref:`Cohen and Reshotko, 1956 <ref-cohen-reshotko-1956>`, Howarth's linearly
-retarded flow (:ref:`Howarth, 1938 <ref-howarth-1938>`), and its compressible
-image under the transformation of :ref:`Illingworth, 1949
+of :ref:`Cohen and Reshotko, 1956 <ref-cohen-reshotko-1956>`, including their
+Table II, Howarth's linearly retarded flow (:ref:`Howarth, 1938
+<ref-howarth-1938>`, with the separation position of :ref:`Hartree, 1939
+<ref-hartree-1939>`), and its compressible image under the transformation of :ref:`Illingworth, 1949
 <ref-illingworth-1949>` and :ref:`Stewartson, 1949 <ref-stewartson-1949>`.
 
 API mapping

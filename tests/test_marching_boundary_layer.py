@@ -31,8 +31,18 @@ from aerophysics.transport import AIR_VISCOSITY
 GAMMA = AIR.heat_capacity_ratio
 GAS_CONSTANT = AIR.specific_gas_constant
 ETA = eta_grid(1e-3, 1.015, 0.05, 16.0)
-# Howarth (1938) linear retardation; accepted separation position.
-HOWARTH_SEPARATION = 0.1199
+# Howarth (1938) linear retardation: Hartree (ARC R&M 2426, eq. 37) gives
+# x_s = 0.9589 for U = 1 - x/8.
+HOWARTH_SEPARATION = 0.9589 / 8.0
+# NACA Report 1293, Table II, for Pr = 1 and viscosity linear in temperature:
+# (beta, S_w, f''(0), S'(0)), with g = 1 + S without dissipation.
+COHEN_RESHOTKO_TABLE_II = (
+    (0.0, 0.0, 0.4696, 0.0),
+    (1.0, 0.0, 1.2326, 0.0),
+    (2.0, 0.0, 1.6870, 0.0),
+    (0.5, 1.0, 1.2351, -0.5725),
+    (2.0, 1.0, 2.4878, -0.6613),
+)
 
 
 class LinearViscosity:
@@ -111,6 +121,17 @@ def test_similar_wall_heat_transfer_matches_an_independent_solution(
     marched_shear, marched_heat = wedge_slopes(beta, wall_ratio)
     assert marched_shear == pytest.approx(shear, rel=5e-4)
     assert marched_heat == pytest.approx(heat, rel=5e-4)
+
+
+@pytest.mark.parametrize(
+    ("beta", "wall_enthalpy", "shear", "heat"), COHEN_RESHOTKO_TABLE_II
+)
+def test_similar_solutions_match_the_published_table(
+    beta: float, wall_enthalpy: float, shear: float, heat: float
+) -> None:
+    marched_shear, marched_heat = wedge_slopes(beta, 1.0 + wall_enthalpy)
+    assert marched_shear == pytest.approx(shear, rel=2e-3)
+    assert marched_heat == pytest.approx(heat, rel=2e-3, abs=1e-8)
 
 
 def howarth_edge(
