@@ -236,6 +236,57 @@ Angewandte Mathematik und Mechanik, 1(4), 233--252, 1921.
 
 https://doi.org/10.1002/zamm.19210010401
 
+.. _ref-falkner-skan-1931:
+
+Falkner, V. M. and Skan, S. W. *Solutions of the Boundary-Layer Equations*.
+Philosophical Magazine, Series 7, 12(80), 865--896, 1931.
+
+https://doi.org/10.1080/14786443109461870
+
+.. _ref-howarth-1938:
+
+Howarth, L. *On the Solution of the Laminar Boundary Layer Equations*.
+Proceedings of the Royal Society of London A, 164(919), 547--579, 1938.
+
+https://doi.org/10.1098/rspa.1938.0037
+
+.. _ref-hartree-1939:
+
+Hartree, D. R. *A Solution of the Laminar Boundary-Layer Equation for Retarded
+Flow*. Aeronautical Research Council Reports and Memoranda 2426, dated 1939.
+
+https://reports.aerade.cranfield.ac.uk/handle/1826.2/3588
+
+.. _ref-stewartson-1949:
+
+Stewartson, K. *Correlated Incompressible and Compressible Boundary Layers*.
+Proceedings of the Royal Society of London A, 200(1060), 84--100, 1949.
+
+https://doi.org/10.1098/rspa.1949.0160
+
+.. _ref-levy-1954:
+
+Levy, S. *Effect of Large Temperature Changes (Including Viscous Heating) upon
+Laminar Boundary Layers with Variable Free-Stream Velocity*. Journal of the
+Aeronautical Sciences, 21(7), 459--474, 1954.
+
+https://doi.org/10.2514/8.3088
+
+.. _ref-lees-1956:
+
+Lees, L. *Laminar Heat Transfer Over Blunt-Nosed Bodies at Hypersonic Flight
+Speeds*. Journal of Jet Propulsion, 26(4), 259--269, 1956.
+
+https://doi.org/10.2514/8.6977
+
+.. _ref-cohen-reshotko-1956:
+
+Cohen, C. B. and Reshotko, E. *Similar Solutions for the Compressible Laminar
+Boundary Layer with Heat Transfer and Pressure Gradient*. NACA Report 1293,
+1956.
+
+https://ntrs.nasa.gov/citations/19930092289
+
 .. _ref-schlichting-gersten-2000:
 
 Schlichting, H. and Gersten, K. *Boundary-Layer Theory*, 8th ed. Springer,

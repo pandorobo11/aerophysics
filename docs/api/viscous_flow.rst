@@ -7,6 +7,12 @@ Flat-plate boundary layers
 .. automodule:: aerophysics.boundary_layer
    :members:
 
+Marching boundary layers
+------------------------
+
+.. automodule:: aerophysics.marching_boundary_layer
+   :members:
+
 Aerodynamic heating
 -------------------
 

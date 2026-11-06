@@ -44,6 +44,11 @@ from aerophysics.heating import (
     swept_cylinder_heat_flux,
     swept_cylinder_turbulent_heat_flux,
 )
+from aerophysics.marching_boundary_layer import (
+    BoundaryLayerEdge,
+    MarchingBoundaryLayerResult,
+    marching_boundary_layer,
+)
 from aerophysics.protrusion import (
     ProtrusionDragResult,
     ProtrusionProfile,
@@ -93,6 +98,7 @@ __all__ = [
     "AttachmentLineHeatingResult",
     "BeattieBridgemanGas",
     "BilligShockShapeResult",
+    "BoundaryLayerEdge",
     "BoundaryLayerRegime",
     "CompressibleBoundaryLayerProfileResult",
     "CompressibleVelocityTransformation",
@@ -103,6 +109,7 @@ __all__ = [
     "FlightCondition",
     "HarmonicOscillatorGas",
     "IdealGasSpecies",
+    "MarchingBoundaryLayerResult",
     "NASA7Polynomial",
     "NASA9Polynomial",
     "PerfectGas",
@@ -125,6 +132,7 @@ __all__ = [
     "conical_shock",
     "flat_plate_boundary_layer",
     "flat_plate_boundary_layer_profile",
+    "marching_boundary_layer",
     "normal_shock",
     "oblique_shock",
     "prandtl_meyer_expansion",

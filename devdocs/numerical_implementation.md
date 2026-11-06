@@ -125,6 +125,51 @@ its `total_pressure_ratio`, which only need the static states.
 - At the incompressible adiabatic limit `M -> 0`, the implementation assigns
   `F_C = F_theta = F_x = 1` directly.
 
+## Marching boundary layer
+
+`marching_boundary_layer` is implemented in `_boundary_layer_march.py`.
+
+- Each station solves `(f, u, g)` on a fixed `eta` grid with a damped Newton
+  iteration. The Jacobian is block tridiagonal, assembled by three-color finite
+  differences, and solved with banded LAPACK. Convergence requires a maximum
+  update below `1e-10` in `u` and in the relative `g`.
+- The adiabatic wall uses a half-cell energy balance, which keeps the Jacobian
+  block tridiagonal: at the wall the convective terms vanish and only viscous
+  dissipation remains.
+- The grid has a first spacing of `1e-3`, a growth ratio of 1.015, a largest
+  spacing of 0.05, and `eta_max = 16` (519 nodes). It is second order, and this
+  resolution holds the Falkner--Skan wall shear within 0.05% down to
+  `beta = -0.15`. Richardson estimates for an expansion from `M = 2` to `3` give
+  wall-normal errors of about 0.01% in wall shear and 0.08% in wall heat flux.
+  A station whose `u` or `g` differs from one by more than
+  `1e-4` five nodes from the outer boundary raises
+  `BoundaryLayerConvergenceError`.
+- The march uses variable-step BDF2 in `xi`, with BDF1 on the first step. The
+  first step is `1e-6` of the first output distance. Steps grow by at most 1.25
+  and are limited to 3% of the distance from the leading edge, so the march
+  always passes through the requested stations.
+- A step is halved when Newton fails, the wall shear is not positive, the
+  logarithm of the wall shear changes by more than 0.0125, the logarithm of `U_e`
+  changes by more than 0.000625, or the wall temperature gradient changes too
+  much. Without the temperature check, a wall-temperature change can converge
+  in a single step while the heat flux stays unresolved.
+- The temperature check limits the change in `g'_w` to 2% of the largest of its
+  two magnitudes and `0.1 f''_w (1 + (gamma-1) M_e^2/2)`. The floor is needed
+  because the heat flux can pass through zero. An adiabatic wall skips the check.
+- When the step falls below `1e-10` of the final distance, the march reports
+  separation if `beta < 0` and the wall shear is below a quarter of its peak.
+  Otherwise it raises `BoundaryLayerConvergenceError`. The separation distance
+  extrapolates the last six stations with a straight line in the squared wall
+  shear, because the wall shear collapses as the square root of the remaining
+  distance.
+- Compared with fully refined marches at `M = 2` to `4`, the streamwise errors
+  are at most about 0.4% in heat flux and 0.12% in skin friction through
+  pressure changes as short as about 2 cm, and 0.3% in heat flux through wall-temperature
+  changes of up to 100 K over 1 mm to 50 cm. The largest relative errors occur
+  where the heat flux is small. One case takes about 1 to 2 s.
+- `xi` is integrated with five-point Gauss--Legendre quadrature on 16 panels per
+  input interval.
+
 ## Flow sequence
 
 - Temperature restoration from validated solver ratios repairs at most one

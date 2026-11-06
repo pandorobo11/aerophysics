@@ -14,6 +14,8 @@ import aerophysics
 from aerophysics import __version__
 from aerophysics.exceptions import (
     ApplicabilityWarning,
+    BoundaryLayerConvergenceError,
+    BoundaryLayerSeparationError,
     ModelRangeError,
     NoAttachedShockError,
     ShockConvergenceError,
@@ -180,6 +182,8 @@ def test_public_diagnostics() -> None:
     assert issubclass(NoAttachedShockError, ValueError)
     assert issubclass(ShockConvergenceError, RuntimeError)
     assert not issubclass(ShockConvergenceError, ValueError)
+    assert issubclass(BoundaryLayerSeparationError, ModelRangeError)
+    assert issubclass(BoundaryLayerConvergenceError, RuntimeError)
     assert issubclass(ApplicabilityWarning, UserWarning)
 
 
@@ -207,6 +211,11 @@ def test_public_models_are_exported_from_their_owning_modules() -> None:
             "BoundaryLayerRegime",
             "TurbulentModel",
             "flat_plate_boundary_layer",
+        ),
+        "marching_boundary_layer": (
+            "BoundaryLayerEdge",
+            "MarchingBoundaryLayerResult",
+            "marching_boundary_layer",
         ),
         "boundary_layer_profile": (
             "CompressibleVelocityTransformation",
