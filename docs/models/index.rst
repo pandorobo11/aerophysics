@@ -30,6 +30,7 @@ model. The pages are grouped in the same order as the GUI sidebar.
    :maxdepth: 1
 
    flat_plate_boundary_layer
+   marching_boundary_layer
    aerodynamic_heating
    compressible_velocity_transformations
    protrusion_drag

@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
 from _verification_common import format_bounded_error, line_chart_svg, write_or_check
+from scipy.integrate import cumulative_trapezoid, solve_bvp
 
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "tests/reference_data/viscous_flow"
@@ -557,6 +559,256 @@ def _turbulent_sa_comparison(api: tuple[object, ...]) -> str:
     return "\n".join(lines)
 
 
+def _similarity_reference(beta: float, wall_ratio: float) -> tuple[float, float]:
+    """Solve the similar equations with ``C = Pr = 1`` and no dissipation."""
+
+    def rhs(_: np.ndarray, y: np.ndarray) -> np.ndarray:
+        return np.vstack(
+            (y[1], y[2], -y[0] * y[2] - beta * (y[3] - y[1] ** 2), y[4], -y[0] * y[4])
+        )
+
+    def boundary(wall: np.ndarray, edge: np.ndarray) -> np.ndarray:
+        return np.array(
+            (wall[0], wall[1], edge[1] - 1.0, wall[3] - wall_ratio, edge[3] - 1.0)
+        )
+
+    x = np.linspace(0.0, 12.0, 400)
+    decay = np.exp(-x)
+    guess = np.vstack(
+        (
+            x - 1.0 + decay,
+            1.0 - decay,
+            decay,
+            1.0 + (wall_ratio - 1.0) * decay,
+            (1.0 - wall_ratio) * decay,
+        )
+    )
+    solution = solve_bvp(rhs, boundary, x, guess, tol=1e-10, max_nodes=200000)
+    return float(solution.y[2, 0]), float(solution.y[4, 0])
+
+
+class _LinearViscosity:
+    """Viscosity proportional to temperature, which makes ``C = 1``."""
+
+    def dynamic_viscosity(self, temperature: object) -> object:
+        value = np.asarray(temperature, dtype=np.float64) * 1e-7
+        return float(value) if np.ndim(temperature) == 0 else value
+
+
+def _howarth_separation(mach0: float, marching: tuple[object, ...]) -> float:
+    from aerophysics.gas import AIR
+
+    edge_type, regime, _, separation_error = marching
+    gamma, gas_constant = AIR.heat_capacity_ratio, AIR.specific_gas_constant
+    transformed = np.linspace(0.0, 1.0, 161)
+    mach = mach0 * (1.0 - transformed / 8.0)
+    temperature = 300.0 / (1.0 + (gamma - 1.0) / 2.0 * mach**2)
+    pressure = 1e5 * (temperature / 300.0) ** (gamma / (gamma - 1.0))
+    density = pressure / (gas_constant * temperature)
+    velocity = mach * np.sqrt(gamma * gas_constant * temperature)
+    model = _LinearViscosity()
+    distance = cumulative_trapezoid(
+        mach / (density * model.dynamic_viscosity(temperature) * velocity),
+        transformed,
+        initial=0,
+    )
+    distance /= distance[-1]
+    edge = edge_type.from_pressure(
+        distance,
+        pressure,
+        total_pressure=1e5,
+        total_temperature=300.0,
+        viscosity_model=model,
+    )
+    try:
+        marching[2](edge, regime=regime.LAMINAR, prandtl_number=1.0)
+    except separation_error as caught:
+        position = float(np.interp(caught.separation_distance, distance, transformed))
+        return position / 8.0
+    raise RuntimeError("the Howarth case did not separate")
+
+
+def _integral_balances(marching: tuple[object, ...]) -> tuple[float, float]:
+    from aerophysics.gas import AIR
+
+    edge_type, regime, solve, _ = marching
+    gamma, gas_constant = AIR.heat_capacity_ratio, AIR.specific_gas_constant
+    cp = AIR.cp
+    distance = np.linspace(0.0, 2.0, 201)
+    mach = 2.0 + (1.0 + np.tanh((distance - 1.0) / 0.1)) / 2.0
+    pressure = 2e5 * (1.0 + (gamma - 1.0) / 2.0 * mach**2) ** (-gamma / (gamma - 1.0))
+    edge = edge_type.from_pressure(
+        distance, pressure, total_pressure=2e5, total_temperature=450.0
+    )
+    result = solve(edge, regime=regime.LAMINAR, wall_temperature=300.0)
+    density = edge.pressure[1:] / (gas_constant * edge.temperature[1:])
+    velocity = edge.velocity[1:]
+    stations = result.distance
+    momentum = (
+        np.gradient(density * velocity**2 * result.momentum_thickness, stations)
+        + density
+        * velocity
+        * np.gradient(velocity, stations)
+        * result.displacement_thickness
+    ) / result.wall_shear_stress
+    deficit = np.array(
+        [
+            np.trapezoid(
+                density[i]
+                / result.temperature_ratio[i]
+                * velocity[i]
+                * result.velocity_ratio[i]
+                * (
+                    cp * edge.temperature[i + 1] * (result.temperature_ratio[i] - 1.0)
+                    + velocity[i] ** 2 / 2.0 * (result.velocity_ratio[i] ** 2 - 1.0)
+                ),
+                result.wall_distance[i],
+            )
+            for i in range(stations.size)
+        ]
+    )
+    energy = -np.gradient(deficit, stations) / result.wall_heat_flux
+    mask = stations > 0.05
+    return (
+        float(np.median(np.abs(momentum[mask] - 1.0))),
+        float(np.median(np.abs(energy[mask] - 1.0))),
+    )
+
+
+def _marching_laminar_verification(api: tuple[object, ...]) -> str:
+    from aerophysics._boundary_layer_march import StationEdge, eta_grid, march
+    from aerophysics.exceptions import BoundaryLayerSeparationError
+    from aerophysics.marching_boundary_layer import (
+        BoundaryLayerEdge,
+        marching_boundary_layer,
+    )
+
+    regime, _, _, flat_plate, _, _, viscosity_model, gas = api
+    gamma, gas_constant = gas.heat_capacity_ratio, gas.specific_gas_constant
+    marching = (
+        BoundaryLayerEdge,
+        regime,
+        marching_boundary_layer,
+        BoundaryLayerSeparationError,
+    )
+    eta = eta_grid(1e-3, 1.015, 0.05, 16.0)
+
+    def wedge(beta: float, wall_ratio: float) -> tuple[float, float]:
+        solution = march(
+            lambda xi: StationEdge(xi, 1.0, beta, 0.0, 300.0, wall_ratio),
+            np.array([1.0]),
+            eta=eta,
+            prandtl_number=1.0,
+            viscosity_model=_LinearViscosity(),
+        )
+        return (
+            float(solution.wall_velocity_slope[-1]),
+            float(solution.wall_temperature_slope[-1]),
+        )
+
+    rows: list[tuple[str, str, float, float]] = []
+    for beta in (-0.15, 0.0, 0.5):
+        computed, _ = wedge(beta, 1.0)
+        reference, _ = _similarity_reference(beta, 1.0)
+        rows.append((f"Falkner--Skan, beta = {beta:g}", "f''(0)", computed, reference))
+    for beta, wall_ratio in ((-0.1, 0.2), (0.5, 2.0)):
+        shear, heat = wedge(beta, wall_ratio)
+        reference_shear, reference_heat = _similarity_reference(beta, wall_ratio)
+        label = f"Similar, beta = {beta:g}, g_w = {wall_ratio:g}"
+        rows.append((label, "f''(0)", shear, reference_shear))
+        rows.append((label, "g'(0)", heat, reference_heat))
+    incompressible = _howarth_separation(0.01, marching)
+    rows.append(("Howarth flow, M = 0.01", "x_sep/L", incompressible, 0.1199))
+    rows.append(
+        (
+            "Howarth image, M0 = 3",
+            "x_sep/L",
+            _howarth_separation(3.0, marching),
+            incompressible,
+        )
+    )
+    for mach, temperature, wall in ((2.0, 220.0, None), (10.0, 60.0, 300.0)):
+        pressure = 2e4
+        ratio = 1.0 + (gamma - 1.0) / 2.0 * mach**2
+        edge = BoundaryLayerEdge.from_pressure(
+            [0.0, 1.0],
+            [pressure, pressure],
+            total_pressure=pressure * ratio ** (gamma / (gamma - 1.0)),
+            total_temperature=temperature * ratio,
+        )
+        density = pressure / (gas_constant * temperature)
+        velocity = mach * np.sqrt(gamma * gas_constant * temperature)
+        viscosity = float(viscosity_model.dynamic_viscosity(temperature))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = marching_boundary_layer(
+                edge, regime=regime.LAMINAR, wall_temperature=wall
+            )
+            plate = flat_plate(
+                1.0,
+                velocity,
+                density,
+                viscosity,
+                regime=regime.LAMINAR,
+                compressible=True,
+                mach=mach,
+                edge_temperature=temperature,
+                wall_temperature=wall,
+            )
+        label = f"Plate, M = {mach:g}, " + (
+            "adiabatic" if wall is None else f"T_w = {wall:g} K"
+        )
+        rows.append(
+            (
+                label,
+                "C_f",
+                float(result.local_skin_friction_coefficient[-1]),
+                float(plate.local_skin_friction_coefficient),
+            )
+        )
+        rows.append(
+            (
+                label,
+                "theta",
+                float(result.momentum_thickness[-1]),
+                float(plate.momentum_thickness),
+            )
+        )
+    momentum, energy = _integral_balances(marching)
+    lines = [
+        ".. list-table:: Marching laminar boundary-layer verification",
+        "   :header-rows: 1",
+        "   :widths: 40 15 15 15 15",
+        "",
+        "   * - Case",
+        "     - Quantity",
+        "     - Computed",
+        "     - Reference",
+        "     - Difference [%]",
+    ]
+    for label, quantity, computed, reference in rows:
+        lines.extend(
+            [
+                f"   * - {label}",
+                f"     - ``{quantity}``",
+                f"     - {computed:.4g}",
+                f"     - {reference:.4g}",
+                f"     - {100.0 * (computed / reference - 1.0):+.2f}",
+            ]
+        )
+    for label, value in (("Momentum", momentum), ("Total enthalpy", energy)):
+        lines.extend(
+            [
+                f"   * - {label} integral, M = 2 to 3, T_w = 300 K",
+                "     - median residual",
+                "     - --",
+                "     - --",
+                f"     - {100.0 * value:.2f}",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def generate(*, check: bool) -> bool:
     api = _api()
     source = _source_comparison(api)
@@ -605,6 +857,11 @@ def generate(*, check: bool) -> bool:
     current &= write_or_check(
         ROOT / "docs/_generated/turbulent_sa_comparison.rst",
         _turbulent_sa_comparison(api),
+        check=check,
+    )
+    current &= write_or_check(
+        ROOT / "docs/_generated/marching_laminar_verification.rst",
+        _marching_laminar_verification(api),
         check=check,
     )
     current &= write_or_check(TABLE_PATH, _rst(source, chart, invariants), check=check)

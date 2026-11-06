@@ -32,6 +32,20 @@ Results
    :alt: Analytic boundary-layer shielding factor for a constant-width protrusion.
    :align: center
 
+Marching laminar boundary layer
+-------------------------------
+
+``marching_boundary_layer`` is compared with solutions that do not share its
+numerics. The wedge and heat-transfer references solve the similarity equations
+with SciPy's ``solve_bvp``. The plate reference is the compressible similarity
+solution of ``flat_plate_boundary_layer``. The compressible Howarth case maps
+the linearly retarded flow through the Illingworth--Stewartson transformation,
+which is exact for ``C = Pr = 1`` and an adiabatic wall, so it must separate at
+the same transformed position as the incompressible flow. The integral balances
+use only the solver's own output and need no reference.
+
+.. include:: ../_generated/marching_laminar_verification.rst
+
 Interpretation and model validation boundary
 --------------------------------------------
 

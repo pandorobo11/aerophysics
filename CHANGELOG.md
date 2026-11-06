@@ -7,6 +7,14 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add `marching_boundary_layer` and `BoundaryLayerEdge` for laminar boundary
+  layers with streamwise-varying edge conditions. The solver marches the
+  compressible thin-layer equations from a sharp leading edge for a calorically
+  perfect gas with an isentropic edge, an isothermal or adiabatic wall, and an
+  optional wall-temperature distribution. Separation raises the new
+  `BoundaryLayerSeparationError`, which holds the separation distance and the
+  upstream result. A failed march raises the new
+  `BoundaryLayerConvergenceError`.
 - Add an independent compressible turbulent boundary-layer reference
   (`docs/scripts/build_turbulent_sa_reference.py`) that marches the
   zero-pressure-gradient thin-layer equations from the leading edge with the

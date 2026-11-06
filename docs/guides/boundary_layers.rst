@@ -23,6 +23,10 @@ Choose a workflow
      - ``flat_plate_boundary_layer``
      - Distance and edge velocity, density, and viscosity
      - :doc:`../models/flat_plate_boundary_layer`
+   * - Follow a laminar boundary layer through a changing edge pressure
+     - ``marching_boundary_layer``
+     - Edge pressure along the wall and edge total pressure and temperature
+     - :doc:`../models/marching_boundary_layer`
    * - Transform a measured or computed compressible velocity profile
      - ``transform_compressible_velocity_profile``
      - Wall-normal velocity, density, and viscosity profiles plus wall shear
@@ -129,11 +133,48 @@ and, when available, ``profile_density``. The profile arrays returned by
 See :doc:`../models/protrusion_drag` for the integral definition, optional
 compressible approximation, and excluded three-dimensional effects.
 
-Check applicability before using the result
---------------------------------------------
+Follow a boundary layer through a pressure change
+-------------------------------------------------
 
-These APIs are engineering models, not a coupled boundary-layer solver. The
-flat-plate correlations exclude roughness, streamwise pressure gradients,
+``flat_plate_boundary_layer`` evaluates each state independently.
+``marching_boundary_layer`` instead marches from the leading edge, so each
+station inherits the upstream history. Supply the edge pressure along the wall,
+starting at the leading edge:
+
+>>> import numpy as np
+>>> from aerophysics import (
+...     BoundaryLayerEdge,
+...     BoundaryLayerRegime,
+...     marching_boundary_layer,
+... )
+>>> distance = np.linspace(0.0, 1.0, 51)
+>>> pressure = 2.0e4 * (1.0 - 0.2 * distance)
+>>> edge = BoundaryLayerEdge.from_pressure(
+...     distance,
+...     pressure,
+...     total_pressure=1.6e5,
+...     total_temperature=500.0,
+... )
+>>> layer = marching_boundary_layer(
+...     edge,
+...     regime=BoundaryLayerRegime.LAMINAR,
+...     wall_temperature=300.0,
+... )
+>>> layer.distance.size
+50
+>>> bool(np.all(layer.pressure_gradient_parameter > 0.0))
+True
+
+An adverse pressure gradient can separate the boundary layer. The march then
+raises ``BoundaryLayerSeparationError``, which holds ``separation_distance`` and
+the ``result`` at the stations upstream.
+
+Check applicability before using the result
+-------------------------------------------
+
+These APIs are engineering models, and none of them is coupled to the outer
+flow. The marching solver takes the edge state as an input and is laminar only.
+The flat-plate correlations exclude roughness, streamwise pressure gradients,
 separation, suction, blowing, and natural-transition prediction. The profile
 construction assumes a smooth, fully turbulent, approximately ZPG boundary
 layer. The protrusion model integrates an undisturbed profile and does not
