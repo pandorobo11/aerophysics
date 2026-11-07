@@ -14,3 +14,6 @@ docs/_build/
 !/literature/README.md
 *.egg-info/
 *.py[cod]
+/native/target/
+/native/.cargo-home/
+/native/dist/

@@ -95,7 +95,11 @@ def low_mach_viscosity_edge(
     )
 
 
-def test_laminar_bounded_viscosity_matches_unrestricted_air() -> None:
+def test_laminar_bounded_viscosity_matches_unrestricted_air(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Compare the bounded model against the same Python solver path.
+    monkeypatch.setenv("AEROPHYSICS_NATIVE", "0")
     edge = low_mach_viscosity_edge(300.001, BoundedAirViscosity())
     bounded = marching_boundary_layer(
         edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=300.001

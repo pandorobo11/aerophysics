@@ -61,6 +61,7 @@ security = [
 
 [tool.hatch.build.targets.sdist]
 exclude = [
+  "/native",
   "/.claude",
   "/.venv",
 ]

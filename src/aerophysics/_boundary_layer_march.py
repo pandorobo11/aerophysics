@@ -10,6 +10,7 @@ Streamwise derivatives use variable-step BDF2 (BDF1 on the first step). Each
 station is solved with a damped Newton iteration; the block-tridiagonal Jacobian
 is assembled by three-color finite differences and solved with banded LAPACK.
 ``_boundary_layer_sa`` adds the Spalart--Allmaras equations on the same march.
+An optional native kernel accelerates the laminar Newton solve.
 """
 
 from collections.abc import Callable
@@ -19,6 +20,7 @@ import numpy as np
 from scipy.linalg import solve_banded
 
 from aerophysics._array import FloatArray
+from aerophysics._native_march import create_adapter
 from aerophysics.exceptions import BoundaryLayerConvergenceError
 from aerophysics.transport import DynamicViscosityModel
 
@@ -124,6 +126,11 @@ class Discretization:
         self.eta = eta
         self.prandtl_number = prandtl_number
         self.viscosity_model = viscosity_model
+        self._native = (
+            create_adapter(eta, prandtl_number, viscosity_model)
+            if type(self) is Discretization
+            else None
+        )
         self.h = np.diff(eta)
         left, right = self.h[:-1], self.h[1:]
         self.width = (left + right) / 2.0
@@ -314,6 +321,16 @@ class Discretization:
         lagged: FloatArray,
     ) -> Station | None:
         """Run the damped Newton iteration; None reports that it did not converge."""
+        if self._native is not None:
+            native_state = self._native.newton(
+                guess,
+                edge,
+                coefficient,
+                lagged,
+                self.newton_iterations,
+                self.newton_tolerance,
+            )
+            return None if native_state is None else self.station(native_state, edge.xi)
         state = guess.copy()
         try:
             for _ in range(self.newton_iterations):
