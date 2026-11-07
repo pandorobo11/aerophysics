@@ -254,8 +254,8 @@ CFDとの一致も実験精度の保証にはならない。TMR比較の適用�
 
 ### テストの配置
 
-- 通常の pytest: API、例外、配列の非共有、V2〜V10。SA の V1 と V7〜V10 は高速版
-- `scripts/check-generated.sh`: 文書用の検証表と、計算量の大きい SA の V1、V11
+- 通常の pytest: API、例外、配列の非共有と、高速な V1・V2・V5・V6・積分収支などの代表例。`scripts/check-generated.sh` は文書用の検証表と生成物を確認する。
+- `solver_verification`: V3・V4、細分検証など計算量の大きい marching 検証。2026-11-07 の明示的なユーザー判断により CI は Ubuntu / Python 3.12 の1ジョブとし、solver 関連の変更時、main、release で実行する。ローカルは `scripts/needs-solver-verification.sh` の判定または `scripts/check.sh --full` で実行する。
 - フォールバックと失敗経路も分岐カバレッジ 95% の対象とする
 
 ## 7. 実装の順序と第2段階

@@ -2,6 +2,7 @@
 
 import warnings
 from dataclasses import FrozenInstanceError, replace
+from importlib import import_module
 from itertools import pairwise
 from typing import overload
 
@@ -22,6 +23,9 @@ from aerophysics import _boundary_layer_march as march_module
 from aerophysics._array import FloatArray
 from aerophysics._boundary_layer_march import (
     Discretization,
+    MarchSolution,
+    SeparationError,
+    Station,
     StationEdge,
     eta_grid,
     march,
@@ -32,7 +36,11 @@ from aerophysics.exceptions import (
     BoundaryLayerSeparationError,
     ModelRangeError,
 )
-from aerophysics.marching_boundary_layer import _EdgeInterpolant, _result
+from aerophysics.marching_boundary_layer import (
+    _EdgeInterpolant,
+    _result,
+    _warn_applicability,
+)
 from aerophysics.transport import AIR_VISCOSITY, BlottnerModel, DynamicViscosityModel
 
 GAMMA = AIR.heat_capacity_ratio
@@ -234,6 +242,7 @@ def howarth_edge(
 
 
 @pytest.mark.parametrize("mach0", [0.01, 3.0])
+@pytest.mark.solver_verification
 def test_howarth_separation_and_its_compressible_image(mach0: float) -> None:
     edge, transformed = howarth_edge(mach0)
     with pytest.raises(BoundaryLayerSeparationError) as caught:
@@ -250,6 +259,7 @@ def test_howarth_separation_and_its_compressible_image(mach0: float) -> None:
     assert np.all(np.diff(upstream.local_skin_friction_coefficient[20:]) < 0.0)
 
 
+@pytest.mark.solver_verification
 def test_adiabatic_unit_prandtl_layer_keeps_the_exact_total_enthalpy() -> None:
     edge, _ = howarth_edge(3.0)
     with pytest.raises(BoundaryLayerSeparationError) as caught:
@@ -432,6 +442,7 @@ def plate_edge(distance: ArrayLike) -> BoundaryLayerEdge:
 
 
 @pytest.mark.parametrize("width", [0.1, 0.02])
+@pytest.mark.solver_verification
 def test_streamwise_refinement_converges_through_a_pressure_change(
     monkeypatch: pytest.MonkeyPatch, width: float
 ) -> None:
@@ -462,6 +473,7 @@ def test_streamwise_refinement_converges_through_a_pressure_change(
     ],
     ids=["1cm-100K", "1mm-10K", "5cm-100K", "50cm-100K"],
 )
+@pytest.mark.solver_verification
 def test_wall_temperature_changes_resolve_the_heat_flux_without_extra_stations(
     monkeypatch: pytest.MonkeyPatch,
     distance: list[float],
@@ -488,6 +500,7 @@ def test_wall_temperature_changes_resolve_the_heat_flux_without_extra_stations(
     )
 
 
+@pytest.mark.solver_verification
 def test_heat_flux_through_zero_stays_resolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -515,6 +528,7 @@ def test_heat_flux_through_zero_stays_resolved(
     )
 
 
+@pytest.mark.solver_verification
 def test_wall_normal_grid_refinement_converges() -> None:
     edge = smooth_edge(2.0, 3.0)
     interpolant = _EdgeInterpolant(edge, np.full(edge.distance.size, 300.0))
@@ -709,6 +723,7 @@ def test_invalid_march_options_are_rejected() -> None:
         )
 
 
+@pytest.mark.solver_verification
 def test_short_pressure_changes_warn() -> None:
     distance = np.linspace(0.0, 1.0, 2001)
     mach = 2.0 + (1.0 + np.tanh((distance - 0.5) / 0.0002)) / 2.0
@@ -737,6 +752,64 @@ def test_strong_viscous_interaction_warns() -> None:
 
 def constant_station(xi: float) -> StationEdge:
     return StationEdge(xi, 1.0, 0.0, 0.0, 300.0, 1.0)
+
+
+def test_pressure_length_warning_without_a_refinement_march() -> None:
+    edge = plate_edge([0.0, 0.1])
+    result = marching_boundary_layer(
+        edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=300.0
+    )
+    varying_edge = BoundaryLayerEdge.from_pressure(
+        [0.0, 0.1], [2e4, 1e4], total_pressure=1.6e5, total_temperature=500.0
+    )
+    # A prescribed thick layer isolates the applicability warning from the
+    # expensive numerical solution through a very short pressure change.
+    thick = replace(result, boundary_layer_thickness=np.ones_like(result.distance))
+    with pytest.warns(ApplicabilityWarning, match="thin-layer"):
+        _warn_applicability(varying_edge, _EdgeInterpolant(varying_edge, None), thick)
+
+
+def test_separation_reports_the_upstream_solution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise error propagation with a manufactured square-root shear collapse."""
+    solver = Discretization(ETA, 1.0, LinearViscosity())
+
+    def solve(
+        guess: FloatArray, edge: StationEdge, coefficient: float, lagged: FloatArray
+    ) -> Station:
+        return Station(
+            edge.xi,
+            solver.starting_guess(edge),
+            float(np.sqrt(max(0.0, 1.0 - 2.0 * edge.xi))),
+            0.0,
+        )
+
+    monkeypatch.setattr(solver, "solve", solve)
+    with pytest.raises(SeparationError) as internal:
+        march(
+            lambda xi: replace(constant_station(xi), beta=-0.1),
+            np.array([0.1, 1.0]),
+            solver,
+        )
+    assert internal.value.distance == pytest.approx(0.5)
+    np.testing.assert_array_equal(internal.value.solution.distance, [0.1])
+
+    def separated(*args: object, **kwargs: object) -> MarchSolution:
+        raise internal.value
+
+    monkeypatch.setattr(
+        import_module(marching_boundary_layer.__module__), "march", separated
+    )
+    with pytest.raises(BoundaryLayerSeparationError) as public:
+        marching_boundary_layer(
+            plate_edge([0.0, 0.1, 1.0]), regime=BoundaryLayerRegime.LAMINAR
+        )
+    assert public.value.__cause__ is internal.value
+    assert public.value.separation_distance == internal.value.distance
+    assert public.value.result is not None
+    np.testing.assert_array_equal(public.value.result.distance, [0.1])
+    assert np.all(public.value.result.wall_shear_stress > 0.0)
 
 
 def test_march_reports_an_outer_boundary_inside_the_layer() -> None:

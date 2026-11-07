@@ -35,11 +35,26 @@ package-build checks. It must pass before handing work back to the user. Use
 `scripts/check.sh --check-only` when a check-only run is needed; that mode does
 not modify source files.
 
+The slow marching-solver tier runs automatically when solver-relevant files
+changed relative to `origin/main`, including staged, unstaged, and untracked
+files. `scripts/needs-solver-verification.sh` owns the path rules and runs the
+tier if the base cannot be resolved. Use `scripts/check.sh --full` to force it,
+and use `--full` before changes whose impact on the solver is unclear. The
+`--full` and `--check-only` options can be combined.
+
 Generated and verification assets are deliberately excluded from the normal
 cross-platform pytest matrix. Run `scripts/check-generated.sh` as part of the
 local gate and keep the dedicated generated-assets CI job on Ubuntu with
 Python 3.12. If an asset check fails, the failing file paths must remain
 visible in the output.
+
+By explicit user decision on 2026-11-07, slow `solver_verification` tests run
+in CI only on Ubuntu / Python 3.12, separately from generated assets. They run
+for solver-relevant pull-request changes and always on main and in releases.
+Representative fast marching tests stay in the full Python/OS matrix. In the
+local write-mode gate, verification assets are regenerated before the asset
+tests; only their redundant currency test is skipped after successful
+regeneration. Check-only, CI, and release runs retain that currency check.
 
 ### Generated-asset failure procedure
 

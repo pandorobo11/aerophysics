@@ -88,6 +88,27 @@ source, use:
 scripts/check.sh --check-only
 ```
 
+Slow marching-solver verification runs automatically for solver-relevant
+changes relative to `origin/main`, including staged, unstaged, and untracked
+files. The path rules are in `scripts/needs-solver-verification.sh`; a missing
+base or failed comparison runs the tier conservatively. Force it with
+`scripts/check.sh --full` (combinable with `--check-only`), and use `--full`
+when a change's solver impact is unclear.
+
+The test tiers are mutually exclusive:
+
+| Tier | Command / selection |
+| --- | --- |
+| Normal tests and coverage | `scripts/check-coverage.sh` (excludes the other three markers) |
+| Generated assets | `scripts/check-generated.sh` |
+| Slow solver verification | `uv run pytest -m solver_verification --no-cov` |
+| Installed packages | `uv run pytest -m package_artifact --no-cov` (after building) |
+
+By explicit user decision on 2026-11-07, slow solver verification runs in one
+Ubuntu / Python 3.12 CI job for solver-relevant PR changes, and always on main
+and in releases. Representative fast marching tests remain in the full
+Python/OS matrix.
+
 The normal test suite collects branch coverage once and applies independent
 gates to the two product layers:
 
@@ -188,6 +209,12 @@ scripts/check-generated.sh
 Generated verification tests remain outside the normal cross-platform pytest
 matrix and run in their dedicated Ubuntu/Python 3.12 CI job. Failure output
 must retain the paths of differing assets.
+
+The local write-mode gate regenerates verification assets before this step,
+then sets `AEROPHYSICS_SKIP_ASSET_CURRENCY=1` only after successful generation
+to skip `test_deterministic_verification_assets_are_current`. Every other
+asset test still runs. Check-only mode runs the currency test without writing;
+CI and release workflows must never set the skip variable.
 
 ## Releases
 
