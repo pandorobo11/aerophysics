@@ -39,16 +39,20 @@ def relative_difference(a, b):
     return float(np.max(np.abs(a - b) / np.maximum(np.abs(a), 1e-300)))
 
 
-def run(edge, wall, mode):
+def run(edge, wall, mode, jacobian="analytic"):
     os.environ["AEROPHYSICS_NATIVE"] = mode
+    os.environ["AEROPHYSICS_NATIVE_JACOBIAN"] = jacobian
     return marching_boundary_layer(
         edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=wall
     )
 
 
 def main():
-    print("case | Python (s) | native (s) | speedup | max rel Cf | max rel wall")
-    print("--- | ---: | ---: | ---: | ---: | ---:")
+    print(
+        "case | Python (s) | native FD (s) | native analytic (s) | "
+        "speedup | max rel Cf | max rel thermal"
+    )
+    print("--- | ---: | ---: | ---: | ---: | ---: | ---:")
     for name, edge, wall in (
         ("flat-51", flat_edge(), None),
         ("smooth-201", smooth_edge(201), 300.0),
@@ -56,16 +60,20 @@ def main():
     ):
         timings = []
         results = []
-        for mode in ("0", "1"):
-            run(edge, wall, mode)
+        for mode, jacobian in (
+            ("0", "analytic"),
+            ("1", "finite-difference"),
+            ("1", "analytic"),
+        ):
+            run(edge, wall, mode, jacobian)
             samples = []
             for _ in range(5):
                 start = perf_counter()
-                result = run(edge, wall, mode)
+                result = run(edge, wall, mode, jacobian)
                 samples.append(perf_counter() - start)
             timings.append(min(samples))
             results.append(result)
-        python, native = results
+        python, _, native = results
         cf = relative_difference(
             python.local_skin_friction_coefficient,
             native.local_skin_friction_coefficient,
@@ -75,8 +83,8 @@ def main():
             getattr(python, wall_name), getattr(native, wall_name)
         )
         print(
-            f"{name} | {timings[0]:.3f} | {timings[1]:.3f} | "
-            f"{timings[0] / timings[1]:.2f} | {cf:.3e} | {thermal:.3e}",
+            f"{name} | {timings[0]:.6f} | {timings[1]:.6f} | {timings[2]:.6f} | "
+            f"{timings[0] / timings[2]:.2f} | {cf:.3e} | {thermal:.3e}",
             flush=True,
         )
 

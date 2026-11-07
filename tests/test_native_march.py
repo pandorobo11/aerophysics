@@ -12,7 +12,7 @@ from test_marching_boundary_layer import smooth_edge
 from aerophysics import BoundaryLayerEdge, BoundaryLayerRegime, marching_boundary_layer
 from aerophysics._boundary_layer_march import Discretization, StationEdge, eta_grid
 from aerophysics._boundary_layer_sa import TurbulentDiscretization
-from aerophysics._native_march import load_extension, viscosity_spec
+from aerophysics._native_march import create_adapter, load_extension, viscosity_spec
 from aerophysics.exceptions import ApplicabilityWarning
 from aerophysics.marching_boundary_layer import _EdgeInterpolant
 from aerophysics.transport import (
@@ -28,8 +28,14 @@ class FakeKernel:
     out_of_range = False
 
     def __init__(
-        self, eta: Any, prandtl_number: float, kind: int, parameters: tuple[float, ...]
+        self,
+        eta: Any,
+        prandtl_number: float,
+        kind: int,
+        parameters: tuple[float, ...],
+        jacobian: str = "analytic",
     ) -> None:
+        self.jacobian = jacobian
         self.kind = kind
         self.parameters = parameters
 
@@ -122,11 +128,14 @@ def test_selection_and_dispatch(
     assert Discretization(eta, 0.72, AIR_VISCOSITY)._native is None
 
 
+@pytest.mark.parametrize("jacobian", ["analytic", "finite-difference"])
 @pytest.mark.parametrize("case", ["adiabatic", "isothermal", "keyes"])
 def test_real_native_agrees_with_python(
-    monkeypatch: pytest.MonkeyPatch, case: str
+    monkeypatch: pytest.MonkeyPatch, case: str, jacobian: str
 ) -> None:
     pytest.importorskip("aerophysics_native")
+    monkeypatch.setenv("AEROPHYSICS_NATIVE_JACOBIAN", jacobian)
+    rtol, atol = (1e-8, 1e-10) if jacobian == "analytic" else (1e-10, 1e-12)
     edge = smooth_edge(2.0, 3.0, count=51)
     if case == "adiabatic":
         edge = BoundaryLayerEdge.from_pressure(
@@ -160,7 +169,7 @@ def test_real_native_agrees_with_python(
                 edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=wall
             )
         )
-    np.testing.assert_allclose(starts[0], starts[1], rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(starts[0], starts[1], rtol=rtol, atol=atol)
     for name in (
         "local_skin_friction_coefficient",
         "wall_temperature" if wall is None else "wall_heat_flux",
@@ -168,11 +177,15 @@ def test_real_native_agrees_with_python(
         "temperature_ratio",
     ):
         np.testing.assert_allclose(
-            getattr(results[0], name), getattr(results[1], name), rtol=1e-10, atol=1e-12
+            getattr(results[0], name), getattr(results[1], name), rtol=rtol, atol=atol
         )
 
 
-def test_real_failure_shapes_and_noncontiguous(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("jacobian", ["analytic", "finite-difference"])
+def test_real_failure_shapes_and_noncontiguous(
+    monkeypatch: pytest.MonkeyPatch, jacobian: str
+) -> None:
+    monkeypatch.setenv("AEROPHYSICS_NATIVE_JACOBIAN", jacobian)
     native = pytest.importorskip("aerophysics_native")
     eta = np.linspace(0.0, 10.0, 101)
     for invalid in (eta[:2], np.array([0.0, 1.0, 1.0])):
@@ -181,7 +194,9 @@ def test_real_failure_shapes_and_noncontiguous(monkeypatch: pytest.MonkeyPatch) 
     for kind, parameters in ((2, ()), (-1, ()), (0, ())):
         with pytest.raises(ValueError):
             native.LaminarKernel(eta, 0.72, kind, parameters)
-    kernel = native.LaminarKernel(eta, 0.72, 0, (1e-5, 300.0, 100.0))
+    with pytest.raises(ValueError, match="jacobian"):
+        native.LaminarKernel(eta, 0.72, 0, (1e-5, 300.0, 100.0), "invalid")
+    kernel = native.LaminarKernel(eta, 0.72, 0, (1e-5, 300.0, 100.0), jacobian)
     with pytest.raises(ValueError):
         kernel.newton(
             0.0,
@@ -223,19 +238,20 @@ def test_real_failure_shapes_and_noncontiguous(monkeypatch: pytest.MonkeyPatch) 
     np.testing.assert_array_equal(state, strided_state)
 
 
-def test_real_keyes_range_and_perturbed_temperature() -> None:
+@pytest.mark.parametrize("jacobian", ["analytic", "finite-difference"])
+def test_real_keyes_range_and_perturbed_temperature(jacobian: str) -> None:
     native = pytest.importorskip("aerophysics_native")
     eta = np.linspace(0.0, 1.0, 5)
     parameters = (1.488e-6, 122.1, 5.0, 79.0, 1845.0)
-    kernel = native.LaminarKernel(eta, 0.72, 1, parameters)
+    kernel = native.LaminarKernel(eta, 0.72, 1, parameters, jacobian)
     state = np.ones((3, 5))
     lagged = np.zeros_like(state)
     # The unperturbed temperature is at the upper limit; the Jacobian's
-    # positive temperature perturbations cross it.
+    # positive temperature perturbations cross it only in finite-difference mode.
     result, out = kernel.newton(
         0.0, 0.0, 0.0, 1845.0, 1.0, 0.0, lagged, state, 1, 1e-10
     )
-    assert out
+    assert out == (jacobian == "finite-difference")
     assert result is None
     state[2, 0] = 0.0
     result, out = kernel.newton(
@@ -244,11 +260,13 @@ def test_real_keyes_range_and_perturbed_temperature() -> None:
     assert result is None and out
 
 
-@pytest.mark.parametrize("temperature", [np.nan, np.inf, -np.inf])
+@pytest.mark.parametrize("jacobian", ["analytic", "finite-difference"])
+@pytest.mark.parametrize("temperature", [np.nan, np.inf, -np.inf, 0.0, -1.0])
 def test_real_nonfinite_temperatures_fail_both_paths(
-    monkeypatch: pytest.MonkeyPatch, temperature: float
+    monkeypatch: pytest.MonkeyPatch, temperature: float, jacobian: str
 ) -> None:
     pytest.importorskip("aerophysics_native")
+    monkeypatch.setenv("AEROPHYSICS_NATIVE_JACOBIAN", jacobian)
     eta = np.linspace(0.0, 10.0, 101)
     edge = StationEdge(0.0, 1.0, 0.0, 0.0, 300.0, None)
     for mode in ("0", "1"):
@@ -262,3 +280,27 @@ def test_real_nonfinite_temperatures_fail_both_paths(
         assert (
             disc.newton(disc.starting_guess(edge), edge_nonfinite, 0.0, lagged) is None
         )
+
+
+@pytest.mark.parametrize("setting", [None, "", "analytic", "finite-difference"])
+def test_jacobian_selection(
+    monkeypatch: pytest.MonkeyPatch, fake_extension: None, setting: str | None
+) -> None:
+    monkeypatch.setenv("AEROPHYSICS_NATIVE", "1")
+    if setting is None:
+        monkeypatch.delenv("AEROPHYSICS_NATIVE_JACOBIAN", raising=False)
+    else:
+        monkeypatch.setenv("AEROPHYSICS_NATIVE_JACOBIAN", setting)
+    adapter = create_adapter(np.array([0.0, 0.5, 1.0]), 0.72, AIR_VISCOSITY)
+    assert adapter is not None
+    assert isinstance(adapter.kernel, FakeKernel)
+    assert adapter.kernel.jacobian == (setting or "analytic")
+
+
+def test_invalid_jacobian_selection(
+    monkeypatch: pytest.MonkeyPatch, fake_extension: None
+) -> None:
+    monkeypatch.setenv("AEROPHYSICS_NATIVE", "1")
+    monkeypatch.setenv("AEROPHYSICS_NATIVE_JACOBIAN", "other")
+    with pytest.raises(ValueError, match="AEROPHYSICS_NATIVE_JACOBIAN"):
+        create_adapter(np.array([0.0, 0.5, 1.0]), 0.72, AIR_VISCOSITY)

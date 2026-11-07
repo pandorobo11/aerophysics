@@ -1,3 +1,6 @@
+mod analytic;
+mod block;
+
 use numpy::ndarray::Array2;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
@@ -25,10 +28,26 @@ impl Viscosity {
             Some(p[0] * t.powf(1.5) / (t + p[1] * 10_f64.powf(-p[2] / t)))
         }
     }
+
+    fn evaluate_with_derivative(&self, t: f64, out: &mut bool) -> Option<(f64, f64)> {
+        // Reuse the value expression verbatim, including range/failure handling.
+        let mu = self.evaluate(t, out)?;
+        let p = &self.parameters;
+        let logarithmic_derivative = if self.kind == 0 {
+            1.5 / t - 1.0 / (t + p[2])
+        } else {
+            let term = p[1] * 10_f64.powf(-p[2] / t);
+            let denominator = t + term;
+            let derivative = 1.0 + term * std::f64::consts::LN_10 * p[2] / t.powi(2);
+            1.5 / t - derivative / denominator
+        };
+        Some((mu, mu * logarithmic_derivative))
+    }
 }
 
 #[pyclass]
 struct LaminarKernel {
+    analytic: bool,
     n: usize,
     pr: f64,
     viscosity: Viscosity,
@@ -312,12 +331,23 @@ impl BandMatrix {
 #[pymethods]
 impl LaminarKernel {
     #[new]
+    #[pyo3(signature = (eta, prandtl_number, viscosity_kind, viscosity_parameters, jacobian="analytic"))]
     fn new(
         eta: PyReadonlyArray1<'_, f64>,
         prandtl_number: f64,
         viscosity_kind: i32,
         viscosity_parameters: Vec<f64>,
+        jacobian: &str,
     ) -> PyResult<Self> {
+        let analytic = match jacobian {
+            "analytic" => true,
+            "finite-difference" => false,
+            _ => {
+                return Err(PyValueError::new_err(
+                    "jacobian must be analytic or finite-difference",
+                ))
+            }
+        };
         let eta: Vec<f64> = eta.as_array().iter().copied().collect();
         if eta.len() < 3
             || eta
@@ -349,6 +379,7 @@ impl LaminarKernel {
             ]);
         }
         Ok(Self {
+            analytic,
             n: eta.len(),
             pr: prandtl_number,
             viscosity: Viscosity {
@@ -394,7 +425,13 @@ impl LaminarKernel {
             coefficient,
         };
         let (state, out) = py.detach(|| {
-            self.iterate(
+            let iterate = if self.analytic {
+                Self::iterate_analytic
+            } else {
+                Self::iterate
+            };
+            iterate(
+                self,
                 guess,
                 &lagged,
                 &edge,
@@ -534,6 +571,47 @@ mod tests {
         for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert!(s.evaluate(bad, &mut out).is_none());
             assert!(k.evaluate(bad, &mut out).is_none());
+        }
+    }
+}
+
+#[cfg(test)]
+mod derivative_tests {
+    use super::*;
+    #[test]
+    fn viscosity_derivatives_values_and_failures() {
+        for viscosity in [
+            Viscosity {
+                kind: 0,
+                parameters: vec![1.7894e-5, 288.15, 110.4],
+            },
+            Viscosity {
+                kind: 1,
+                parameters: vec![1.488e-6, 122.1, 5.0, 79.0, 1845.0],
+            },
+        ] {
+            for t in [60.0, 79.0, 288.15, 500.0, 1845.0, 2000.0] {
+                let mut out = false;
+                let mut derivative_out = false;
+                let mu = viscosity.evaluate(t, &mut out).unwrap();
+                let (value, derivative) = viscosity
+                    .evaluate_with_derivative(t, &mut derivative_out)
+                    .unwrap();
+                assert_eq!(mu.to_bits(), value.to_bits());
+                assert_eq!(out, derivative_out);
+                let h = t * 1e-5;
+                let central = (viscosity.evaluate(t + h, &mut out).unwrap()
+                    - viscosity.evaluate(t - h, &mut out).unwrap())
+                    / (2.0 * h);
+                assert!((derivative - central).abs() < 1e-9 * derivative.abs());
+            }
+            for bad in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                for initial in [false, true] {
+                    let mut out = initial;
+                    assert!(viscosity.evaluate_with_derivative(bad, &mut out).is_none());
+                    assert_eq!(out, initial);
+                }
+            }
         }
     }
 }

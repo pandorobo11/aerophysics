@@ -16,7 +16,6 @@ valid past it.
 
 import warnings
 from dataclasses import dataclass
-from itertools import pairwise
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -327,8 +326,16 @@ class _EdgeInterpolant:
             ]
             + [edge.distance[-1:]]
         )
+        half = (panels[1:] - panels[:-1]) / 2.0
+        nodes = panels[:-1, None] + half[:, None] * (_GAUSS_NODES + 1.0)
+        flux = self._flux(nodes)
+        # Copy each row to match the scalar integral's aligned flux allocation.
+        # Unaligned five-element views can change np.dot's summation order.
         increments = np.array(
-            [self._integral(left, right) for left, right in pairwise(panels)]
+            [
+                float(h * np.dot(_GAUSS_WEIGHTS, row.copy()))
+                for h, row in zip(half, flux, strict=True)
+            ]
         )
         self.panels = panels
         self.xi_at_panels = np.concatenate(([0.0], np.cumsum(increments)))

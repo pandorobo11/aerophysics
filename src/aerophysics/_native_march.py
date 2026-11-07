@@ -15,6 +15,15 @@ if TYPE_CHECKING:
 
 
 class Kernel(Protocol):
+    def __init__(
+        self,
+        eta: FloatArray,
+        prandtl_number: float,
+        viscosity_kind: int,
+        viscosity_parameters: tuple[float, ...],
+        jacobian: str = "analytic",
+    ) -> None: ...
+
     def newton(
         self,
         xi: float,
@@ -31,7 +40,7 @@ class Kernel(Protocol):
 
 
 class Extension(Protocol):
-    LaminarKernel: Callable[[FloatArray, float, int, tuple[float, ...]], Kernel]
+    LaminarKernel: Callable[[FloatArray, float, int, tuple[float, ...], str], Kernel]
 
 
 def load_extension() -> Extension | None:
@@ -113,7 +122,12 @@ def create_adapter(
     spec = viscosity_spec(model)
     if extension is None or spec is None:
         return None
+    jacobian = os.environ.get("AEROPHYSICS_NATIVE_JACOBIAN", "analytic") or "analytic"
+    if jacobian not in ("analytic", "finite-difference"):
+        raise ValueError(
+            "AEROPHYSICS_NATIVE_JACOBIAN must be analytic or finite-difference"
+        )
     kind, parameters = spec
     return NativeMarch(
-        extension.LaminarKernel(eta, prandtl_number, kind, parameters), model
+        extension.LaminarKernel(eta, prandtl_number, kind, parameters, jacobian), model
     )
