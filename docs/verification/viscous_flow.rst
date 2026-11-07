@@ -91,3 +91,36 @@ with wall-normal refinement rather than streamwise refinement. SA-noft2 develops
 its own laminar start and transition near the leading edge; this is not a
 transition prediction. Accuracy against experiment is not established.
 Agreement with CFD that uses the same model does not establish it.
+
+Thin axisymmetric marching boundary layer
+------------------------------------------
+
+The model uses SI, downstream wall arc length from a sharp tip/leading edge,
+wall-normal outward y, local-edge Cf, positive-into-wall heat flux and positive
+beta for acceleration. Perfect-gas and isentropic-edge assumptions apply.
+Transverse/longitudinal curvature and normal pressure gradients are excluded.
+The delta99/r_w warning at 0.1 is an uncalibrated indicator, expected near tips.
+
+All 57 saved planar arrays are bit-identical with omitted or explicit None
+radius. Constant-radius cylinders reproduce planar wall quantities and profiles
+within relative 1e-9 (profiles use a relative maximum norm because no-slip
+values approach zero). Laminar cones at M0.3 and M2, 5 and 20 degrees, with
+a prescribed 300 K or adiabatic wall, reproduce the sqrt(3) relation within 6e-12 percent.
+The Mangler original was not obtained; the analytical transform and
+:ref:`Tauber <ref-tauber-1989>`, :ref:`Seiff <ref-seiff-1954>` and
+:ref:`Moore <ref-moore-1951>` provide the checks.
+
+Generalized Mangler mappings on 801 nodes differ by at most 0.000827 percent
+in Cf. SA has no such exact mapping. Momentum balance medians are below
+0.05 percent; enthalpy diagnostics distinguish streamwise and wall-normal
+refinement. All details, including adiabatic diagnostics and synthetic shoulder
+stress measurements, are in section 12 of the development design note.
+
+The real-body example uses :ref:`R&M 3633 <ref-winter-rotta-smith-1968>`
+wind-tunnel measurements. See :ref:`the guide <rm3633-example>` for geometry,
+interpolation, thermal and transition assumptions. Maximum Cf discrepancy
+is 0.0004443 and delta99/r_w reaches 0.4774. Physical accuracy, transition and
+real shoulder edge conditions remain open. The regression bound is distinct
+from the +/-0.0002 measurement accuracy.
+
+.. include:: ../_generated/marching_axisymmetric_verification.rst
