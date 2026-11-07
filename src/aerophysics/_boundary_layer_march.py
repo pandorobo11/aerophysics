@@ -1,7 +1,7 @@
-"""Downstream march of the transformed laminar boundary-layer equations.
+"""Downstream march of the transformed boundary-layer equations.
 
-The unknowns at one station are ``f``, ``u = f'`` and ``g = T/T_e`` on a fixed
-``eta`` grid, with ``xi`` as the marching variable:
+The laminar unknowns at one station are ``f``, ``u = f'`` and ``g = T/T_e`` on a
+fixed ``eta`` grid, with ``xi`` as the marching variable:
 
     (C f'')' + f f'' + beta (g - f'^2)        = 2 xi (f' f'_xi - f'' f_xi)
     (C/Pr g')' + f g' + (gamma-1) M_e^2 C f''^2 = 2 xi (f' g_xi - g' f_xi)
@@ -9,6 +9,7 @@ The unknowns at one station are ``f``, ``u = f'`` and ``g = T/T_e`` on a fixed
 Streamwise derivatives use variable-step BDF2 (BDF1 on the first step). Each
 station is solved with a damped Newton iteration; the block-tridiagonal Jacobian
 is assembled by three-color finite differences and solved with banded LAPACK.
+``_boundary_layer_sa`` adds the Spalart--Allmaras equations on the same march.
 """
 
 from collections.abc import Callable
@@ -21,11 +22,7 @@ from aerophysics._array import FloatArray
 from aerophysics.exceptions import BoundaryLayerConvergenceError
 from aerophysics.transport import DynamicViscosityModel
 
-_UNKNOWNS = 3
-_BAND = 2 * _UNKNOWNS - 1
 _COLORS = 3
-_NEWTON_ITERATIONS = 20
-_NEWTON_TOLERANCE = 1e-10
 _MAX_VELOCITY_UPDATE = 0.5
 _MAX_RELATIVE_TEMPERATURE_UPDATE = 0.7
 
@@ -50,7 +47,10 @@ _EDGE_TOLERANCE = 1e-4
 class StationEdge:
     """Edge parameters at one streamwise position.
 
-    ``wall_ratio`` is ``T_w/T_e``, or None for an adiabatic wall.
+    ``wall_ratio`` is ``T_w/T_e``, or None for an adiabatic wall. The last three
+    fields are used by the turbulent equations only: ``reynolds_root`` is
+    ``sqrt(2 xi)/mu_e``, ``viscosity_growth`` is ``2 xi d(ln nu_e)/d(xi)``, and
+    ``sa_ratio`` is ``nu_tilde/nu_e`` at the outer boundary.
     """
 
     xi: float
@@ -59,6 +59,9 @@ class StationEdge:
     heating: float
     temperature: float
     wall_ratio: float | None
+    reynolds_root: float = 0.0
+    viscosity_growth: float = 0.0
+    sa_ratio: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +74,7 @@ class MarchSolution:
     temperature_ratio: FloatArray
     wall_velocity_slope: FloatArray
     wall_temperature_slope: FloatArray
+    nu_tilde_ratio: FloatArray | None = None
 
 
 class SeparationError(Exception):
@@ -83,11 +87,11 @@ class SeparationError(Exception):
 
 
 @dataclass(frozen=True, slots=True)
-class _Station:
+class Station:
+    """Converged state ``(f, u, g, ...)`` at one position."""
+
     xi: float
-    f: FloatArray
-    u: FloatArray
-    g: FloatArray
+    state: FloatArray
     wall_velocity_slope: float
     wall_temperature_slope: float
 
@@ -104,8 +108,12 @@ def eta_grid(
     return np.asarray(nodes, dtype=np.float64)
 
 
-class _Discretization:
-    """Residual and Jacobian of one station on a fixed ``eta`` grid."""
+class Discretization:
+    """Residual, Jacobian, and Newton solve of one station on a fixed ``eta`` grid."""
+
+    unknowns = 3
+    newton_iterations = 20
+    newton_tolerance = 1e-10
 
     def __init__(
         self,
@@ -135,8 +143,9 @@ class _Discretization:
                 -first / (second * (second - first)),
             ]
         )
+        self.band = 2 * self.unknowns - 1
         node, offset, equation, variable = np.indices(
-            (len(eta), _COLORS, _UNKNOWNS, _UNKNOWNS)
+            (len(eta), _COLORS, self.unknowns, self.unknowns)
         )
         neighbor = node + offset - 1
         valid = (neighbor >= 0) & (neighbor < len(eta))
@@ -232,33 +241,108 @@ class _Discretization:
         lagged: FloatArray,
     ) -> FloatArray:
         """Assemble a three-color finite-difference Jacobian in LAPACK bands."""
+        unknowns = self.unknowns
         step = np.sqrt(np.finfo(np.float64).eps) * np.maximum(np.abs(state), 1.0)
-        colors = _COLORS * _UNKNOWNS
+        colors = _COLORS * unknowns
         perturbed = np.broadcast_to(state, (colors, *state.shape)).copy()
         variables, nodes = np.indices(state.shape)
-        perturbed[_UNKNOWNS * (nodes % _COLORS) + variables, variables, nodes] += step
+        perturbed[unknowns * (nodes % _COLORS) + variables, variables, nodes] += step
         difference = self.residual(perturbed, edge, coefficient, lagged) - residual
         row, column, equation, variable = self.band_indices
-        bands = np.zeros((2 * _BAND + 1, state.size), dtype=np.float64)
+        bands = np.zeros((2 * self.band + 1, state.size), dtype=np.float64)
         bands[
-            _BAND + _UNKNOWNS * (row - column) + equation - variable,
-            _UNKNOWNS * column + variable,
+            self.band + unknowns * (row - column) + equation - variable,
+            unknowns * column + variable,
         ] = (
-            difference[_UNKNOWNS * (column % _COLORS) + variable, equation, row]
+            difference[unknowns * (column % _COLORS) + variable, equation, row]
             / step[variable, column]
         )
         return bands
 
-    def station(self, state: FloatArray, xi: float) -> _Station:
-        f, u, g = state
-        return _Station(
+    def station(self, state: FloatArray, xi: float) -> Station:
+        return Station(
             xi=xi,
-            f=f.copy(),
-            u=u.copy(),
-            g=g.copy(),
-            wall_velocity_slope=float(np.dot(self.wall_weights, u[:3])),
-            wall_temperature_slope=float(np.dot(self.wall_weights, g[:3])),
+            state=state.copy(),
+            wall_velocity_slope=float(np.dot(self.wall_weights, state[1, :3])),
+            wall_temperature_slope=float(np.dot(self.wall_weights, state[2, :3])),
         )
+
+    def cumulative(self, values: FloatArray) -> FloatArray:
+        """Integrate ``values`` from the wall with the trapezoidal rule."""
+        increments = self.h * (values[1:] + values[:-1]) / 2.0
+        return np.concatenate(([0.0], np.cumsum(increments)))
+
+    def starting_guess(self, edge: StationEdge) -> FloatArray:
+        """Return a state from which the leading-edge profile converges."""
+        u = np.tanh(0.5 * self.eta)
+        recovery = 1.0 + np.sqrt(self.prandtl_number) * edge.heating / 2.0
+        wall = recovery if edge.wall_ratio is None else edge.wall_ratio
+        g = wall + (recovery - wall) * u + (1.0 - recovery) * u**2
+        return np.array([self.cumulative(u), u, g], dtype=np.float64)
+
+    def next_guess(self, last: Station, edge: StationEdge) -> FloatArray:
+        """Start from the upstream station with the new boundary values."""
+        guess = last.state.copy()
+        if edge.wall_ratio is not None:
+            guess[2, 0] = edge.wall_ratio
+        return guess
+
+    def damping(self, state: FloatArray, update: FloatArray) -> float:
+        """Return the fraction of a Newton update to apply; zero abandons it."""
+        return min(
+            1.0,
+            _MAX_VELOCITY_UPDATE / max(float(np.max(np.abs(update[1]))), 1e-30),
+            _MAX_RELATIVE_TEMPERATURE_UPDATE
+            / max(float(np.max(np.abs(update[2] / state[2]))), 1e-30),
+        )
+
+    def update_size(self, state: FloatArray, update: FloatArray) -> float:
+        """Return the size of a Newton update for the convergence test."""
+        return max(
+            float(np.max(np.abs(update[1]))),
+            float(np.max(np.abs(update[2] / state[2]))),
+        )
+
+    def enforce_boundaries(self, state: FloatArray, edge: StationEdge) -> None:
+        """Restore exact boundary values when required by a discretization."""
+
+    def newton(
+        self,
+        guess: FloatArray,
+        edge: StationEdge,
+        coefficient: float,
+        lagged: FloatArray,
+    ) -> Station | None:
+        """Run the damped Newton iteration; None reports that it did not converge."""
+        state = guess.copy()
+        try:
+            for _ in range(self.newton_iterations):
+                residual = self.residual(state, edge, coefficient, lagged)
+                bands = self.jacobian(state, residual, edge, coefficient, lagged)
+                update = (
+                    solve_banded(
+                        (self.band, self.band),
+                        bands,
+                        -residual.T.ravel(),
+                        check_finite=False,
+                    )
+                    .reshape(-1, self.unknowns)
+                    .T
+                )
+                if not np.all(np.isfinite(update)):
+                    return None
+                damping = self.damping(state, update)
+                if damping == 0.0:
+                    return None
+                size = self.update_size(state, update)
+                state += damping * update
+                self.enforce_boundaries(state, edge)
+                if size < self.newton_tolerance:
+                    return self.station(state, edge.xi)
+        except (ValueError, FloatingPointError, np.linalg.LinAlgError):
+            # Viscosity models reject nonphysical trial temperatures.
+            return None
+        return None
 
     def solve(
         self,
@@ -266,96 +350,52 @@ class _Discretization:
         edge: StationEdge,
         coefficient: float,
         lagged: FloatArray,
-    ) -> _Station | None:
-        """Run the damped Newton iteration; None requests a smaller step."""
-        state = guess.copy()
-        try:
-            for _ in range(_NEWTON_ITERATIONS):
-                residual = self.residual(state, edge, coefficient, lagged)
-                bands = self.jacobian(state, residual, edge, coefficient, lagged)
-                update = (
-                    solve_banded(
-                        (_BAND, _BAND),
-                        bands,
-                        -residual.T.ravel(),
-                        check_finite=False,
-                    )
-                    .reshape(-1, _UNKNOWNS)
-                    .T
-                )
-                if not np.all(np.isfinite(update)):
-                    return None
-                velocity_change = float(np.max(np.abs(update[1])))
-                temperature_change = float(np.max(np.abs(update[2] / state[2])))
-                damping = min(
-                    1.0,
-                    _MAX_VELOCITY_UPDATE / max(velocity_change, 1e-30),
-                    _MAX_RELATIVE_TEMPERATURE_UPDATE / max(temperature_change, 1e-30),
-                )
-                state += damping * update
-                if max(velocity_change, temperature_change) < _NEWTON_TOLERANCE:
-                    return self.station(state, edge.xi)
-        except (ValueError, FloatingPointError, np.linalg.LinAlgError):
-            # Viscosity models reject nonphysical trial temperatures.
-            return None
-        return None
+    ) -> Station | None:
+        """Solve one station; None requests a smaller step."""
+        return self.newton(guess, edge, coefficient, lagged)
 
 
-def _starting_guess(
-    discretization: _Discretization, edge: StationEdge, prandtl_number: float
-) -> FloatArray:
-    eta = discretization.eta
-    u = np.tanh(0.5 * eta)
-    recovery = 1.0 + np.sqrt(prandtl_number) * edge.heating / 2.0
-    wall = recovery if edge.wall_ratio is None else edge.wall_ratio
-    g = wall + (recovery - wall) * u + (1.0 - recovery) * u**2
-    f = np.concatenate(([0.0], np.cumsum(discretization.h * (u[1:] + u[:-1]) / 2.0)))
-    return np.array([f, u, g], dtype=np.float64)
-
-
-def _streamwise_stencil(xi: float, history: list[_Station]) -> tuple[float, FloatArray]:
+def _streamwise_stencil(xi: float, history: list[Station]) -> tuple[float, FloatArray]:
     """Return ``c0`` and lagged terms with ``phi_xi = c0 phi + lagged``."""
     last = history[-1]
-    latest = np.array([last.f, last.u, last.g])
     first_gap = xi - last.xi
     if len(history) == 1:
         coefficient = 1.0 / first_gap
-        return coefficient, -coefficient * latest
+        return coefficient, -coefficient * last.state
     older = history[-2]
     second_gap = xi - older.xi
     coefficient = 1.0 / first_gap + 1.0 / second_gap
-    lagged = -second_gap / (
-        first_gap * (second_gap - first_gap)
-    ) * latest + first_gap / (second_gap * (second_gap - first_gap)) * np.array(
-        [older.f, older.u, older.g]
+    lagged = (
+        -second_gap / (first_gap * (second_gap - first_gap)) * last.state
+        + first_gap / (second_gap * (second_gap - first_gap)) * older.state
     )
     return coefficient, lagged
 
 
 def _build_solution(
-    eta: FloatArray, distances: list[float], stations: list[_Station]
+    discretization: Discretization, distances: list[float], stations: list[Station]
 ) -> MarchSolution:
+    eta = discretization.eta
     count = len(stations)
-    velocity = np.empty((count, len(eta)), dtype=np.float64)
-    temperature = np.empty((count, len(eta)), dtype=np.float64)
+    field = np.empty((discretization.unknowns, count, len(eta)), dtype=np.float64)
     for index, station in enumerate(stations):
-        velocity[index] = station.u
-        temperature[index] = station.g
+        field[:, index] = station.state
     return MarchSolution(
         eta=eta,
         distance=np.asarray(distances, dtype=np.float64),
-        velocity_ratio=velocity,
-        temperature_ratio=temperature,
+        velocity_ratio=field[1],
+        temperature_ratio=field[2],
         wall_velocity_slope=np.asarray(
             [station.wall_velocity_slope for station in stations], dtype=np.float64
         ),
         wall_temperature_slope=np.asarray(
             [station.wall_temperature_slope for station in stations], dtype=np.float64
         ),
+        nu_tilde_ratio=field[3] if discretization.unknowns > 3 else None,
     )
 
 
-def _step_is_resolved(previous: _Station, station: _Station, edge: StationEdge) -> bool:
+def _step_is_resolved(previous: Station, station: Station, edge: StationEdge) -> bool:
     """Reject a converged step that changes the wall shear or heat flux too much."""
     shear = station.wall_velocity_slope
     if shear <= 0.0:
@@ -385,23 +425,21 @@ def _separation_position(positions: list[float], shear: list[float]) -> float:
 def march(
     edge_at: Callable[[float], StationEdge],
     targets: FloatArray,
+    discretization: Discretization,
     *,
-    eta: FloatArray,
-    prandtl_number: float,
-    viscosity_model: DynamicViscosityModel,
     relative_step: float = _RELATIVE_STEP,
 ) -> MarchSolution:
     """March from the leading edge at zero through the increasing ``targets``."""
-    discretization = _Discretization(eta, prandtl_number, viscosity_model)
+    eta = discretization.eta
     end = float(targets[-1])
     start_edge = edge_at(0.0)
     if start_edge.xi != 0.0:
         raise BoundaryLayerConvergenceError("the march must start at xi = 0")
     start = discretization.solve(
-        _starting_guess(discretization, start_edge, prandtl_number),
+        discretization.starting_guess(start_edge),
         start_edge,
         0.0,
-        np.zeros((_UNKNOWNS, len(eta)), dtype=np.float64),
+        np.zeros((discretization.unknowns, len(eta)), dtype=np.float64),
     )
     if start is None:
         raise BoundaryLayerConvergenceError(
@@ -416,7 +454,7 @@ def march(
     accepted_positions = [0.0]
     accepted_shear = [start.wall_velocity_slope]
     output_positions: list[float] = []
-    output_stations: list[_Station] = []
+    output_stations: list[Station] = []
     for target in (float(value) for value in targets):
         while position < target:
             trial = min(step, _MAX_STEP_RATIO * last_step)
@@ -432,12 +470,12 @@ def march(
             station = None
             if abs(np.log(edge.velocity / velocity)) <= _MAX_LOG_VELOCITY_CHANGE:
                 coefficient, lagged = _streamwise_stencil(edge.xi, history)
-                guess = np.array(
-                    [history[-1].f, history[-1].u, history[-1].g], dtype=np.float64
+                station = discretization.solve(
+                    discretization.next_guess(history[-1], edge),
+                    edge,
+                    coefficient,
+                    lagged,
                 )
-                if edge.wall_ratio is not None:
-                    guess[2, 0] = edge.wall_ratio
-                station = discretization.solve(guess, edge, coefficient, lagged)
             if station is not None and not _step_is_resolved(
                 history[-1], station, edge
             ):
@@ -453,13 +491,15 @@ def march(
                 ):
                     raise SeparationError(
                         _separation_position(accepted_positions, accepted_shear),
-                        _build_solution(eta, output_positions, output_stations),
+                        _build_solution(
+                            discretization, output_positions, output_stations
+                        ),
                     )
                 raise BoundaryLayerConvergenceError(
                     f"the march did not converge at distance {candidate:.6g}"
                 )
-            outer = np.abs(station.u[-_EDGE_PROBE_NODES] - 1.0) + np.abs(
-                station.g[-_EDGE_PROBE_NODES] - 1.0
+            outer = np.abs(station.state[1, -_EDGE_PROBE_NODES] - 1.0) + np.abs(
+                station.state[2, -_EDGE_PROBE_NODES] - 1.0
             )
             if outer > _EDGE_TOLERANCE:
                 raise BoundaryLayerConvergenceError(
@@ -473,4 +513,4 @@ def march(
             accepted_shear.append(station.wall_velocity_slope)
         output_positions.append(position)
         output_stations.append(history[-1])
-    return _build_solution(eta, output_positions, output_stations)
+    return _build_solution(discretization, output_positions, output_stations)

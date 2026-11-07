@@ -7,6 +7,14 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Extend `marching_boundary_layer` to planar SA-noft2 flow with varying
+  isentropic edge conditions, prescribed or adiabatic wall temperature,
+  conserved dimensional edge `nu_tilde`, and a Reynolds-scaled outer grid.
+  Add `turbulent_prandtl_number`, `edge_sa_ratio`, read-only `nu_tilde_ratio`
+  profiles, and a first-node `y+` warning. Laminar numerical results are
+  unchanged. Verify ZPG regression,
+  integral balances, refinement, and the NASA TMR bump; experimental accuracy
+  and transition prediction are not established.
 - Add `marching_boundary_layer` and `BoundaryLayerEdge` for laminar boundary
   layers with streamwise-varying edge conditions. The solver marches the
   compressible thin-layer equations from a sharp leading edge for a calorically

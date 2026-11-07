@@ -165,6 +165,18 @@ starting at the leading edge:
 >>> bool(np.all(layer.pressure_gradient_parameter > 0.0))
 True
 
+Use ``regime=BoundaryLayerRegime.TURBULENT`` for SA-noft2. The defaults are
+``turbulent_prandtl_number=0.9`` and ``edge_sa_ratio=3.0`` at the first edge
+station; dimensional ``nu_tilde`` is conserved along the outer streamline.
+``edge_sa_ratio=0`` gives the laminar limit. Both options are validated in every
+regime, and only the turbulent regime uses them. The result's read-only
+``nu_tilde_ratio`` array has shape ``(N_s, N_eta)``; laminar results use None.
+Omit ``wall_temperature`` for an adiabatic wall.
+
+SA-noft2 develops its own laminar start and transition near the leading edge.
+This is not a transition prediction. Accuracy against experiment is not
+established; agreement with CFD using the same model does not establish it.
+
 An adverse pressure gradient can separate the boundary layer. The march then
 raises ``BoundaryLayerSeparationError``, which holds ``separation_distance`` and
 the ``result`` at the stations upstream.
@@ -173,7 +185,8 @@ Check applicability before using the result
 -------------------------------------------
 
 These APIs are engineering models, and none of them is coupled to the outer
-flow. The marching solver takes the edge state as an input and is laminar only.
+flow. The marching solver takes the edge state as an input and supports
+laminar and SA-noft2 flow.
 The flat-plate correlations exclude roughness, streamwise pressure gradients,
 separation, suction, blowing, and natural-transition prediction. The profile
 construction assumes a smooth, fully turbulent, approximately ZPG boundary

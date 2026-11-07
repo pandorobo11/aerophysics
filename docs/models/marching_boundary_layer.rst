@@ -3,9 +3,10 @@
 Marching boundary-layer model
 =============================
 
-This page describes the laminar boundary-layer solver for edge conditions that
-change along a wall, including its equations, assumptions, and API mapping. For
-a task-oriented example, see :doc:`../guides/boundary_layers`.
+This page describes the laminar and SA-noft2 boundary-layer solver for edge
+conditions that change along a wall, including its equations, assumptions,
+and API mapping. For a task-oriented example, see
+:doc:`../guides/boundary_layers`.
 
 Physical background
 -------------------
@@ -67,6 +68,49 @@ At the wall, :math:`f = f' = 0`, and :math:`g` is either the specified wall
 temperature ratio or follows from a zero wall heat flux. At the outer boundary,
 :math:`f' = g = 1`.
 
+SA-noft2 transport
+~~~~~~~~~~~~~~~~~~
+
+For turbulent flow define :math:`n = \widetilde\nu/\nu_e`,
+:math:`Y = \int_0^\eta g\,d\eta`, :math:`\chi = n/(C g^2)`, and
+:math:`\epsilon = \chi f_{v1}`. Replace the momentum diffusivity by
+:math:`C(1+\epsilon)` and the energy diffusivity by
+:math:`C/Pr\,(1+\epsilon Pr/Pr_t)`. Dissipation uses :math:`C(1+\epsilon)` too.
+The additional equation is
+
+.. math::
+
+   \frac{((Cg+n/g)n')'}{\sigma g}
+   + \frac{c_{b2} n'^2}{\sigma g^2} + f n'
+   + c_{b1}\widetilde S n - c_{w1} f_w\frac{n^2}{Y^2}
+   - \Lambda f'n
+   = 2\xi(f'n_\xi - n'f_\xi),
+
+.. math::
+
+   R = \frac{\sqrt{2\xi}}{\mu_e},\qquad
+   \Lambda = 2\xi\frac{d\ln\nu_e}{d\xi},\qquad
+   \widetilde S = \frac{R|f''|}{g} + \frac{n f_{v2}}{\kappa^2Y^2}.
+
+The original model is due to
+:ref:`Spalart and Allmaras, 1994 <ref-spalart-allmaras-1994>`.
+The constants and smooth modified-vorticity limiter follow
+:ref:`Allmaras, Johnson and Spalart (2012) <ref-allmaras-johnson-spalart-2012>`.
+The trip term ft2 is omitted. The wall has :math:`n=0`; the outer boundary has
+:math:`n_e(s)=n_e(0)\nu_e(0)/\nu_e(s)`, so dimensional modified kinematic
+viscosity is conserved.
+The adiabatic wall uses a half-cell energy balance with zero wall flux.
+
+The five unknowns per node are ``(f, u, g, n, Y)``. A damped Newton iteration
+falls back to relaxed Picard with nonnegative ``n`` clipping. If both fail the
+streamwise step halves. The eta grid has first spacing 0.0007 and spacing
+ratio 1.04. Before marching, define ``Re_equivalent = max(R)^2/2`` over the
+output stations and ``scale = max(1, (Re_equivalent/1e8)^0.42)``. The extent is
+``150 scale`` and the outer spacing cap is ``scale``. Up to Re_equivalent=1e8
+this is the original 312-node grid. These are geometric spacings, not
+geometrically positioned nodes. The outer-boundary check remains active:
+a compression can grow beyond this estimate and stop the march.
+
 Results
 ~~~~~~~
 
@@ -106,18 +150,34 @@ directly in the solution.
 Assumptions and range
 ---------------------
 
-* Steady, planar, laminar, attached flow from a sharp leading edge.
+* Steady, planar, laminar or SA-noft2, attached flow from a sharp leading edge.
 * Calorically perfect gas with constant :math:`Pr`, and pressure constant across
   the layer.
 * Isentropic edge flow with constant total enthalpy. Entropy layers from blunt
   noses are not represented.
-* No transition, roughness, suction, blowing, wall curvature, or chemical
+* No specified transition, roughness, suction, blowing, wall curvature, or chemical
   reactions, and no interaction with the outer flow.
 * Wall temperature changes over distances much longer than the boundary-layer
   thickness. Unlike a pressure change, a shorter change does not raise a warning.
 
-``BoundaryLayerRegime.TURBULENT`` and ``TRANSITIONAL`` raise
-``ModelRangeError``.
+``BoundaryLayerRegime.TRANSITIONAL`` raises ``ModelRangeError``.
+SA-noft2 develops its own laminar start and transition near the leading edge.
+This is not a transition prediction. Accuracy against experiment is not
+established. Agreement with CFD that uses the same model does not establish it.
+Wall-temperature changes as short as delta99 can be numerically resolved, but
+neglect of streamwise diffusion then has no established accuracy.
+
+The outer part of ``nu_tilde_ratio`` can oscillate and is not grid-converged
+in strong expansions or with a small ``edge_sa_ratio``. In the measured
+cases, relative oscillation amplitudes reached about 100% on the default
+grid and about 60% after outer-grid refinement, measured as half the excursion
+between neighbouring extrema divided by their mean. Wall quantities and
+delta99 were insensitive to that refinement in these cases: Cf changed by
+less than 0.01% and delta99 by less than 0.06%. These measurements are not
+general bounds.
+
+A strong expansion can take tens of seconds because of Picard fallbacks;
+M1.2 to 4 took about 25 s in a measurement on one machine.
 
 .. list-table:: Reported conditions
    :header-rows: 1
@@ -131,12 +191,17 @@ Assumptions and range
      - ``BoundaryLayerSeparationError``, holding ``separation_distance`` and the
        ``result`` at the stations upstream. The march cannot continue because
        the thin-layer equations are not valid past separation.
-   * - The solution cannot be resolved
-     - ``BoundaryLayerConvergenceError``
+   * - The solution cannot be resolved or the layer reaches the outer grid boundary
+     - ``BoundaryLayerConvergenceError``. The outer grid is sized from the
+       Reynolds number before the march. Strong compression at high Reynolds
+       number can therefore stop with this error, as measured for M3 to 1.5
+       at :math:`Re_s \simeq 10^9`.
    * - :math:`\delta_{99}\,|d \ln p_e/ds| > 1`
      - ``ApplicabilityWarning``. The pressure changes too quickly for the
        thin-layer approximation, as near a sharp corner, where viscous
        interaction with the outer flow matters.
+   * - Turbulent first-node :math:`y^+ = y_1\sqrt{\rho_w\tau_w}/\mu_w > 1`
+     - ``ApplicabilityWarning`` using local wall density and viscosity.
    * - :math:`\bar\chi = M_e^3 \sqrt{C_w/Re_s} > 1`
      - ``ApplicabilityWarning``. Leading-edge viscous interaction changes the
        pressure, which the supplied edge state may not include.
@@ -152,6 +217,17 @@ Table II, Howarth's linearly retarded flow (:ref:`Howarth, 1938
 <ref-howarth-1938>`, with the separation position of :ref:`Hartree, 1939
 <ref-hartree-1939>`), and its compressible image under the transformation of :ref:`Illingworth, 1949
 <ref-illingworth-1949>` and :ref:`Stewartson, 1949 <ref-stewartson-1949>`.
+
+The frozen SA reference covers constant-edge Mach numbers 0.3--10 and
+Reynolds numbers 1e6--1e8. ZPG marches at M0.3, M2, and M6 also complete at
+Re_s=3e8, 1e9, and 1e10. At Re_s=1e9, comparison with an extended grid capped
+at unit spacing changes Cf by less than 0.1% and heat flux by less than 0.5%.
+Above 1e8 these comparisons establish numerical convergence only, without a
+frozen reference or experimental validation. Completion at 1e10 does not
+establish wall-normal convergence: the first-node y+ warning fires in the
+M0.3 and M2 cases. M2--3 and M3--4 expansions, compression and separation,
+and a low-Mach bump are also checked. These are numerical verification
+conditions, not an experimentally established validity range.
 
 API mapping
 -----------
@@ -175,6 +251,8 @@ API mapping
      - ``wall_temperature``, ``wall_heat_flux``
    * - :math:`\beta`
      - ``pressure_gradient_parameter``
+   * - :math:`n = \widetilde\nu/\nu_e`
+     - ``nu_tilde_ratio`` (None for laminar flow)
    * - :math:`\eta,\ y,\ u/U_e,\ T/T_e`
      - ``eta``, ``wall_distance``, ``velocity_ratio``, ``temperature_ratio``
 

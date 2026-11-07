@@ -20,7 +20,12 @@ from aerophysics import (
 )
 from aerophysics import _boundary_layer_march as march_module
 from aerophysics._array import FloatArray
-from aerophysics._boundary_layer_march import StationEdge, eta_grid, march
+from aerophysics._boundary_layer_march import (
+    Discretization,
+    StationEdge,
+    eta_grid,
+    march,
+)
 from aerophysics.exceptions import (
     ApplicabilityWarning,
     BoundaryLayerConvergenceError,
@@ -98,9 +103,7 @@ def wedge_slopes(beta: float, wall_ratio: float) -> tuple[float, float]:
     solution = march(
         lambda xi: StationEdge(xi, 1.0, beta, 0.0, 300.0, wall_ratio),
         np.array([1.0]),
-        eta=ETA,
-        prandtl_number=1.0,
-        viscosity_model=LinearViscosity(),
+        Discretization(ETA, 1.0, LinearViscosity()),
     )
     return (
         float(solution.wall_velocity_slope[-1]),
@@ -353,9 +356,7 @@ def march_with_stations(
     solution = march(
         interpolant.state,
         stations,
-        eta=ETA,
-        prandtl_number=0.72,
-        viscosity_model=edge.viscosity_model,
+        Discretization(ETA, 0.72, edge.viscosity_model),
         relative_step=relative_step,
     )
     return _result(edge, interpolant, solution, 0.72)
@@ -462,9 +463,7 @@ def test_wall_normal_grid_refinement_converges() -> None:
         march(
             interpolant.state,
             edge.distance[1:],
-            eta=grid,
-            prandtl_number=0.72,
-            viscosity_model=edge.viscosity_model,
+            Discretization(grid, 0.72, edge.viscosity_model),
         )
         for grid in (ETA, eta_grid(5e-4, 1.0075, 0.025, 16.0))
     )
@@ -638,7 +637,7 @@ def test_invalid_march_options_are_rejected() -> None:
     edge = BoundaryLayerEdge.from_pressure(
         [0.0, 1.0], [2e4, 2e4], total_pressure=1.6e5, total_temperature=500.0
     )
-    for regime in (BoundaryLayerRegime.TURBULENT, BoundaryLayerRegime.TRANSITIONAL):
+    for regime in (BoundaryLayerRegime.TRANSITIONAL,):
         with pytest.raises(ModelRangeError, match="LAMINAR"):
             marching_boundary_layer(edge, regime=regime)
     with pytest.raises(ValueError, match="prandtl_number"):
@@ -686,9 +685,7 @@ def test_march_reports_an_outer_boundary_inside_the_layer() -> None:
         march(
             constant_station,
             np.array([1.0]),
-            eta=eta_grid(1e-3, 1.04, 0.05, 2.0),
-            prandtl_number=1.0,
-            viscosity_model=LinearViscosity(),
+            Discretization(eta_grid(1e-3, 1.04, 0.05, 2.0), 1.0, LinearViscosity()),
         )
 
 
@@ -697,9 +694,7 @@ def test_march_rejects_a_start_away_from_the_leading_edge() -> None:
         march(
             lambda xi: StationEdge(xi + 1.0, 1.0, 0.0, 0.0, 300.0, 1.0),
             np.array([1.0]),
-            eta=ETA,
-            prandtl_number=1.0,
-            viscosity_model=LinearViscosity(),
+            Discretization(ETA, 1.0, LinearViscosity()),
         )
 
 
@@ -708,9 +703,7 @@ def test_march_reports_an_unconverged_start() -> None:
         march(
             lambda xi: StationEdge(xi, 1.0, float("nan"), 0.0, 300.0, 1.0),
             np.array([1.0]),
-            eta=ETA,
-            prandtl_number=1.0,
-            viscosity_model=LinearViscosity(),
+            Discretization(ETA, 1.0, LinearViscosity()),
         )
 
 
@@ -723,7 +716,5 @@ def test_march_reports_a_station_that_cannot_be_resolved() -> None:
         march(
             edge_at,
             np.array([1.0]),
-            eta=ETA,
-            prandtl_number=1.0,
-            viscosity_model=LinearViscosity(),
+            Discretization(ETA, 1.0, LinearViscosity()),
         )

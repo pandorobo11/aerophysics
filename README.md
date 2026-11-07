@@ -3,8 +3,8 @@
 `aerophysics` is a Python scientific-computing package for traceable,
 vectorized atmospheric and aerodynamic physics models. It covers standard
 atmosphere and gas properties, flight conditions, compressible flow, shocks
-and expansions, smooth flat-plate boundary layers, and laminar boundary layers
-marched through a changing edge pressure. The documentation
+and expansions, smooth flat-plate boundary layers, and laminar or SA-noft2
+boundary layers marched through a changing edge pressure. The documentation
 records each model's assumptions, applicability, references, and verification.
 
 Public calculation APIs use SI units and radians. The package provides local
