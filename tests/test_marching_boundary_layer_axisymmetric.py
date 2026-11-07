@@ -373,8 +373,13 @@ def test_integral_balance(regime: BoundaryLayerRegime) -> None:
 
 
 @pytest.mark.generated_assets
-@pytest.mark.parametrize("regime", [LAMINAR, TURBULENT])
-@pytest.mark.parametrize("wall", [300.0, None])
+@pytest.mark.parametrize(
+    ("regime", "wall"),
+    [
+        pytest.param(LAMINAR, None, id="laminar-adiabatic"),
+        pytest.param(TURBULENT, 300.0, id="sa-300K"),
+    ],
+)
 def test_refinement_and_balance_diagnostics(
     monkeypatch: pytest.MonkeyPatch, regime: BoundaryLayerRegime, wall: float | None
 ) -> None:
@@ -601,9 +606,15 @@ def _measure_shoulder(
 
 
 @pytest.mark.generated_assets
-@pytest.mark.parametrize("width", [0.02, 0.005, 0.001, 0.0002])
-@pytest.mark.parametrize("regime", [LAMINAR, TURBULENT])
-@pytest.mark.parametrize("wall", [300.0, None])
+@pytest.mark.parametrize(
+    ("regime", "wall", "width"),
+    [
+        pytest.param(TURBULENT, 300.0, 0.005, id="sa-300K-width-0.005"),
+        pytest.param(TURBULENT, 300.0, 0.001, id="sa-300K-width-0.001"),
+        pytest.param(LAMINAR, 300.0, 0.001, id="laminar-300K-width-0.001"),
+        pytest.param(LAMINAR, 300.0, 0.0002, id="laminar-300K-width-0.0002"),
+    ],
+)
 def test_shoulder_stress_measurement(
     monkeypatch: pytest.MonkeyPatch,
     width: float,

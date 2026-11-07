@@ -38,6 +38,50 @@ def test_bounded_error_format_hides_insignificant_cpu_noise() -> None:
     assert formatter(5.0e-13, 1.0e-12) == "5e-13"
 
 
+def test_axisymmetric_display_rejects_near_rounding_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "docs/scripts"))
+    namespace = runpy.run_path(
+        str(PROJECT_ROOT / "docs/scripts/generate_viscous_flow_validation.py")
+    )
+    formatter = cast(Callable[[float, int], str], namespace["_axisymmetric_display"])
+    for sign in (-1, 1):
+        for offset in (-9e-6, 0.0, 9e-6):
+            with pytest.raises(AssertionError, match="rounding boundary"):
+                formatter(sign * (1.235 + offset), 2)
+    assert formatter(1.235 - 1.1e-5, 2) == "1.23"
+    assert formatter(1.235 + 1.1e-5, 2) == "1.24"
+
+
+def test_verification_check_shows_bounded_diff(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    namespace = runpy.run_path(
+        str(PROJECT_ROOT / "docs/scripts/_verification_common.py")
+    )
+    writer = cast(Callable[..., bool], namespace["write_or_check"])
+    path = tmp_path / "verification.rst"
+    existing = "".join(f"old {i}\n" for i in range(100))
+    replacement = "".join(f"new {i}\n" for i in range(100))
+    assert writer(path, existing, check=False)
+    assert not writer(path, replacement, check=True)
+    output = capsys.readouterr().err.splitlines()
+    display_path = (
+        path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path
+    )
+    assert output[0] == f"out of date or missing: {display_path}"
+    assert output[1:3] == [
+        f"--- {display_path}",
+        f"+++ {display_path} (regenerated)",
+    ]
+    assert output[3].startswith("@@ ")
+    assert len(output[1:]) == 80
+    assert path.read_text(encoding="utf-8") == existing
+    assert writer(path, existing, check=True)
+    assert capsys.readouterr().err == ""
+
+
 def _assert_generator_check_passes(generator: Path) -> None:
     result = subprocess.run(
         [sys.executable, str(generator), "--check"],
@@ -110,3 +154,5 @@ def test_axisymmetric_record_preserves_measurement_limitations() -> None:
     assert "0.0006" in fragment
     assert "X=15 in Cf is missing" in fragment
     assert "transverse curvature is neglected" in fragment
+    assert "Measured 10^3 cf" in fragment
+    assert "Maximum absolute difference (10^3 cf)" in fragment

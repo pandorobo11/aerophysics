@@ -1204,6 +1204,14 @@ def _rm3633_comparison(
         "freestream_pressure_Pa": float(pressure),
         "failure": failure,
         "warnings": [str(w.message) for w in caught],
+        "warning_kinds": sorted(
+            {
+                f"{w.category.__name__}: transverse curvature is neglected"
+                if "transverse curvature is neglected" in str(w.message)
+                else w.category.__name__
+                for w in caught
+            }
+        ),
         "rows": [],
     }
     if result is not None and result.distance.size:
@@ -1243,6 +1251,18 @@ def _rm3633_comparison(
     return record
 
 
+def _axisymmetric_display(value: float, digits: int, *, signed: bool = False) -> str:
+    """Reject values within 1e-3 display units of a rounding boundary."""
+    scaled = value * 10**digits
+    distance = abs(scaled - np.floor(scaled) - 0.5)
+    if not np.isfinite(scaled) or distance < 1e-3:
+        raise AssertionError(
+            f"axisymmetric display rounding boundary: value={value!r}, "
+            f"digits={digits}, distance={distance!r} display units"
+        )
+    return format(value, f"{'+' if signed else ''}.{digits}f")
+
+
 def _marching_axisymmetric_verification() -> str:
     """Generated V19 table; geometry and comparison regressions run on regeneration."""
     lines = [
@@ -1250,9 +1270,9 @@ def _marching_axisymmetric_verification() -> str:
         "   :header-rows: 1",
         "",
         "   * - X [in]",
-        "     - Measured Cf",
-        "     - SA-noft2 Cf",
-        "     - Difference",
+        "     - Measured 10^3 cf",
+        "     - SA-noft2 10^3 cf",
+        "     - Difference (10^3 cf)",
         "     - abs difference / 0.0002",
         "     - delta99/r_w",
     ]
@@ -1262,12 +1282,12 @@ def _marching_axisymmetric_verification() -> str:
     ):
         x, measured, computed, difference = row
         lines += [
-            f"   * - {x:g}",
-            f"     - {measured:.6f}",
-            f"     - {computed:.6f}",
-            f"     - {difference:+.6f}",
-            f"     - {abs(difference) / 0.0002:.2f}",
-            f"     - {curvature:.4f}",
+            f"   * - {_axisymmetric_display(x, 1).removesuffix('.0')}",
+            f"     - {_axisymmetric_display(1000 * measured, 2)}",
+            f"     - {_axisymmetric_display(1000 * computed, 2)}",
+            f"     - {_axisymmetric_display(1000 * difference, 2, signed=True)}",
+            f"     - {_axisymmetric_display(abs(difference) / 0.0002, 1)}",
+            f"     - {_axisymmetric_display(curvature, 3)}",
         ]
     lines += [
         "",
@@ -1279,7 +1299,7 @@ def _marching_axisymmetric_verification() -> str:
         "   :header-rows: 1",
         "",
         "   * - Assumption",
-        "     - Maximum absolute Cf difference",
+        "     - Maximum absolute difference (10^3 cf)",
         "     - Maximum delta99/r_w",
         "     - Outcome",
     ]
@@ -1289,17 +1309,23 @@ def _marching_axisymmetric_verification() -> str:
         ("T0=330 K", _rm3633_comparison(330.0)),
         ("T0=310 K, cone Cp replaced", _rm3633_comparison(cone_pressure=True)),
     ]:
-        lines += [
-            f"   * - {label}",
-            f"     - {record.get('max_absolute_difference', float('nan')):.6f}",
-            f"     - {record.get('max_delta_over_radius', float('nan')):.4f}",
-            f"     - {record['failure'] or 'Completed'}",
-        ]
         # This is a regression bound, not the measurement-accuracy tolerance.
         if record["failure"] is not None or record["max_absolute_difference"] > 0.0006:
             raise AssertionError(f"R&M 3633 regression: {record}")
+        lines += [
+            f"   * - {label}",
+            "     - "
+            + _axisymmetric_display(1000 * record["max_absolute_difference"], 2),
+            f"     - {_axisymmetric_display(record['max_delta_over_radius'], 3)}",
+            f"     - {record['failure'] or 'Completed'}",
+        ]
     lines += ["", "Warnings from the baseline:", ""]
-    lines += [f"* {message}" for message in base["warnings"]] or ["* None."]
+    lines += [
+        f"* {kind}; maximum delta99/r_w = "
+        f"{_axisymmetric_display(base['max_delta_over_radius'], 3)} "
+        f"at s = {_axisymmetric_display(base['max_delta_over_radius_s_m'], 3)} m."
+        for kind in base["warning_kinds"]
+    ] or ["* None."]
     lines += [
         "",
         "The regression bound is 0.0006: the measured maximum over these cases is",
