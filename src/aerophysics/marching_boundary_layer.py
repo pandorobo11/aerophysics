@@ -31,6 +31,7 @@ from aerophysics._boundary_layer_march import (
     march,
 )
 from aerophysics._boundary_layer_sa import TurbulentDiscretization
+from aerophysics._native_march import native_march
 from aerophysics.boundary_layer import BoundaryLayerRegime
 from aerophysics.exceptions import (
     ApplicabilityWarning,
@@ -438,6 +439,7 @@ def _result(
     interpolant: _EdgeInterpolant,
     solution: MarchSolution,
     prandtl_number: float,
+    edge_values: FloatArray | None = None,
 ) -> MarchingBoundaryLayerResult:
     gas = edge.gas
     count = solution.distance.size
@@ -458,9 +460,13 @@ def _result(
     heat_flux, beta = field(), field()
     wall_distance = np.empty_like(temperature_ratio)
     for index, distance in enumerate(float(value) for value in solution.distance):
-        state = interpolant.state(distance)
+        if edge_values is None:
+            state = interpolant.state(distance)
+            pressure = float(np.exp(interpolant.log_pressure(distance)))
+        else:
+            xi, velocity, beta_value, temperature, pressure = edge_values[index, :5]
+            state = StationEdge(xi, velocity, beta_value, 0.0, temperature, None)
         temperature, xi = state.temperature, state.xi
-        pressure = float(np.exp(interpolant.log_pressure(distance)))
         density = pressure / (gas.specific_gas_constant * temperature)
         viscosity = float(edge.viscosity_model.dynamic_viscosity(temperature))
         root = np.sqrt(2.0 * xi)
@@ -699,12 +705,23 @@ def marching_boundary_layer(
         if regime is BoundaryLayerRegime.TURBULENT
         else Discretization(eta, prandtl, edge.viscosity_model)
     )
+    edge_values = None
     try:
-        solution = march(
-            interpolant.state,
-            edge.distance[1:],
-            discretization,
+        native = (
+            native_march(
+                interpolant, edge.distance[1:], discretization, edge.viscosity_model
+            )
+            if regime is BoundaryLayerRegime.LAMINAR
+            else None
         )
+        if native is None:
+            solution = march(
+                interpolant.state,
+                edge.distance[1:],
+                discretization,
+            )
+        else:
+            solution, edge_values = native
     except SeparationError as separation:
         upstream = _result(edge, interpolant, separation.solution, prandtl)
         raise BoundaryLayerSeparationError(
@@ -713,7 +730,7 @@ def marching_boundary_layer(
             separation_distance=separation.distance,
             result=upstream,
         ) from separation
-    result = _result(edge, interpolant, solution, prandtl)
+    result = _result(edge, interpolant, solution, prandtl, edge_values)
     _warn_applicability(edge, interpolant, result)
     return result
 

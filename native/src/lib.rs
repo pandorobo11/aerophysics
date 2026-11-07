@@ -1,5 +1,7 @@
 mod analytic;
 mod block;
+mod edge;
+mod march;
 
 use numpy::ndarray::Array2;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
@@ -453,6 +455,8 @@ impl LaminarKernel {
 #[pymodule]
 fn aerophysics_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<LaminarKernel>()?;
+    module.add_class::<edge::NativeEdge>()?;
+    module.add_function(wrap_pyfunction!(march::march, module)?)?;
     Ok(())
 }
 

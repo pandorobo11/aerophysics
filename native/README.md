@@ -1,8 +1,13 @@
-# Experimental laminar Newton kernel
+# Experimental native laminar march
 
-This optional prototype ports only the laminar station Newton solve. The
-Spalart–Allmaras solver remains in Python. From the repository root, with the
-cached crates available, build and install the separate extension:
+This optional prototype runs the laminar march in Rust: the leading-edge
+solve, adaptive steps, BDF1/BDF2 stencils, Newton iterations, acceptance and
+separation checks, and output collection. Scalar PPoly edge evaluation and
+partial-panel quadrature also run in Rust. The march releases the GIL for
+the entire computation. Sutherland and Keyes viscosity models are supported;
+the Spalart–Allmaras solver and unsupported models remain in Python. From the
+repository root, with the cached crates available, build and install the
+separate extension:
 
 ```sh
 export CARGO_HOME="$PWD/native/.cargo-home"
@@ -29,6 +34,29 @@ damping rules. The analytic path evaluates viscosity at the current node
 temperatures only; finite differences also evaluate perturbed temperatures,
 which can cause a Keyes applicability warning at a fitted-range endpoint.
 This remains an experimental, optional extension; the Python and SA station
-solvers are unchanged. `native/bench.py` reports the best of five runs after
-one warm-up for Python and both native modes, plus analytic/Python Cf and
-thermal differences.
+solvers are unchanged.
+
+`AEROPHYSICS_NATIVE_MARCH=0` keeps the march and edge evaluations in Python
+while retaining the native Newton kernel. Unset, empty, and `1` enable the
+native march when applicable; other values raise `ValueError` on the laminar
+path. The Python interpolant still constructs the PCHIP coefficients and
+integral panels. Rust receives those arrays, the derivative's own coefficients,
+quadrature nodes/weights, and the Python march control constants. Output edge
+values are reused by Python result construction. On separation, Python builds
+the same partial result and extrapolates the separation position as before.
+Keyes range excursions in a native call produce one applicability warning.
+
+The physical applicability, units, and conventions are unchanged: planar
+laminar perfect-gas flow with an isentropic prescribed edge, SI units, distance
+from the sharp leading edge, and positive heat flux into the wall. This port
+adds no physical model or validity range. Tests compare PPoly values bitwise
+with SciPy (including knots and extrapolation), edge states at `rtol=1e-13`,
+and all result fields and Howarth separation with the Python march at
+`rtol=1e-8, atol=1e-10`. A Rust flat-plate test checks the Blasius wall slope;
+three-path regression tests also compare accepted step positions exactly.
+
+`native/bench.py` reports the best of five runs after one warm-up for Python,
+native Newton only (analytic), and the full native march, plus full-march/Python
+Cf and thermal differences. For sandbox testing without installation, unzip
+the wheel under `tmp/` and prepend that directory and `src/` to `PYTHONPATH`.
+Use `.venv/bin/python` to preserve the optional extension.

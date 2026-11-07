@@ -1,4 +1,4 @@
-"""Compare the Python and optional Rust laminar station solvers."""
+"""Compare the Python and optional Rust laminar solvers."""
 
 import os
 from time import perf_counter
@@ -39,9 +39,10 @@ def relative_difference(a, b):
     return float(np.max(np.abs(a - b) / np.maximum(np.abs(a), 1e-300)))
 
 
-def run(edge, wall, mode, jacobian="analytic"):
+def run(edge, wall, mode, march_mode="1"):
     os.environ["AEROPHYSICS_NATIVE"] = mode
-    os.environ["AEROPHYSICS_NATIVE_JACOBIAN"] = jacobian
+    os.environ["AEROPHYSICS_NATIVE_JACOBIAN"] = "analytic"
+    os.environ["AEROPHYSICS_NATIVE_MARCH"] = march_mode
     return marching_boundary_layer(
         edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=wall
     )
@@ -49,7 +50,7 @@ def run(edge, wall, mode, jacobian="analytic"):
 
 def main():
     print(
-        "case | Python (s) | native FD (s) | native analytic (s) | "
+        "case | Python (s) | native Newton (s) | native march (s) | "
         "speedup | max rel Cf | max rel thermal"
     )
     print("--- | ---: | ---: | ---: | ---: | ---: | ---:")
@@ -60,16 +61,16 @@ def main():
     ):
         timings = []
         results = []
-        for mode, jacobian in (
-            ("0", "analytic"),
-            ("1", "finite-difference"),
-            ("1", "analytic"),
+        for mode, march_mode in (
+            ("0", "1"),
+            ("1", "0"),
+            ("1", "1"),
         ):
-            run(edge, wall, mode, jacobian)
+            run(edge, wall, mode, march_mode)
             samples = []
             for _ in range(5):
                 start = perf_counter()
-                result = run(edge, wall, mode, jacobian)
+                result = run(edge, wall, mode, march_mode)
                 samples.append(perf_counter() - start)
             timings.append(min(samples))
             results.append(result)
