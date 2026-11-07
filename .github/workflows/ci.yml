@@ -51,7 +51,7 @@ jobs:
       - name: Run normal test suite without coverage
         if: matrix.coverage == false
         run: >-
-          uv run pytest -m "not generated_assets and not package_artifact"
+          uv run pytest -m "not generated_assets and not package_artifact and not solver_verification"
           --no-cov
 
   lint:
@@ -115,6 +115,47 @@ jobs:
       - name: Check generated and verification assets
         run: bash scripts/check-generated.sh
 
+  solver-verification:
+    name: Solver verification (Ubuntu, Python 3.12)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: "0.9.13"
+          enable-cache: true
+      - run: uv sync --all-groups --all-extras --locked
+      - name: Decide whether solver verification is needed
+        id: solver
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            # A failed fetch leaves the decision script to fail safe on a missing ref.
+            git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" || true
+            decision="$(VERIFICATION_BASE="origin/${BASE_REF}" bash scripts/needs-verification.sh solver 2>&1)"
+            needed="${decision%%$'\n'*}"
+            reason="${decision#*$'\n'}"
+          else
+            needed=yes
+            reason="always run on main"
+          fi
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+          if [[ "$needed" == yes ]]; then
+            printf 'Solver verification: %s\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'Solver verification skipped: %s\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Run solver verification
+        if: steps.solver.outputs.needed == 'yes'
+        run: uv run pytest -m solver_verification --no-cov
+
   docs:
     name: Documentation build
     needs: test
@@ -142,6 +183,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -150,8 +193,32 @@ jobs:
           version: "0.9.13"
           enable-cache: true
       - run: uv sync --all-groups --all-extras --locked
-      - run: uv run python -m build
+      - name: Decide whether package verification is needed
+        id: package
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" || true
+            decision="$(VERIFICATION_BASE="origin/${BASE_REF}" bash scripts/needs-verification.sh package 2>&1)"
+            needed="${decision%%$'\n'*}"
+            reason="${decision#*$'\n'}"
+          else
+            needed=yes
+            reason="always run on main"
+          fi
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+          if [[ "$needed" == yes ]]; then
+            printf 'Package verification: %s\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'Package build and installation verification skipped: %s\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Build Python distributions
+        if: steps.package.outputs.needed == 'yes'
+        run: uv run python -m build
       - name: Verify clean wheel and sdist installations
+        if: steps.package.outputs.needed == 'yes'
         env:
           AEROPHYSICS_TEST_ARTIFACT_DIRECTORY: dist
         run: uv run pytest -m package_artifact --no-cov
@@ -166,6 +233,7 @@ jobs:
       - format
       - typecheck
       - generated-assets
+      - solver-verification
       - docs
       - package
     runs-on: ubuntu-latest
@@ -177,6 +245,7 @@ jobs:
           FORMAT_RESULT: ${{ needs.format.result }}
           TYPECHECK_RESULT: ${{ needs.typecheck.result }}
           GENERATED_ASSETS_RESULT: ${{ needs['generated-assets'].result }}
+          SOLVER_VERIFICATION_RESULT: ${{ needs['solver-verification'].result }}
           DOCS_RESULT: ${{ needs.docs.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
         run: |
@@ -187,6 +256,7 @@ jobs:
             "format=${FORMAT_RESULT}" \
             "typecheck=${TYPECHECK_RESULT}" \
             "generated-assets=${GENERATED_ASSETS_RESULT}" \
+            "solver-verification=${SOLVER_VERIFICATION_RESULT}" \
             "docs=${DOCS_RESULT}" \
             "package=${PACKAGE_RESULT}"
           do

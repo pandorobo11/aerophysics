@@ -4,6 +4,7 @@ import importlib
 import json
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import fields
 
 import numpy as np
@@ -23,7 +24,14 @@ from aerophysics import (
     marching_boundary_layer,
 )
 from aerophysics._array import FloatArray
-from aerophysics._boundary_layer_march import Discretization, eta_grid, march
+from aerophysics._boundary_layer_march import (
+    Discretization,
+    MarchSolution,
+    SeparationError,
+    StationEdge,
+    eta_grid,
+    march,
+)
 from aerophysics._boundary_layer_sa import TurbulentDiscretization
 from aerophysics.exceptions import (
     ApplicabilityWarning,
@@ -70,8 +78,24 @@ def test_explicit_none_is_bit_identical() -> None:
         )
 
 
-@pytest.mark.parametrize("regime", [LAMINAR, TURBULENT])
-@pytest.mark.parametrize("varying", [False, True])
+@pytest.mark.parametrize(
+    ("varying", "regime"),
+    [
+        pytest.param(False, LAMINAR, id="False-laminar"),
+        pytest.param(
+            False,
+            TURBULENT,
+            id="False-turbulent",
+            marks=pytest.mark.solver_verification,
+        ),
+        pytest.param(
+            True, LAMINAR, id="True-laminar", marks=pytest.mark.solver_verification
+        ),
+        pytest.param(
+            True, TURBULENT, id="True-turbulent", marks=pytest.mark.solver_verification
+        ),
+    ],
+)
 def test_cylinder_is_planar(regime: BoundaryLayerRegime, varying: bool) -> None:
     edge = smooth_edge(2.0, 3.0) if varying else constant_edge(2.0, 220.0, [0.1, 1.0])
     planar = marching_boundary_layer(edge, regime=regime, wall_temperature=300.0)
@@ -130,6 +154,7 @@ def test_sharp_cone_mangler(mach: float, wall: float | None, angle: float) -> No
 
 
 @pytest.mark.parametrize("kink", [False, True])
+@pytest.mark.solver_verification
 def test_generalized_mangler(kink: bool) -> None:
     s = np.linspace(0.0, 1.0, 801)
     radius = (
@@ -363,6 +388,7 @@ def flared_radius(s: FloatArray) -> FloatArray:
 
 
 @pytest.mark.parametrize("regime", [LAMINAR, TURBULENT])
+@pytest.mark.solver_verification
 def test_integral_balance(regime: BoundaryLayerRegime) -> None:
     edge = smooth_edge(2.0, 3.0)
     radius = flared_radius(edge.distance)
@@ -372,7 +398,7 @@ def test_integral_balance(regime: BoundaryLayerRegime) -> None:
     assert metrics["momentum_median_percent"] < 0.05
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 @pytest.mark.parametrize(
     ("regime", "wall"),
     [
@@ -430,6 +456,7 @@ def test_refinement_and_balance_diagnostics(
             assert thermal < (0.001 if wall is None else 0.005)
 
 
+@pytest.mark.solver_verification
 def test_separation_uses_axisymmetric_postprocessing() -> None:
     edge = smooth_edge(3.0, 1.0)
     with pytest.raises(BoundaryLayerSeparationError) as caught:
@@ -442,6 +469,37 @@ def test_separation_uses_axisymmetric_postprocessing() -> None:
     reference = planar.value.result
     assert isinstance(result, MarchingBoundaryLayerResult)
     assert isinstance(reference, MarchingBoundaryLayerResult)
+    np.testing.assert_allclose(
+        result.momentum_thickness, reference.momentum_thickness, rtol=1e-8
+    )
+
+
+def test_separation_postprocessing_on_a_short_constant_edge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Check exception postprocessing after one real station and forced separation."""
+
+    def separated(
+        edge_at: Callable[[float], StationEdge],
+        targets: FloatArray,
+        discretization: Discretization,
+    ) -> MarchSolution:
+        solution = march(edge_at, targets[:1], discretization)
+        raise SeparationError(float(targets[0]) * 1.01, solution)
+
+    module = importlib.import_module("aerophysics.marching_boundary_layer")
+    monkeypatch.setattr(module, "march", separated)
+    edge = constant_edge(2.0, 220.0, [0.1, 1.0])
+    with pytest.raises(BoundaryLayerSeparationError) as cylinder:
+        marching_boundary_layer(
+            edge, regime=LAMINAR, wall_temperature=300.0, wall_radius=0.05
+        )
+    with pytest.raises(BoundaryLayerSeparationError) as planar:
+        marching_boundary_layer(edge, regime=LAMINAR, wall_temperature=300.0)
+    result, reference = cylinder.value.result, planar.value.result
+    assert isinstance(result, MarchingBoundaryLayerResult)
+    assert isinstance(reference, MarchingBoundaryLayerResult)
+    np.testing.assert_array_equal(result.distance, [0.1])
     np.testing.assert_allclose(
         result.momentum_thickness, reference.momentum_thickness, rtol=1e-8
     )
@@ -605,7 +663,7 @@ def _measure_shoulder(
     return result, warning_kinds
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 @pytest.mark.parametrize(
     ("regime", "wall", "width"),
     [
@@ -629,7 +687,7 @@ def test_shoulder_stress_measurement(
     assert warning_kinds == expected
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 def test_sa_cone_ratio_is_informational() -> None:
     edge = constant_edge(2.0, 220.0, [0.1, 1.0, 10.0])
     cone = marching_boundary_layer(
@@ -654,6 +712,7 @@ def test_sa_cone_ratio_is_informational() -> None:
 
 @pytest.mark.parametrize("regime", [LAMINAR, TURBULENT])
 @pytest.mark.parametrize("wall", [300.0, None])
+@pytest.mark.solver_verification
 def test_cone_integral_balance(regime: BoundaryLayerRegime, wall: float | None) -> None:
     edge = smooth_edge(2.0, 3.0)
     radius = edge.distance * np.sin(np.radians(10.0))

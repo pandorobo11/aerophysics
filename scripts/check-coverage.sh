@@ -10,7 +10,7 @@ if [[ "$#" -ne 0 ]]; then
 fi
 
 uv run coverage erase
-uv run pytest -m "not generated_assets and not package_artifact"
+uv run pytest -m "not generated_assets and not package_artifact and not solver_verification"
 
 echo
 echo "Enforcing numerical-core branch coverage >= 95%"

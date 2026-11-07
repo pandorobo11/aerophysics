@@ -35,11 +35,41 @@ package-build checks. It must pass before handing work back to the user. Use
 `scripts/check.sh --check-only` when a check-only run is needed; that mode does
 not modify source files.
 
+The slow marching-solver tier runs automatically when solver-relevant files
+changed relative to `origin/main`, including staged, unstaged, and untracked
+files. `scripts/needs-verification.sh solver` owns the path rules and runs the
+tier if the base cannot be resolved. Use `scripts/check.sh --full` to force
+both solver and package verification, and use `--full` before changes whose
+impact on the solver or distribution is unclear. The `--full` and
+`--check-only` options can be combined.
+
+By explicit user decision on 2026-11-07, package building and clean-install
+verification are also conditional locally and in pull-request CI.
+`scripts/needs-verification.sh package` owns these rules: packaging metadata,
+the `hatch_build.py` hook, entry points/documentation lookup, packaging tests,
+documentation configuration, README/license files, gate scripts/workflows,
+and additions/deletions/renames under `src/` or `docs/`. The wheel hook's
+documentation generators and reference data also trigger verification because
+they are copied and executed in its isolated build tree. Ordinary source or
+documentation content edits outside these rules do not trigger the package
+tier. Main and release CI always run it; skipped PR jobs report the reason and
+remain subject to `ci-gate`. Both modes use `origin/main` by default;
+`VERIFICATION_BASE` overrides it (the former `SOLVER_VERIFICATION_BASE` remains
+a fallback). Missing bases or failed comparisons run verification conservatively.
+
 Generated and verification assets are deliberately excluded from the normal
 cross-platform pytest matrix. Run `scripts/check-generated.sh` as part of the
 local gate and keep the dedicated generated-assets CI job on Ubuntu with
 Python 3.12. If an asset check fails, the failing file paths must remain
 visible in the output.
+
+By explicit user decision on 2026-11-07, slow `solver_verification` tests run
+in CI only on Ubuntu / Python 3.12, separately from generated assets. They run
+for solver-relevant pull-request changes and always on main and in releases.
+Representative fast marching tests stay in the full Python/OS matrix. In the
+local write-mode gate, verification assets are regenerated before the asset
+tests; only their redundant currency test is skipped after successful
+regeneration. Check-only, CI, and release runs retain that currency check.
 
 ### Generated-asset failure procedure
 

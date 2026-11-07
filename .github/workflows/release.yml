@@ -45,6 +45,8 @@ jobs:
         run: bash scripts/check-coverage.sh
       - name: Check generated and verification assets
         run: bash scripts/check-generated.sh
+      - name: Run solver verification
+        run: uv run pytest -m solver_verification --no-cov
       - name: Generate verification records from release checkout
         run: uv run python docs/scripts/generate_verification.py
       - name: Run Ruff

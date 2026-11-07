@@ -138,6 +138,7 @@ def test_new_options_are_validated_for_every_regime(
         marching_boundary_layer(plate_edge([0.0, 1.0]), regime=regime, **{name: value})
 
 
+@pytest.mark.solver_verification
 def test_edge_viscosity_derivative_and_conservation() -> None:
     edge = smooth_edge(2.0, 3.0)
     interp = _EdgeInterpolant(edge, np.full(edge.distance.size, 300.0), 3.0)
@@ -265,6 +266,7 @@ def test_picard_exhaustion_and_invalid_trials(monkeypatch: pytest.MonkeyPatch) -
     assert solver.picard(guess, edge, 0.0, np.zeros_like(guess)) is None
 
 
+@pytest.mark.solver_verification
 def test_adiabatic_wall_matches_a_fixed_recovery_temperature() -> None:
     edge = constant_edge(2.0, 220.0, [1.0])
     adiabatic = marching_boundary_layer(edge, regime=BoundaryLayerRegime.TURBULENT)
@@ -283,6 +285,7 @@ def test_adiabatic_wall_matches_a_fixed_recovery_temperature() -> None:
     )
 
 
+@pytest.mark.solver_verification
 def test_strong_compression_separates_with_an_upstream_result() -> None:
     from aerophysics.exceptions import BoundaryLayerSeparationError
 
@@ -329,13 +332,14 @@ def _sa_march(
     ("start", "end", "width"),
     [
         (2.0, 3.0, 0.1),
-        pytest.param(2.0, 3.0, 0.02, marks=pytest.mark.generated_assets),
-        pytest.param(3.0, 4.0, 0.1, marks=pytest.mark.generated_assets),
-        pytest.param(3.0, 4.0, 0.02, marks=pytest.mark.generated_assets),
-        pytest.param(3.0, 2.9, 0.1, marks=pytest.mark.generated_assets),
-        pytest.param(3.0, 2.0, 0.1, marks=pytest.mark.generated_assets),
+        pytest.param(2.0, 3.0, 0.02),
+        pytest.param(3.0, 4.0, 0.1),
+        pytest.param(3.0, 4.0, 0.02),
+        pytest.param(3.0, 2.9, 0.1),
+        pytest.param(3.0, 2.0, 0.1),
     ],
 )
+@pytest.mark.solver_verification
 def test_sa_streamwise_refinement(
     monkeypatch: pytest.MonkeyPatch, start: float, end: float, width: float
 ) -> None:
@@ -370,6 +374,7 @@ def test_sa_streamwise_refinement(
     assert np.max(abs(base.wall_heat_flux / fine.wall_heat_flux[ix] - 1.0)) < 0.005
 
 
+@pytest.mark.solver_verification
 def test_sa_wall_temperature_step_refinement(monkeypatch: pytest.MonkeyPatch) -> None:
     from test_marching_boundary_layer import tighten_streamwise_control
 
@@ -402,6 +407,7 @@ def test_sa_wall_temperature_step_refinement(monkeypatch: pytest.MonkeyPatch) ->
     assert np.max(abs(base.wall_heat_flux / fine.wall_heat_flux[ix] - 1.0)) < 0.005
 
 
+@pytest.mark.solver_verification
 def test_sa_wall_normal_refinement() -> None:
     edge = smooth_edge(2.0, 3.0)
     wall = np.full(edge.distance.size, 300.0)
@@ -472,7 +478,7 @@ def _energy_balance_error(
     return float(np.median(error[mask]))
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 def test_enthalpy_balance_improves_under_wall_normal_refinement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -518,7 +524,7 @@ def test_reference_grid_is_unchanged(reynolds: float) -> None:
     np.testing.assert_array_equal(_turbulent_eta_grid(reynolds), expected)
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 @pytest.mark.parametrize(
     ("mach", "temperature", "wall"),
     [(0.3, 288.15, 292.8), (2.0, 220.0, 300.0), (6.0, 100.0, 300.0)],
@@ -551,7 +557,7 @@ def test_high_reynolds_outer_extent(
         )
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 def test_real_high_reynolds_wall_node_warns() -> None:
     edge = constant_edge(0.3, 288.15, [100.0], unit_reynolds=1e8)
     with pytest.warns(ApplicabilityWarning, match=r"y\+ > 1"):
@@ -587,7 +593,7 @@ def test_turbulent_leading_edge_viscous_interaction(
     assert bool(interaction) is expected
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 def test_adiabatic_pressure_change_streamwise_refinement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -623,7 +629,7 @@ def test_adiabatic_pressure_change_streamwise_refinement(
     assert np.all(fine.wall_heat_flux == 0.0)
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 def test_separation_position_under_streamwise_refinement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -656,7 +662,7 @@ def test_separation_position_under_streamwise_refinement(
     assert np.isfinite(base.value.distance) and np.isfinite(fine.value.distance)
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 def test_high_reynolds_compression_keeps_the_outer_boundary_check() -> None:
     from aerophysics.exceptions import BoundaryLayerConvergenceError
 
@@ -720,7 +726,7 @@ def _adiabatic_balances(
     }
 
 
-@pytest.mark.generated_assets
+@pytest.mark.solver_verification
 def test_adiabatic_integral_balance_diagnostics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

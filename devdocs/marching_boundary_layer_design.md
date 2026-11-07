@@ -254,8 +254,8 @@ CFDとの一致も実験精度の保証にはならない。TMR比較の適用�
 
 ### テストの配置
 
-- 通常の pytest: API、例外、配列の非共有、V2〜V10。SA の V1 と V7〜V10 は高速版
-- `scripts/check-generated.sh`: 文書用の検証表と、計算量の大きい SA の V1、V11
+- 通常の pytest: API、例外、配列の非共有と、高速な V1・V2・V5・V6・積分収支などの代表例。`scripts/check-generated.sh` は文書用の検証表と生成物を確認する。
+- `solver_verification`: V3・V4、細分検証など計算量の大きい marching 検証。2026-11-07 の明示的なユーザー判断により CI は Ubuntu / Python 3.12 の1ジョブとし、solver 関連の変更時、main、release で実行する。ローカルは `scripts/needs-verification.sh solver` の判定または `scripts/check.sh --full` で実行する。
 - フォールバックと失敗経路も分岐カバレッジ 95% の対象とする
 
 ## 7. 実装の順序と第2段階
@@ -645,6 +645,9 @@ Noneは平面の既存演算を維持。正スカラーは鋭い前縁付き円�
 鋭い先端に近づくと比は発散するので、近傍の出力では警告が期待される。
 delta99 |dln p/ds|、粘性干渉、y+の既存警告を維持する。
 
+通常のCI matrixにはNone一致、層流・一定外縁の円柱、鋭い円錐のMangler、入力・半径・警告・剥離後処理の高速テストを残す。
+重い円柱比較、一般化Mangler、積分収支・細分、SA円錐比、V20は `solver_verification` とし、`solver-verification` ジョブ（Ubuntu / Python 3.12）でsolver関連のPR変更時とmainに実行する。releaseでも常に実行する。
+
 ### V12 平面非変更
 
 変更前コードでbuild/axisym/planar_snapshot.npzを保存。M2→3、幅0.1 m、
@@ -762,7 +765,7 @@ cp Te(g−1)+Ue²(u²−1)/2のrho u dy積分を使い、d(r F_H)/ds/rを計算�
 SA(7e-4,1.04,1,150)→(3.5e-4,1.02,.5,150)。順にfirst,ratio,cap,extent。
 下表は最大差[%]。thermalは冷却壁q、断熱Tw。
 streamはCf<0.1%,q<0.5%,Tw<0.1%、normalはCf<0.3%で全て合格。
-CIでは層流・断熱とSA・Tw=300 Kの2条件のみを再実行し、V16の収支と同じ基準を維持する。
+CIの `solver-verification` ジョブ（Ubuntu / Python 3.12）では層流・断熱とSA・Tw=300 Kの2条件のみを再実行し、V16の収支と同じ基準を維持する。solver関連のPR変更時、およびmain・releaseで実行する。
 除外した層流・Tw=300 KとSA・断熱は2026-11-07の一度限りの測定記録として表に残し、CIでは再実行しない。
 
 | 条件 | Cf [%] | qまたはTw [%] |
@@ -856,7 +859,7 @@ Rに比べて小さくないという指摘と整合する。壁Cpを外縁Cpと
 下表のPは `delta99 abs(dln p/ds)`、Dは `delta99/r_w`。`値 @ s` のsはm。
 Dの全出力点の最大と、先端・最終点を除いた0.25<s<1での最大を別々に示す。
 C=横曲率警告、P=圧力長さ警告で、これ以外の警告は出ていない。
-CIではTw=300 KのSA・幅0.005/0.001 mと層流・幅0.001/0.0002 mの4ケースで、完走位置s=1 mと警告種類の集合をassertする。
+CIの `solver-verification` ジョブではTw=300 KのSA・幅0.005/0.001 mと層流・幅0.001/0.0002 mの4ケースで、完走位置s=1 mと警告種類の集合をassertする。
 残り12ケースは2026-11-07の一度限りの測定記録として表に残し、CIでは再実行しない。壁温欄の「断熱」はq_w=0。
 
 | 幅 [m] | 流れ | 壁 | 秒 | Picard | P最大 @ s | D最大 @ s | D最大（0.25<s<1）@ s | 警告 | 結果 |
