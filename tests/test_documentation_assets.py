@@ -99,3 +99,14 @@ def test_thermophysical_record_separates_verification_and_accuracy() -> None:
     ).read_text(encoding="utf-8")
     assert "NIST physical-accuracy assessment" in fragment
     assert "not an acceptance test" in fragment
+
+
+def test_axisymmetric_record_preserves_measurement_limitations() -> None:
+    fragment = (
+        PROJECT_ROOT / "docs/_generated/marching_axisymmetric_verification.rst"
+    ).read_text(encoding="utf-8")
+    assert "R&M 3633" in fragment
+    assert "wind-tunnel comparison" in fragment
+    assert "0.0006" in fragment
+    assert "X=15 in Cf is missing" in fragment
+    assert "transverse curvature is neglected" in fragment

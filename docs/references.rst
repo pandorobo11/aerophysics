@@ -649,3 +649,37 @@ Cf and Cp zones are retained unchanged with source metadata in
 normalization, and wall thermal condition are assumptions in our comparison.
 
 https://tmbwg.github.io/turbmodels/bump_sa.html
+
+.. _ref-mangler-1948:
+
+Mangler, W. *Zusammenhang zwischen ebenen und rotationssymmetrischen
+Grenzschichten in kompressiblen Flüssigkeiten*. ZAMM, 28(4), 97--103, 1948.
+Bibliographic reference only: the original paper was not obtained. Cone relations
+are checked through Tauber, Seiff and Moore and analytically from the transform.
+
+https://doi.org/10.1002/zamm.19480280401
+
+.. _ref-winter-rotta-smith-1968:
+
+Winter, K. G., Rotta, J. C., and Smith, K. G. *Studies of the Turbulent Boundary
+Layer on a Waisted Body of Revolution in Subsonic and Supersonic Flow*.
+ARC R&M 3633, August 1968 (published 1970). Table 1, printed page 21, phi=0,
+M_inf=1.700, Re_l=10.08e6; body polynomials in Fig. 1. Transcription and
+assumptions are retained in ``tests/reference_data/viscous_flow/rm3633_m17.json``.
+
+https://reports.aerade.cranfield.ac.uk/handle/1826.2/2902
+
+.. _ref-moore-1951:
+
+Moore, F. K. *Laminar Boundary Layer on a Circular Cone in Supersonic Flow
+at a Small Angle of Attack*. NACA TN 2521, October 1951.
+
+https://ntrs.nasa.gov/citations/19930083293
+
+.. _ref-seiff-1954:
+
+Seiff, A. *Examination of the Existing Data on the Heat Transfer of Turbulent
+Boundary Layers at Supersonic Speeds from the Point of View of Reynolds
+Analogy*. NACA TN 3284, August 1954. Appendix C, equation (C13), printed page 24.
+
+https://ntrs.nasa.gov/citations/19930083971

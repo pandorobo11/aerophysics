@@ -49,7 +49,7 @@ class StationEdge:
 
     ``wall_ratio`` is ``T_w/T_e``, or None for an adiabatic wall. The last three
     fields are used by the turbulent equations only: ``reynolds_root`` is
-    ``sqrt(2 xi)/mu_e``, ``viscosity_growth`` is ``2 xi d(ln nu_e)/d(xi)``, and
+    ``sqrt(2 xi)/(r_w^j mu_e)``, ``viscosity_growth`` is ``2 xi d(ln nu_e)/d(xi)``, and
     ``sa_ratio`` is ``nu_tilde/nu_e`` at the outer boundary.
     """
 

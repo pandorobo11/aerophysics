@@ -6,6 +6,7 @@ import argparse
 import csv
 import sys
 import warnings
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -1066,6 +1067,249 @@ def _tmr_bump_comparison(
     return rows
 
 
+# R&M 3633 (Winter, Rotta and Smith, 1968), Fig. 1. Coefficients in
+# descending powers, eta=R/l and x=X/l, l=60 in. The last segment is CUBIC.
+_RM_JUNCTIONS = np.array([0.0, 0.14158, 0.45725, 0.64473, 0.76317, 1.0])
+_RM_POLYNOMIALS = (
+    (0.36397, 0.0),
+    (6.34730, -6.49221, 1.22668, 0.33498, -0.00461),
+    (-0.236382, 0.607620, -0.595521, 0.229694),
+    (-53.58258, 150.87806, -158.03866, 72.96859, -12.4939),
+    (0.236382, -0.390789, 0.290242, -0.064001),
+)
+
+
+def _rm_geometry(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Radius and accurately integrated wall distance, in metres."""
+    from scipy.integrate import quad
+
+    gaps = [
+        abs(np.polyval(a, t) - np.polyval(b, t))
+        for a, b, t in zip(
+            _RM_POLYNOMIALS[:-1], _RM_POLYNOMIALS[1:], _RM_JUNCTIONS[1:-1], strict=True
+        )
+    ]
+    if max(gaps) >= 1e-5:
+        raise AssertionError(f"R&M 3633 geometry transcription: junction gaps {gaps}")
+    polynomials = [np.poly1d(c) for c in _RM_POLYNOMIALS]
+    slopes = [p.deriv() for p in polynomials]
+
+    def integral(a: float, b: float, i: int) -> float:
+        return float(
+            quad(
+                lambda t: np.sqrt(1 + slopes[i](t) ** 2),
+                a,
+                b,
+                epsabs=1e-12,
+                epsrel=1e-12,
+            )[0]
+        )
+
+    lengths = np.r_[
+        0.0,
+        np.cumsum(
+            [integral(a, b, i) for i, (a, b) in enumerate(pairwise(_RM_JUNCTIONS))]
+        ),
+    ]
+    indices = np.minimum(np.searchsorted(_RM_JUNCTIONS, x, side="right") - 1, 4)
+    radius = (
+        np.array([polynomials[i](t) for i, t in zip(indices, x, strict=True)]) * 1.524
+    )
+    distance = (
+        np.array(
+            [
+                lengths[i] + integral(float(_RM_JUNCTIONS[i]), float(t), int(i))
+                for i, t in zip(indices, x, strict=True)
+            ]
+        )
+        * 1.524
+    )
+    return radius, distance
+
+
+def _rm3633_comparison(
+    total_temperature: float = 310.0, *, cone_pressure: bool = False
+) -> dict:
+    """Unfitted wind-tunnel comparison; retain failures and applicability warnings."""
+    from scipy.interpolate import PchipInterpolator
+
+    from aerophysics import (
+        AIR,
+        BoundaryLayerEdge,
+        BoundaryLayerRegime,
+        conical_shock,
+        marching_boundary_layer,
+    )
+    from aerophysics.exceptions import (
+        BoundaryLayerConvergenceError,
+        BoundaryLayerSeparationError,
+    )
+    from aerophysics.transport import AIR_VISCOSITY
+
+    measured = np.genfromtxt(REFERENCE / "rm3633_m17.csv", delimiter=",")
+    if measured.shape != (28, 4):
+        raise AssertionError("R&M 3633 transcription must have 28 rows and 4 columns")
+    total_ratios = (
+        (1 + 0.7 * 1.7**2 * measured[:, 1])
+        * (1 + 0.2 * measured[:, 2] ** 2) ** 3.5
+        / (1 + 0.2 * 1.7**2) ** 3.5
+    )
+    if not np.all((total_ratios > 0.9925) & (total_ratios < 0.9963)):
+        raise AssertionError("R&M 3633 Cp/M_delta transcription consistency failed")
+    cone = conical_shock(1.7, np.radians(20.0))
+    cone_cp = (float(cone.surface_pressure_ratio) - 1.0) / (0.7 * 1.7**2)
+    temperature = total_temperature / (1 + 0.2 * 1.7**2)
+    velocity = 1.7 * np.sqrt(1.4 * AIR.specific_gas_constant * temperature)
+    density = 10.08e6 / 1.524 * AIR_VISCOSITY.dynamic_viscosity(temperature) / velocity
+    pressure = density * AIR.specific_gas_constant * temperature
+    # Preserve measured values, including the unsmoothed small variations.
+    source_x = np.r_[0.0, measured[:, 0] / 60.0]
+    cp = np.r_[measured[0, 1], measured[:, 1]]
+    if cone_pressure:
+        cp[source_x <= 0.1] = cone_cp
+    _, source_s = _rm_geometry(source_x)
+    log_p = PchipInterpolator(source_s, np.log(pressure * (1 + 0.7 * 1.7**2 * cp)))
+    # About 0.25 in spacing, including every measured station and body junction.
+    x = np.unique(np.r_[np.arange(237) / 240.0, source_x, _RM_JUNCTIONS[1:-1]])
+    radius, distance = _rm_geometry(x)
+    edge = BoundaryLayerEdge.from_pressure(
+        distance,
+        np.exp(log_p(distance)),
+        total_pressure=pressure
+        * (1 + 0.2 * 1.7**2) ** 3.5
+        * float(cone.total_pressure_ratio),
+        total_temperature=total_temperature,
+    )
+    failure = None
+    result = None
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            result = marching_boundary_layer(
+                edge,
+                regime=BoundaryLayerRegime.TURBULENT,
+                wall_radius=radius,
+                edge_sa_ratio=3.0,
+            )
+        except BoundaryLayerSeparationError as error:
+            failure = str(error)
+            result = error.result
+        except BoundaryLayerConvergenceError as error:
+            failure = str(error)
+    record = {
+        "temperature": total_temperature,
+        "cone_pressure": cone_pressure,
+        "cone_cp": cone_cp,
+        "cone_total_pressure_ratio": float(cone.total_pressure_ratio),
+        "freestream_pressure_Pa": float(pressure),
+        "failure": failure,
+        "warnings": [str(w.message) for w in caught],
+        "rows": [],
+    }
+    if result is not None and result.distance.size:
+        available = (
+            (measured[:, 0] >= 12)
+            & np.isfinite(measured[:, 3])
+            & (source_s[1:] <= result.distance[-1])
+        )
+        stations = measured[available]
+        computed = np.interp(
+            source_s[1:][available],
+            result.distance,
+            result.local_skin_friction_coefficient,
+        )
+        ratios = np.interp(result.distance, distance, radius)
+        curvature = result.boundary_layer_thickness / ratios
+        record["max_delta_over_radius"] = float(np.max(curvature))
+        record["max_delta_over_radius_s_m"] = float(
+            result.distance[np.argmax(curvature)]
+        )
+        record["curvature_at_stations"] = np.interp(
+            source_s[1:][available], result.distance, curvature
+        ).tolist()
+        record["rows"] = [
+            (
+                float(row[0]),
+                float(row[3] / 1000),
+                float(value),
+                float(value - row[3] / 1000),
+            )
+            for row, value in zip(stations, computed, strict=True)
+        ]
+        if computed.size:
+            record["max_absolute_difference"] = float(
+                np.max(abs(computed - stations[:, 3] / 1000))
+            )
+    return record
+
+
+def _marching_axisymmetric_verification() -> str:
+    """Generated V19 table; geometry and comparison regressions run on regeneration."""
+    lines = [
+        ".. list-table:: R&M 3633, M_inf=1.7, Re_l=10.08e6: local Cf",
+        "   :header-rows: 1",
+        "",
+        "   * - X [in]",
+        "     - Measured Cf",
+        "     - SA-noft2 Cf",
+        "     - Difference",
+        "     - abs difference / 0.0002",
+        "     - delta99/r_w",
+    ]
+    base = _rm3633_comparison()
+    for row, curvature in zip(
+        base["rows"], base.get("curvature_at_stations", []), strict=True
+    ):
+        x, measured, computed, difference = row
+        lines += [
+            f"   * - {x:g}",
+            f"     - {measured:.6f}",
+            f"     - {computed:.6f}",
+            f"     - {difference:+.6f}",
+            f"     - {abs(difference) / 0.0002:.2f}",
+            f"     - {curvature:.4f}",
+        ]
+    lines += [
+        "",
+        "Measured Cf accuracy is +/-0.0002; Cp accuracy is +/-0.005 (section 3.6).",
+        "The X=15 in Cf is missing. X<12 in is excluded because of transition.",
+        "This is a wind-tunnel comparison, not a calibrated accuracy claim.",
+        "",
+        ".. list-table:: R&M 3633 sensitivity to assumptions",
+        "   :header-rows: 1",
+        "",
+        "   * - Assumption",
+        "     - Maximum absolute Cf difference",
+        "     - Maximum delta99/r_w",
+        "     - Outcome",
+    ]
+    for label, record in [
+        ("T0=310 K", base),
+        ("T0=290 K", _rm3633_comparison(290.0)),
+        ("T0=330 K", _rm3633_comparison(330.0)),
+        ("T0=310 K, cone Cp replaced", _rm3633_comparison(cone_pressure=True)),
+    ]:
+        lines += [
+            f"   * - {label}",
+            f"     - {record.get('max_absolute_difference', float('nan')):.6f}",
+            f"     - {record.get('max_delta_over_radius', float('nan')):.4f}",
+            f"     - {record['failure'] or 'Completed'}",
+        ]
+        # This is a regression bound, not the measurement-accuracy tolerance.
+        if record["failure"] is not None or record["max_absolute_difference"] > 0.0006:
+            raise AssertionError(f"R&M 3633 regression: {record}")
+    lines += ["", "Warnings from the baseline:", ""]
+    lines += [f"* {message}" for message in base["warnings"]] or ["* None."]
+    lines += [
+        "",
+        "The regression bound is 0.0006: the measured maximum over these cases is",
+        "rounded up to 0.0005, plus 0.0001 margin. This is not a physical accuracy",
+        "bound. Input construction and limitations are in the boundary-layer guide.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def generate(*, check: bool) -> bool:
     api = _api()
     source = _source_comparison(api)
@@ -1124,6 +1368,11 @@ def generate(*, check: bool) -> bool:
     current &= write_or_check(
         ROOT / "docs/_generated/marching_sa_verification.rst",
         _marching_sa_verification(),
+        check=check,
+    )
+    current &= write_or_check(
+        ROOT / "docs/_generated/marching_axisymmetric_verification.rst",
+        _marching_axisymmetric_verification(),
         check=check,
     )
     current &= write_or_check(TABLE_PATH, _rst(source, chart, invariants), check=check)
