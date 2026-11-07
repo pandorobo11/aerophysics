@@ -9,7 +9,7 @@ All inputs and outputs use SI units. ``distance`` is measured along the wall
 from the leading edge, the skin-friction coefficient uses the local edge dynamic
 pressure, and heat flux into the wall is positive.
 
-The current scope is planar laminar flow of a calorically perfect gas with an
+The current scope is planar laminar or SA-noft2 flow of a perfect gas with an
 isentropic edge. Separation stops the march because the downstream march is not
 valid past it.
 """
@@ -24,12 +24,14 @@ from scipy.interpolate import PchipInterpolator
 
 from aerophysics._array import FloatArray, as_float_array
 from aerophysics._boundary_layer_march import (
+    Discretization,
     MarchSolution,
     SeparationError,
     StationEdge,
     eta_grid,
     march,
 )
+from aerophysics._boundary_layer_sa import TurbulentDiscretization
 from aerophysics.boundary_layer import BoundaryLayerRegime
 from aerophysics.exceptions import (
     ApplicabilityWarning,
@@ -43,6 +45,30 @@ _LAMINAR_ETA_FIRST = 1e-3
 _LAMINAR_ETA_RATIO = 1.015
 _LAMINAR_ETA_SPACING = 0.05
 _LAMINAR_ETA_MAXIMUM = 16.0
+
+_SA_ETA_FIRST = 7e-4
+_SA_ETA_RATIO = 1.04
+_SA_ETA_SPACING = 1.0
+_SA_ETA_MINIMUM_EXTENT = 150.0
+_SA_ETA_REFERENCE_REYNOLDS = 1e8
+_SA_ETA_REYNOLDS_EXPONENT = 0.42
+
+
+def _turbulent_eta_grid(reynolds_equivalent: float) -> FloatArray:
+    """Size the outer domain before marching, preserving the low-Re grid."""
+    scale = max(1.0, reynolds_equivalent / _SA_ETA_REFERENCE_REYNOLDS) ** (
+        _SA_ETA_REYNOLDS_EXPONENT
+    )
+    # Do not change the reference grid for roundoff at Re_equivalent = 1e8.
+    if scale <= 1.0 + 32.0 * np.finfo(np.float64).eps:
+        scale = 1.0
+    return eta_grid(
+        _SA_ETA_FIRST,
+        _SA_ETA_RATIO,
+        _SA_ETA_SPACING * scale,
+        _SA_ETA_MINIMUM_EXTENT * scale,
+    )
+
 
 _PANELS_PER_INTERVAL = 16
 _GAUSS_NODES, _GAUSS_WEIGHTS = np.polynomial.legendre.leggauss(5)
@@ -239,6 +265,11 @@ class MarchingBoundaryLayerResult:
     gradient at the wall, not from a Reynolds analogy; it is zero for an
     adiabatic wall. ``pressure_gradient_parameter`` is
     ``beta = 2 xi d(ln U_e)/d(xi)``, positive for accelerating flow.
+    ``nu_tilde_ratio`` is the read-only SA working variable divided by local
+    edge kinematic viscosity, or None for laminar flow.
+    Its outer profile can oscillate and is not grid-converged in strong
+    expansions or with a small ``edge_sa_ratio``. Wall quantities and
+    ``delta99`` were insensitive to outer-grid refinement in the measured cases.
     """
 
     distance: FloatArray
@@ -255,14 +286,22 @@ class MarchingBoundaryLayerResult:
     wall_distance: FloatArray
     velocity_ratio: FloatArray
     temperature_ratio: FloatArray
+    nu_tilde_ratio: FloatArray | None = None
 
 
 class _EdgeInterpolant:
     """Monotone interpolation of the edge state and of the ``xi`` integral."""
 
     def __init__(
-        self, edge: BoundaryLayerEdge, wall_temperature: FloatArray | None
+        self,
+        edge: BoundaryLayerEdge,
+        wall_temperature: FloatArray | None,
+        edge_sa_ratio: float | None = None,
     ) -> None:
+        self.edge_sa_ratio = edge_sa_ratio
+        self.initial_nu = float(
+            edge.viscosity_model.dynamic_viscosity(edge.temperature[0])
+        ) / (edge.pressure[0] / (edge.gas.specific_gas_constant * edge.temperature[0]))
         self.gas = edge.gas
         self.viscosity_model = edge.viscosity_model
         self.total_temperature = edge.temperature[0] + edge.velocity[0] ** 2 / (
@@ -341,7 +380,39 @@ class _EdgeInterpolant:
             if self.wall_temperature is None
             else float(self.wall_temperature(distance)) / temperature
         )
-        return StationEdge(xi, velocity, beta, heating, temperature, wall_ratio)
+        if self.edge_sa_ratio is None:
+            growth = 0.0
+            sa_ratio = 0.0
+        else:
+            # Only SA needs this derivative, including at zero edge SA ratio.
+            # The viscosity model must accept T_e * exp(+/-1e-5).
+            delta = 1e-5
+            mu_plus = float(
+                self.viscosity_model.dynamic_viscosity(temperature * np.exp(delta))
+            )
+            mu_minus = float(
+                self.viscosity_model.dynamic_viscosity(temperature * np.exp(-delta))
+            )
+            exponent = np.log(mu_plus / mu_minus) / (2.0 * delta)
+            gamma = gas.heat_capacity_ratio
+            log_nu_slope = (
+                ((gamma - 1.0) * exponent - 1.0)
+                / gamma
+                * float(self.log_pressure_slope(distance))
+            )
+            growth = 2.0 * xi * log_nu_slope / (density * viscosity * velocity)
+            sa_ratio = self.edge_sa_ratio * self.initial_nu * density / viscosity
+        return StationEdge(
+            xi,
+            velocity,
+            beta,
+            heating,
+            temperature,
+            wall_ratio,
+            float(np.sqrt(2.0 * xi) / viscosity),
+            float(growth),
+            sa_ratio,
+        )
 
 
 def _first_crossing(
@@ -429,6 +500,9 @@ def _result(
         wall_distance=_read_only(wall_distance),
         velocity_ratio=_read_only(velocity_ratio),
         temperature_ratio=_read_only(temperature_ratio),
+        nu_tilde_ratio=None
+        if solution.nu_tilde_ratio is None
+        else _read_only(solution.nu_tilde_ratio),
     )
 
 
@@ -463,6 +537,20 @@ def _warn_applicability(
         edge.viscosity_model.dynamic_viscosity(result.wall_temperature)
     )
     wall_c = temperature / result.wall_temperature * wall_viscosity / viscosity
+    if result.nu_tilde_ratio is not None:
+        wall_density = pressure / (gas.specific_gas_constant * result.wall_temperature)
+        y_plus = (
+            result.wall_distance[:, 1]
+            * np.sqrt(wall_density * np.maximum(result.wall_shear_stress, 0.0))
+            / wall_viscosity
+        )
+        if np.max(y_plus) > 1.0:
+            warnings.warn(
+                "the first wall-normal node has y+ > 1 "
+                f"(maximum y+ = {np.max(y_plus):.6g})",
+                ApplicabilityWarning,
+                stacklevel=3,
+            )
     interaction = mach**3 * np.sqrt(wall_c / result.reynolds_number)
     if np.max(interaction) > _VISCOUS_INTERACTION_THRESHOLD:
         warnings.warn(
@@ -480,6 +568,8 @@ def marching_boundary_layer(
     regime: BoundaryLayerRegime,
     wall_temperature: ArrayLike | None = None,
     prandtl_number: float = 0.72,
+    turbulent_prandtl_number: float = 0.9,
+    edge_sa_ratio: float = 3.0,
 ) -> MarchingBoundaryLayerResult:
     """March a boundary layer along a wall from a sharp leading edge.
 
@@ -489,13 +579,21 @@ def marching_boundary_layer(
         Edge state along the wall. Resolve pressure changes smoothly, because
         the march follows a monotone interpolation of the supplied pressure.
     regime:
-        Boundary-layer state. Only ``BoundaryLayerRegime.LAMINAR`` is
-        implemented.
+        ``LAMINAR`` or ``TURBULENT`` (SA-noft2). ``TRANSITIONAL`` is not
+        implemented. SA-noft2 develops its own laminar start and transition
+        near the leading edge; this is not a transition prediction.
     wall_temperature:
         Wall temperature in K, as a scalar or an array with the shape of
         ``edge.distance``. None selects an adiabatic wall.
     prandtl_number:
         Constant Prandtl number.
+    turbulent_prandtl_number:
+        Constant turbulent Prandtl number, greater than zero. Validated in
+        every regime and used only for ``TURBULENT``.
+    edge_sa_ratio:
+        Initial ``nu_tilde/nu_e`` at the edge, at least zero. Dimensional
+        ``nu_tilde`` is conserved along the edge streamline. Zero gives the
+        laminar limit. Validated in every regime and used only for ``TURBULENT``.
 
     Returns
     -------
@@ -518,7 +616,15 @@ def marching_boundary_layer(
     -----
     ApplicabilityWarning
         If the pressure changes over a distance comparable to the boundary-layer
-        thickness, or laminar viscous interaction is strong.
+        thickness, laminar viscous interaction is strong, or the turbulent
+        first wall-normal node has ``y+ > 1`` using local wall properties.
+
+    Notes
+    -----
+    Turbulent flow requires the viscosity model to accept ``T_e * exp(+/-1e-5)``
+    for an edge viscosity derivative, even when ``edge_sa_ratio=0``. Near a
+    model's temperature-range limit, these evaluations can raise its range
+    exception or warning. Laminar flow does not evaluate this SA derivative.
 
     Examples
     --------
@@ -538,9 +644,20 @@ def marching_boundary_layer(
     >>> layer.distance.tolist()
     [0.5, 1.0]
     """
-    if regime is not BoundaryLayerRegime.LAMINAR:
+    turbulent_prandtl = _positive_scalar(
+        turbulent_prandtl_number, name="turbulent_prandtl_number"
+    )
+    sa_array, sa_scalar = as_float_array(edge_sa_ratio, name="edge_sa_ratio")
+    if not sa_scalar or float(sa_array) < 0.0:
+        raise ValueError("edge_sa_ratio must be a scalar at least zero")
+    sa_ratio = float(sa_array)
+    if (
+        regime is not BoundaryLayerRegime.LAMINAR
+        and regime is not BoundaryLayerRegime.TURBULENT
+    ):
         raise ModelRangeError(
-            "marching_boundary_layer implements only BoundaryLayerRegime.LAMINAR"
+            "marching_boundary_layer implements BoundaryLayerRegime.LAMINAR "
+            "and TURBULENT"
         )
     prandtl = _positive_scalar(prandtl_number, name="prandtl_number")
     wall = (
@@ -550,20 +667,36 @@ def marching_boundary_layer(
             wall_temperature, edge.distance.size, name="wall_temperature"
         )
     )
-    interpolant = _EdgeInterpolant(edge, wall)
+    interpolant = _EdgeInterpolant(
+        edge, wall, sa_ratio if regime is BoundaryLayerRegime.TURBULENT else None
+    )
     eta = eta_grid(
         _LAMINAR_ETA_FIRST,
         _LAMINAR_ETA_RATIO,
         _LAMINAR_ETA_SPACING,
         _LAMINAR_ETA_MAXIMUM,
     )
+    discretization = (
+        TurbulentDiscretization(
+            _turbulent_eta_grid(
+                max(
+                    interpolant.state(float(s)).reynolds_root for s in edge.distance[1:]
+                )
+                ** 2
+                / 2.0
+            ),
+            prandtl,
+            turbulent_prandtl,
+            edge.viscosity_model,
+        )
+        if regime is BoundaryLayerRegime.TURBULENT
+        else Discretization(eta, prandtl, edge.viscosity_model)
+    )
     try:
         solution = march(
             interpolant.state,
             edge.distance[1:],
-            eta=eta,
-            prandtl_number=prandtl,
-            viscosity_model=edge.viscosity_model,
+            discretization,
         )
     except SeparationError as separation:
         upstream = _result(edge, interpolant, separation.solution, prandtl)

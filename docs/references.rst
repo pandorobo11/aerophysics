@@ -637,3 +637,15 @@ National Institute of Standards and Technology. *Guide for the Use of the
 International System of Units (SI)*, NIST Special Publication 811, Appendix B.
 
 https://www.nist.gov/pml/special-publication-811
+
+.. _ref-tmr-bump-sa:
+
+NASA Turbulence Modeling Resource. *2D Bump-in-channel Verification Case:
+Spalart--Allmaras results*. CFL3D and FUN3D on the 1409 x 641 grid,
+M = 0.2, Reynolds number 3 million per unit length. The source states that
+SA and SA-noft2 are essentially identical for this case. The downloaded
+Cf and Cp zones are retained unchanged with source metadata in
+``tests/reference_data/viscous_flow/tmr_bump_sa.json``. Temperature, coefficient
+normalization, and wall thermal condition are assumptions in our comparison.
+
+https://tmbwg.github.io/turbmodels/bump_sa.html

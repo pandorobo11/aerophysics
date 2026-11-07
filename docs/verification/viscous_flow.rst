@@ -71,3 +71,23 @@ input rather than a correlation supplied by this package.
 
 The commands that regenerate this record are listed in the repository's
 ``DEVELOPMENT.md``.
+
+Marching SA-noft2 boundary layer
+--------------------------------
+
+The frozen constant-edge SA solver checks implementation consistency across
+18 cases. It shares the turbulence model, so this is not independent physical
+validation. The :ref:`NASA TMR bump <ref-tmr-bump-sa>` compares against external
+CFL3D and FUN3D RANS solutions. Wall Cp supplies the edge pressure, which limits
+the comparison on the curved wall. SI units, downstream wall arc length,
+local-edge Cf, and positive-into-wall heat flux are used by the API; only the
+TMR table converts wall shear to freestream dynamic-pressure normalization.
+
+.. include:: ../_generated/marching_sa_verification.rst
+
+The development memo records momentum and enthalpy balances, streamwise and
+wall-normal refinement, separation, and fallback checks. Energy balance improves
+with wall-normal refinement rather than streamwise refinement. SA-noft2 develops
+its own laminar start and transition near the leading edge; this is not a
+transition prediction. Accuracy against experiment is not established.
+Agreement with CFD that uses the same model does not establish it.

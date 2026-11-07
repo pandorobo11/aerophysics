@@ -1,0 +1,19 @@
+{
+  "sources": [
+    "NASA Turbulence Modeling Resource, 2D Bump-in-channel Verification Case, SA results, https://tmbwg.github.io/turbmodels/bump_sa.html"
+  ],
+  "files": {
+    "tmr_bump_sa_cf.dat": "https://tmbwg.github.io/turbmodels/Bump/SA/cf_bump.dat",
+    "tmr_bump_sa_cp.dat": "https://tmbwg.github.io/turbmodels/Bump/SA/cp_bump.dat"
+  },
+  "retrieved": "2026-11-07",
+  "role": "numerical RANS solutions on the 1409 x 641 grid from CFL3D and FUN3D; not measurements",
+  "format": "Tecplot ASCII, unmodified from the source, with one zone per code and two columns: x and the coefficient",
+  "flow": "M = 0.2, Re = 3 million per unit grid length, viscous wall from x = 0 to 1.5, bump y = 0.05 sin(pi x/0.9 - pi/3)^4 on 0.3 <= x <= 1.2",
+  "turbulence": "SA with farfield nu_tilde = 3 nu; the source states that SA-noft2 gives essentially identical results for this case",
+  "not_stated_by_source": [
+    "temperature",
+    "normalization of Cf and Cp",
+    "wall thermal boundary condition"
+  ]
+}

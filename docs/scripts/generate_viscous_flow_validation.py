@@ -676,7 +676,12 @@ def _integral_balances(marching: tuple[object, ...]) -> tuple[float, float]:
 
 
 def _marching_laminar_verification(api: tuple[object, ...]) -> str:
-    from aerophysics._boundary_layer_march import StationEdge, eta_grid, march
+    from aerophysics._boundary_layer_march import (
+        Discretization,
+        StationEdge,
+        eta_grid,
+        march,
+    )
     from aerophysics.exceptions import BoundaryLayerSeparationError
     from aerophysics.marching_boundary_layer import (
         BoundaryLayerEdge,
@@ -699,9 +704,7 @@ def _marching_laminar_verification(api: tuple[object, ...]) -> str:
         solution = march(
             lambda xi: StationEdge(xi, 1.0, beta, 0.0, 300.0, wall_ratio),
             np.array([1.0]),
-            eta=eta,
-            prandtl_number=1.0,
-            viscosity_model=_LinearViscosity(),
+            Discretization(eta, 1.0, _LinearViscosity()),
         )
         return (
             float(solution.wall_velocity_slope[-1]),
@@ -806,9 +809,7 @@ def _marching_laminar_verification(api: tuple[object, ...]) -> str:
         march(
             interpolant.state,
             stations,
-            eta=eta,
-            prandtl_number=0.72,
-            viscosity_model=wall_edge.viscosity_model,
+            Discretization(eta, 0.72, wall_edge.viscosity_model),
         ),
         0.72,
     )
@@ -853,6 +854,216 @@ def _marching_laminar_verification(api: tuple[object, ...]) -> str:
             ]
         )
     return "\n".join(lines)
+
+
+def _marching_sa_verification() -> str:
+    """Frozen ZPG regression and an unfitted external same-model comparison."""
+    from aerophysics import (
+        AIR,
+        BoundaryLayerEdge,
+        BoundaryLayerRegime,
+        marching_boundary_layer,
+    )
+    from aerophysics.transport import AIR_VISCOSITY
+
+    lines = [
+        ".. list-table:: SA-noft2 ZPG differences from the frozen reference [%]",
+        "   :header-rows: 1",
+        "",
+        "   * - Case",
+        "     - Re_s",
+        "     - Cf",
+        "     - delta99",
+        "     - theta",
+        "     - Heat coefficient",
+    ]
+    with (REFERENCE / "turbulent_sa_boundary_layer.csv").open() as stream:
+        rows = list(csv.DictReader(stream))
+    for label in dict.fromkeys(row["case"] for row in rows):
+        group = [row for row in rows if row["case"] == label]
+        first = group[0]
+        mach, temperature = float(first["mach"]), float(first["edge_temperature_K"])
+        velocity = mach * np.sqrt(1.4 * AIR.specific_gas_constant * temperature)
+        density = 1e7 * AIR_VISCOSITY.dynamic_viscosity(temperature) / velocity
+        pressure = density * AIR.specific_gas_constant * temperature
+        distances = np.array([float(row["reynolds_number"]) / 1e7 for row in group])
+        ratio = 1.0 + 0.2 * mach**2
+        edge = BoundaryLayerEdge.from_pressure(
+            np.r_[0.0, distances],
+            np.full(len(distances) + 1, pressure),
+            total_pressure=pressure * ratio**3.5,
+            total_temperature=temperature * ratio,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = marching_boundary_layer(
+                edge,
+                regime=BoundaryLayerRegime.TURBULENT,
+                wall_temperature=float(first["wall_temperature_K"]),
+            )
+        quantities = (
+            result.local_skin_friction_coefficient,
+            result.boundary_layer_thickness / distances,
+            result.momentum_thickness / distances,
+            result.wall_heat_flux / (density * velocity * AIR.cp * temperature),
+        )
+        keys = ("cf", "delta99_over_x", "momentum_over_x", "wall_heat_flux_coefficient")
+        for index, row in enumerate(group):
+            differences = []
+            for quantity, key in zip(quantities, keys, strict=True):
+                reference = float(row[key])
+                scale = (
+                    float(row["cf"])
+                    if key == keys[-1] and "AD" in label
+                    else abs(reference)
+                )
+                difference = 100.0 * (quantity[index] - reference) / scale
+                if abs(difference) >= 0.3:
+                    raise AssertionError(
+                        f"SA ZPG {label} Re={row['reynolds_number']} {key}: "
+                        f"{difference:.6g}% exceeds 0.3%"
+                    )
+                differences.append(difference)
+            lines += [f"   * - {label}", f"     - {float(row['reynolds_number']):.0e}"]
+            lines += [f"     - {value:.4f}" for value in differences]
+    lines += [
+        "",
+        "The recovery-temperature rows (AD) use an absolute heat-coefficient",
+        "difference divided by the reference Cf. All other differences are relative",
+        "to the reference quantity. The limit is 0.3% per entry; reference grid",
+        "uncertainty is about 0.1%. The reference displacement integrates only to",
+        "delta99 and is excluded here. Unit Reynolds number is 1e7 per metre,",
+        "gamma is 1.4, Pr is 0.72, Prt is 0.9, and Sutherland S is 110.4 K.",
+        "",
+        ".. list-table:: NASA TMR bump: local wall shear / freestream dynamic pressure",
+        "   :header-rows: 1",
+        "",
+        "   * - Cp source / Cf reference",
+        "     - Region (x)",
+        "     - Median difference [%]",
+        "     - Maximum absolute difference [%]",
+        "     - Maximum code spread [%]",
+    ]
+    for row in _tmr_bump_comparison():
+        if row[3] >= 3.0:
+            raise AssertionError(
+                f"SA TMR {row[0]} {row[1]}: {row[3]:.6g}% exceeds 3.0%"
+            )
+        lines += [f"   * - {row[0]}", f"     - {row[1]}"]
+        lines += [f"     - {value:.3f}" for value in row[2:]]
+    lines += [
+        "",
+        "Each march uses that code's wall Cp as edge Cp. The comparison excludes",
+        "x < 0.05 and x >= 1.45; the march ends at the last source point below 1.48.",
+        "Cp is replaced by its linearly interpolated value at x = 0.02 for x < 0.02,",
+        "including the added leading edge x = 0. No other smoothing or fitting",
+        "is used.",
+        "The wall distance is the trapezoidal integral of sqrt(1 + (dy/dx)^2) on",
+        "the source x nodes. Regions are upstream [0.05, 0.3), windward [0.3, 0.675),",
+        "crest [0.675, 0.825), leeward [0.825, 1.2), recovery [1.2, 1.45).",
+        "",
+        "M_inf = 0.2 and Re_inf = 3e6 per metre. Dimensional edge nu_tilde is",
+        "3 nu_inf, converted to the initial local edge ratio. T_inf = 300 K,",
+        "an adiabatic wall,",
+        "and freestream dynamic-pressure normalization for both Cp and Cf are",
+        "assumptions: the source does not state these three details. Repeating at",
+        "250 K and 350 K changes each regional maximum by less than 0.007 percentage",
+        "points; temperature has little effect at this Mach number. The small",
+        "upstream-flat discrepancy supports the normalization assumption. Wall Cp",
+        "need not equal boundary-layer edge Cp on the curved bump. The regression",
+        "limit is 3.0%, from the measured maximum of 2.50% plus 0.50 percentage",
+        "points of margin; it is not an accuracy claim. The same-model CFD spread",
+        "is smaller than our differences over much of the bump. Accuracy against",
+        "experiment is not established by this comparison.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _tmr_bump_comparison(
+    temperature: float = 300.0,
+) -> list[tuple[str, str, float, float, float]]:
+    from aerophysics import (
+        AIR,
+        BoundaryLayerEdge,
+        BoundaryLayerRegime,
+        marching_boundary_layer,
+    )
+    from aerophysics.transport import AIR_VISCOSITY
+
+    def zones(name: str) -> dict[str, np.ndarray]:
+        records: dict[str, list[list[float]]] = {}
+        label = ""
+        for line in (REFERENCE / name).read_text().splitlines():
+            if line.lower().startswith("zone"):
+                label = line.split('"')[1]
+                records[label] = []
+            elif label:
+                records[label].append([float(value) for value in line.split()])
+        return {key: np.array(value) for key, value in records.items()}
+
+    cp, cf = zones("tmr_bump_sa_cp.dat"), zones("tmr_bump_sa_cf.dat")
+    rows = []
+    for code in cp:
+        x = np.unique(np.r_[0.0, cp[code][:, 0]])
+        x = x[(x >= 0.0) & (x <= 1.48)]
+        coefficient = np.interp(np.maximum(x, 0.02), cp[code][:, 0], cp[code][:, 1])
+        angle = np.pi * x / 0.9 - np.pi / 3.0
+        slope = np.where(
+            (x >= 0.3) & (x <= 1.2),
+            0.2 * np.pi / 0.9 * np.sin(angle) ** 3 * np.cos(angle),
+            0.0,
+        )
+        distance = cumulative_trapezoid(np.sqrt(1.0 + slope**2), x, initial=0.0)
+        mach = 0.2
+        velocity = mach * np.sqrt(1.4 * AIR.specific_gas_constant * temperature)
+        density = 3e6 * AIR_VISCOSITY.dynamic_viscosity(temperature) / velocity
+        pressure = density * AIR.specific_gas_constant * temperature
+        dynamic = 0.5 * density * velocity**2
+        edge = BoundaryLayerEdge.from_pressure(
+            distance,
+            pressure + dynamic * coefficient,
+            total_pressure=pressure * (1.0 + 0.2 * mach**2) ** 3.5,
+            total_temperature=temperature * (1.0 + 0.2 * mach**2),
+        )
+        initial_nu = (
+            AIR_VISCOSITY.dynamic_viscosity(float(edge.temperature[0]))
+            * AIR.specific_gas_constant
+            * edge.temperature[0]
+            / edge.pressure[0]
+        )
+        farfield_nu = AIR_VISCOSITY.dynamic_viscosity(temperature) / density
+        result = marching_boundary_layer(
+            edge,
+            regime=BoundaryLayerRegime.TURBULENT,
+            edge_sa_ratio=3.0 * farfield_nu / initial_nu,
+        )
+        computed = result.wall_shear_stress / dynamic
+        reference = np.interp(x[1:], cf[code][:, 0], cf[code][:, 1])
+        other_code = "FUN3D" if code == "CFL3D" else "CFL3D"
+        other = np.interp(x[1:], cf[other_code][:, 0], cf[other_code][:, 1])
+        difference, spread = (
+            100.0 * (computed / reference - 1.0),
+            100.0 * (other / reference - 1.0),
+        )
+        for region, left, right in (
+            ("Upstream", 0.05, 0.3),
+            ("Windward", 0.3, 0.675),
+            ("Crest", 0.675, 0.825),
+            ("Leeward", 0.825, 1.2),
+            ("Recovery", 1.2, 1.45),
+        ):
+            mask = (x[1:] >= left) & (x[1:] < right)
+            rows.append(
+                (
+                    code,
+                    f"{region} [{left:g}, {right:g})",
+                    float(np.median(difference[mask])),
+                    float(np.max(abs(difference[mask]))),
+                    float(np.max(abs(spread[mask]))),
+                )
+            )
+    return rows
 
 
 def generate(*, check: bool) -> bool:
@@ -908,6 +1119,11 @@ def generate(*, check: bool) -> bool:
     current &= write_or_check(
         ROOT / "docs/_generated/marching_laminar_verification.rst",
         _marching_laminar_verification(api),
+        check=check,
+    )
+    current &= write_or_check(
+        ROOT / "docs/_generated/marching_sa_verification.rst",
+        _marching_sa_verification(),
         check=check,
     )
     current &= write_or_check(TABLE_PATH, _rst(source, chart, invariants), check=check)

@@ -170,6 +170,113 @@ its `total_pressure_ratio`, which only need the static states.
 - `xi` is integrated with five-point Gauss--Legendre quadrature on 16 panels per
   input interval.
 
+### SA-noft2 marching extension
+
+- `Discretization` retains the laminar residual and numerical operations;
+  `_boundary_layer_sa.TurbulentDiscretization` adds `(n, Y)` to `(f, u, g)`.
+  Three representative laminar cases retain all 42 output arrays bit for bit.
+- The SA grid uses geometric **spacings**, first `7e-4`, ratio `1.04`.
+  Before the march, `Re_equivalent = max(R)^2/2` over the output stations sets
+  `scale = max(1, (Re_equivalent/1e8)^0.42)`, extent `150 scale`, and outer
+  spacing cap `scale`. The grid is unchanged at or below 1e8 (312 nodes;
+  first positions 0.0007 and 0.001428), with a roundoff guard at that boundary.
+  The estimate is not a guarantee for compression; the outer-boundary check
+  still stops a layer that outgrows it.
+  Refining to `(3.5e-4, 1.02, 0.5, 150)` changes expansion Cf by at most
+  0.0547%, heat flux by 0.2024%, and delta99 by 0.0705%.
+- The shared streamwise limits above are unchanged. In the M2 ZPG study there
+  were 625 converged trial checks and zero shear-limit rejections. Typical V9
+  cases took 3--10 s, with 0--234 Picard fallbacks; refined cases took 15--40 s.
+  Strong expansions exceed that cost, as measured below.
+- Newton uses 50 iterations and a `1e-9` update tolerance. SA positivity limits
+  the update; damping below `1e-4` requests Picard. Exact Dirichlet values are
+  restored after each SA Newton update. Picard retains the frozen reference's
+  constants, smooth S-tilde limiter, nonnegative clipping, 0.5 relaxation,
+  4000-iteration cap, and `1e-9` tolerance. Beta and Lambda sinks are implicit
+  only when they strengthen the diagonal. Failure of both methods halves the step.
+- Edge dimensional `nu_tilde` is conserved. The viscosity exponent is a central
+  difference in log temperature with half-width `1e-5`, valid for any viscosity
+  protocol implementation. Isentropic density and temperature derivatives give
+  `Lambda`. Fixed and adiabatic Picard rows solve the same residual as Newton.
+- All 18 frozen ZPG rows satisfy 0.3%: maximum Cf 0.0553%, delta99 0.0645%,
+  theta 0.0185%, and cold-wall heat coefficient 0.0283%. Recovery-temperature
+  rows use an absolute heat difference scaled by Cf. Zero SA agrees with
+  laminar Cf within 0.0142%. The reference's own grid uncertainty is about 0.1%.
+- M2--3 momentum balance has median error 0.00437%. With 600 common output
+  stations, energy balance errors are 0.2999% (default), 0.3386% (streamwise
+  refinement), and 0.0873% (wall-normal refinement). Wall-normal discretization,
+  including quadrature, dominates this defect. No experimental accuracy is inferred.
+- The external NASA TMR bump comparison uses wall Cp as edge pressure, arc
+  length, and assumed freestream coefficient normalization. Its measured
+  maximum difference is 2.497%; the generated regression bound is 3.0%.
+  The comparison and its exclusions are in the generated verification table.
+- `nu_tilde_ratio` is copied and read-only in public results; laminar results
+  use None. First-node y+ uses wall density and viscosity. The units, signs,
+  applicability, V1 and V6--V11 measurements, and mutation tests
+  are recorded in section 11 of `marching_boundary_layer_design.md`.
+
+### SA outer-grid and transport limits
+
+The Reynolds-scaled grid completes ZPG runs at Re_s = 3e8, 1e9, and 1e10
+for M = 0.3, 2, and 6. At 1e9, comparison with an outer spacing cap of 1
+and an extent of at least twice eta99 gives maximum Cf differences of
+0.00120%, 0.00157%, and 0.00524%; heat-flux differences are 0.19503%,
+0.00635%, and 0.00681%, respectively. The frozen reference ends at 1e8;
+above it these are numerical comparisons only. At 1e10 the first-node y+
+is 2.303, 1.911, and 0.993: the first two runs warn and do not establish
+near-wall convergence. The grid estimate does not cover every compression.
+M3 to 1.5 over a tanh width of 0.1 m, with local Re_s = 1e9 at s = 1 m,
+outgrows its eta extent of 476.135 near s = 1.865 m. The outer-boundary
+check stops the march there.
+
+The added streamwise refinement checks use the same simultaneous tightening
+of all limits as V9. M3 to 2, width 0.1 m and Tw = 300 K, changes Cf by
+0.005283% and heat flux by 0.008101%. Adiabatic M2 to 3 changes Cf by
+0.002497% and wall temperature by 0.001685%. Its momentum-balance median
+error is 0.003724% (0.003723% refined). With zero wall heat flux, the energy
+diagnostic is the absolute derivative of the enthalpy-deficit flux,
+`|d/ds int rho u (H-H_e) dy|`, rather than a relative error divided by q_w.
+Its median is 50.546 W/m² (53.895 W/m² refined), or 8.220e-7
+(8.223e-7 refined) after division by `rho_e U_e cp T0`. These diagnostics
+have no added acceptance threshold. The M3 to 1 separation position moves
+from 1.04051134018 m to 1.04051326840 m, a change of 1.9282e-6 m.
+
+The outer SA profile can oscillate even when wall quantities change little.
+The following measurements use T0 = 450 K, p0 = 200 kPa, 201 input points
+over 0--2 m, and the final station's n profile above node 30. The refined
+outer grid retains the first spacing and ratio, reduces the cap to 0.25,
+and retains at least the original extent. Relative amplitude is the
+half-excursion between neighboring outer extrema divided by their mean,
+`|a-b|/(a+b)`. At each extremum the smaller of the two adjacent excursions
+is used, excluding the first and last extrema and the main profile peak,
+so the monotone front drop is not counted as a wiggle. Sign-change counts
+include changes at roundoff level; clipped interior nodes are counted
+separately. Cf and delta99 differences are maxima over all output stations.
+
+| Case, wall, initial SA ratio | Direction changes / clipped nodes, base → fine | Maximum relative amplitude, base → fine | Cf difference | delta99 difference |
+| --- | --- | --- | ---: | ---: |
+| M2→3, width 0.1 m, adiabatic, 3 | 14 / 0 → 4 / 0 | 11.469% → 0.00000275% | 0.005974% | 0.037897% |
+| M1.2→4, width 0.05 m, adiabatic, 3 | 16 / 0 → 21 / 0 | 99.981% → 25.947% | 0.005003% | 0.050265% |
+| M2→3, width 0.1 m, adiabatic, 0.001 | 46 / 1 → 48 / 1 | 73.420% → 61.113% | 0.005473% | 0.048579% |
+| M2→3, width 0.1 m, 300 K, 0.001 | 48 / 2 → 48 / 1 | 100% → 59.305% | 0.006195% | 0.049224% |
+
+The last two cases still clip an interior node after refinement. Local n
+is not converged merely because Cf and delta99 are stable. The convection
+scheme is unchanged; outer-front transport and clipping remain known limits.
+
+The approximately 10 s performance target is not met for strong expansions.
+On the final code, using the same thermodynamic conditions and input points:
+
+| Expansion and tanh width | 300 K wall: seconds / Picard fallbacks | Adiabatic: seconds / Picard fallbacks |
+| --- | ---: | ---: |
+| M1.2→4, 0.05 m | 23.63 / 1004 | 24.97 / 1062 |
+| M2→6, 0.1 m | 15.97 / 493 | 16.74 / 504 |
+| M0.3→0.8, 0.1 m | 13.17 / 211 | 9.92 / 0 |
+
+M1.2→4 and M2→6 also trigger the thin-layer pressure-gradient warning.
+These timings and stable wall quantities do not establish physical accuracy
+where pressure or wall-temperature changes occur on a boundary-layer scale.
+
 ## Flow sequence
 
 - Temperature restoration from validated solver ratios repairs at most one
