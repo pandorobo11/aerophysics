@@ -296,7 +296,7 @@ class _EdgeInterpolant:
         self,
         edge: BoundaryLayerEdge,
         wall_temperature: FloatArray | None,
-        edge_sa_ratio: float = 0.0,
+        edge_sa_ratio: float | None = None,
     ) -> None:
         self.edge_sa_ratio = edge_sa_ratio
         self.initial_nu = float(
@@ -380,22 +380,28 @@ class _EdgeInterpolant:
             if self.wall_temperature is None
             else float(self.wall_temperature(distance)) / temperature
         )
-        # Logarithmic central difference works for every viscosity protocol model.
-        delta = 1e-5
-        mu_plus = float(
-            self.viscosity_model.dynamic_viscosity(temperature * np.exp(delta))
-        )
-        mu_minus = float(
-            self.viscosity_model.dynamic_viscosity(temperature * np.exp(-delta))
-        )
-        exponent = np.log(mu_plus / mu_minus) / (2.0 * delta)
-        gamma = gas.heat_capacity_ratio
-        log_nu_slope = (
-            ((gamma - 1.0) * exponent - 1.0)
-            / gamma
-            * float(self.log_pressure_slope(distance))
-        )
-        growth = 2.0 * xi * log_nu_slope / (density * viscosity * velocity)
+        if self.edge_sa_ratio is None:
+            growth = 0.0
+            sa_ratio = 0.0
+        else:
+            # Only SA needs this derivative, including at zero edge SA ratio.
+            # The viscosity model must accept T_e * exp(+/-1e-5).
+            delta = 1e-5
+            mu_plus = float(
+                self.viscosity_model.dynamic_viscosity(temperature * np.exp(delta))
+            )
+            mu_minus = float(
+                self.viscosity_model.dynamic_viscosity(temperature * np.exp(-delta))
+            )
+            exponent = np.log(mu_plus / mu_minus) / (2.0 * delta)
+            gamma = gas.heat_capacity_ratio
+            log_nu_slope = (
+                ((gamma - 1.0) * exponent - 1.0)
+                / gamma
+                * float(self.log_pressure_slope(distance))
+            )
+            growth = 2.0 * xi * log_nu_slope / (density * viscosity * velocity)
+            sa_ratio = self.edge_sa_ratio * self.initial_nu * density / viscosity
         return StationEdge(
             xi,
             velocity,
@@ -405,7 +411,7 @@ class _EdgeInterpolant:
             wall_ratio,
             float(np.sqrt(2.0 * xi) / viscosity),
             float(growth),
-            self.edge_sa_ratio * self.initial_nu * density / viscosity,
+            sa_ratio,
         )
 
 
@@ -613,6 +619,13 @@ def marching_boundary_layer(
         thickness, laminar viscous interaction is strong, or the turbulent
         first wall-normal node has ``y+ > 1`` using local wall properties.
 
+    Notes
+    -----
+    Turbulent flow requires the viscosity model to accept ``T_e * exp(+/-1e-5)``
+    for an edge viscosity derivative, even when ``edge_sa_ratio=0``. Near a
+    model's temperature-range limit, these evaluations can raise its range
+    exception or warning. Laminar flow does not evaluate this SA derivative.
+
     Examples
     --------
     >>> import numpy as np
@@ -655,7 +668,7 @@ def marching_boundary_layer(
         )
     )
     interpolant = _EdgeInterpolant(
-        edge, wall, sa_ratio if regime is BoundaryLayerRegime.TURBULENT else 0.0
+        edge, wall, sa_ratio if regime is BoundaryLayerRegime.TURBULENT else None
     )
     eta = eta_grid(
         _LAMINAR_ETA_FIRST,

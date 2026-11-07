@@ -6,7 +6,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from test_marching_boundary_layer import plate_edge, smooth_edge
+from test_marching_boundary_layer import (
+    BoundedAirViscosity,
+    low_mach_viscosity_edge,
+    plate_edge,
+    smooth_edge,
+)
 
 from aerophysics import (
     AIR,
@@ -169,6 +174,28 @@ def test_edge_viscosity_derivative_and_conservation() -> None:
     assert (
         np.median(abs(momentum[mask] / result.wall_shear_stress[mask] - 1.0)) < 0.0005
     )
+
+
+@pytest.mark.parametrize("sa_ratio", [0.0, 3.0])
+def test_turbulent_bounded_viscosity_propagates_range_error(sa_ratio: float) -> None:
+    edge = low_mach_viscosity_edge(300.001, BoundedAirViscosity())
+    with pytest.raises(ValueError, match="temperature outside 300--1000 K"):
+        marching_boundary_layer(
+            edge,
+            regime=BoundaryLayerRegime.TURBULENT,
+            wall_temperature=300.001,
+            edge_sa_ratio=sa_ratio,
+        )
+
+
+def test_zero_sa_edge_keeps_viscosity_growth_but_laminar_skips_it() -> None:
+    edge = smooth_edge(2.0, 3.0)
+    turbulent = _EdgeInterpolant(edge, None, 0.0).state(1.003)
+    laminar = _EdgeInterpolant(edge, None).state(1.003)
+    assert turbulent.viscosity_growth != 0.0
+    assert laminar.viscosity_growth == 0.0
+    assert turbulent.sa_ratio == laminar.sa_ratio == 0.0
+    assert turbulent.reynolds_root == laminar.reynolds_root
 
 
 @pytest.mark.parametrize("wall", [1.4, None])

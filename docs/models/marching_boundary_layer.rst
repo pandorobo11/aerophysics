@@ -167,6 +167,12 @@ established. Agreement with CFD that uses the same model does not establish it.
 Wall-temperature changes as short as delta99 can be numerically resolved, but
 neglect of streamwise diffusion then has no established accuracy.
 
+Turbulent flow requires the viscosity model to accept ``T_e * exp(+/-1e-5)``
+for an edge viscosity derivative, including when ``edge_sa_ratio=0``. Near a
+temperature-range limit, a model that raises outside its range can fail at
+these temperatures, and a model that warns outside its range can warn.
+Laminar flow does not evaluate this SA derivative.
+
 The outer part of ``nu_tilde_ratio`` can oscillate and is not grid-converged
 in strong expansions or with a small ``edge_sa_ratio``. In the measured
 cases, relative oscillation amplitudes reached about 100% on the default

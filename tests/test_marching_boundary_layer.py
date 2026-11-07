@@ -1,7 +1,7 @@
 """Verification of the marching boundary layer against independent solutions."""
 
 import warnings
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from itertools import pairwise
 from typing import overload
 
@@ -33,7 +33,7 @@ from aerophysics.exceptions import (
     ModelRangeError,
 )
 from aerophysics.marching_boundary_layer import _EdgeInterpolant, _result
-from aerophysics.transport import AIR_VISCOSITY
+from aerophysics.transport import AIR_VISCOSITY, BlottnerModel, DynamicViscosityModel
 
 GAMMA = AIR.heat_capacity_ratio
 GAS_CONSTANT = AIR.specific_gas_constant
@@ -64,6 +64,65 @@ class LinearViscosity:
     def dynamic_viscosity(self, temperature: ArrayLike) -> float | FloatArray:
         value = np.asarray(temperature, dtype=np.float64) * 1e-7
         return float(value) if np.ndim(temperature) == 0 else value
+
+
+class BoundedAirViscosity:
+    """Air viscosity restricted to 300--1000 K, for range-edge regression tests."""
+
+    @overload
+    def dynamic_viscosity(self, temperature: float) -> float: ...
+
+    @overload
+    def dynamic_viscosity(self, temperature: ArrayLike) -> FloatArray: ...
+
+    def dynamic_viscosity(self, temperature: ArrayLike) -> float | FloatArray:
+        values = np.asarray(temperature, dtype=np.float64)
+        if np.any((values < 300.0) | (values > 1000.0)):
+            raise ValueError("temperature outside 300--1000 K")
+        return AIR_VISCOSITY.dynamic_viscosity(temperature)
+
+
+def low_mach_viscosity_edge(
+    temperature: float, model: DynamicViscosityModel
+) -> BoundaryLayerEdge:
+    """Constant M0.1 edge near a viscosity model's lower temperature limit."""
+    return BoundaryLayerEdge(
+        np.array([0.0, 0.1]),
+        np.full(2, 2e4),
+        np.full(2, temperature),
+        np.full(2, 0.1 * np.sqrt(GAMMA * GAS_CONSTANT * temperature)),
+        viscosity_model=model,
+    )
+
+
+def test_laminar_bounded_viscosity_matches_unrestricted_air() -> None:
+    edge = low_mach_viscosity_edge(300.001, BoundedAirViscosity())
+    bounded = marching_boundary_layer(
+        edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=300.001
+    )
+    unrestricted = marching_boundary_layer(
+        replace(edge, viscosity_model=AIR_VISCOSITY),
+        regime=BoundaryLayerRegime.LAMINAR,
+        wall_temperature=300.001,
+    )
+    for name in (
+        "local_skin_friction_coefficient",
+        "wall_heat_flux",
+        "boundary_layer_thickness",
+    ):
+        np.testing.assert_array_equal(
+            getattr(bounded, name), getattr(unrestricted, name)
+        )
+
+
+def test_laminar_blottner_does_not_warn_from_sa_derivative() -> None:
+    edge = low_mach_viscosity_edge(1000.005, BlottnerModel(0.026, 0.3, -11.3))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ApplicabilityWarning)
+        marching_boundary_layer(
+            edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=1000.005
+        )
+    assert not any("fitted range" in str(item.message) for item in caught)
 
 
 def similarity_reference(beta: float, wall_ratio: float) -> tuple[float, float]:
