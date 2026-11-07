@@ -1,0 +1,13 @@
+{
+  "sources": ["Winter, K. G., Rotta, J. C., and Smith, K. G., Studies of the Turbulent Boundary Layer on a Waisted Body of Revolution in Subsonic and Supersonic Flow, ARC R&M 3633, August 1968 (published 1970), https://reports.aerade.cranfield.ac.uk/handle/1826.2/2902"],
+  "role": "wind-tunnel measurement",
+  "page": "Table 1, printed page 21, phi = 0 rows; body equations in Fig. 1",
+  "format": "Headerless CSV: X [in], Cp, M_delta, 1000 cf. Empty cf at X=15 in is missing, not zero. Numbers copied unchanged from the supplied checked transcription build/axisym/rm_m17.csv.",
+  "flow": "M_inf=1.700, Re_l=10.08e6, l=60 in=1.524 m, gamma=1.4",
+  "normalization": "cf uses local edge dynamic pressure; Cp uses freestream dynamic pressure",
+  "accuracy": {"cf_absolute": 0.0002, "Cp_absolute": 0.005, "source": "section 3.6"},
+  "trip": "0.005 in ballotini at 1.5 in from nose; inadequate at M >= 1.4 (section 3.4)",
+  "not_stated_by_source": ["total temperature", "wall thermal condition; the analysis assumes zero heat transfer"],
+  "comparison_assumptions": ["T0=310 K with 290 and 330 K sensitivities", "adiabatic wall", "wall Cp used as edge Cp", "edge total pressure from Taylor-Maccoll 20 degree cone", "edge_sa_ratio=3; no prescribed transition", "compare available cf only at X >= 12 in"],
+  "transcription_checks": "28 Cp/M_delta rows imply p0_delta/p0_inf=0.9926-0.9962; Taylor-Maccoll predicts about 0.9957. Last body segment is cubic; junction residual must be below 1e-5."
+}

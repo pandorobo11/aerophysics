@@ -7,6 +7,23 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add optional `wall_radius` to `marching_boundary_layer` for thin axisymmetric
+  laminar and SA-noft2 flow from a sharp tip or leading edge. Radii use SI metres
+  and linear interpolation in wall distance; Cf uses local edge dynamic pressure,
+  heat flux is positive into the wall, and positive beta means acceleration.
+  Perfect-gas, isentropic-edge assumptions remain; transverse/longitudinal
+  curvature and normal pressure gradients are neglected. The new delta99/r_w
+  warning at 0.1 is an uncalibrated indicator. Planar arrays remain bit-identical.
+  Verify Mangler cone and variable-radius relations (the 1948 original was not
+  obtained), balances, and refinement; add R&M 3633 measurements and shoulder
+  stress tests, including locally resolved widths of 0.001 and 0.0002 m.
+  Pressure-length warnings fire at 0.001 m for SA and 0.0002 m for both regimes.
+  All 16 cases complete with zero Picard fallbacks; the recorded times are
+  2.82--8.85 s. Shoulder-adjacent SA-variable oscillations reach 1.46404%, so
+  applicability warnings do not establish local profile convergence. R&M maximum
+  Cf difference is 0.0004443 and delta99/r_w reaches 0.4774; experimental accuracy,
+  transition, and shoulder edge flow remain open.
+
 - Extend `marching_boundary_layer` to planar SA-noft2 flow with varying
   isentropic edge conditions, prescribed or adiabatic wall temperature,
   conserved dimensional edge `nu_tilde`, and a Reynolds-scaled outer grid.

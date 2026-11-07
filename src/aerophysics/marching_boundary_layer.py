@@ -3,15 +3,16 @@
 The solver marches the thin-layer equations from a sharp leading edge along the
 wall, so each station inherits the upstream pressure and wall-temperature
 history. The edge state is an input: this module does not compute the outer
-flow or represent a body shape.
+flow. An optional wall radius supplies thin axisymmetric geometry.
 
 All inputs and outputs use SI units. ``distance`` is measured along the wall
 from the leading edge, the skin-friction coefficient uses the local edge dynamic
 pressure, and heat flux into the wall is positive.
 
-The current scope is planar laminar or SA-noft2 flow of a perfect gas with an
-isentropic edge. Separation stops the march because the downstream march is not
-valid past it.
+The current scope is planar or thin axisymmetric laminar or SA-noft2 flow of a
+perfect gas with an isentropic edge. Transverse and longitudinal curvature and
+normal pressure gradients are neglected. Separation stops the march because the
+downstream march is not valid past it.
 """
 
 import warnings
@@ -20,7 +21,7 @@ from itertools import pairwise
 
 import numpy as np
 from numpy.typing import ArrayLike
-from scipy.interpolate import PchipInterpolator
+from scipy.interpolate import PchipInterpolator, PPoly
 
 from aerophysics._array import FloatArray, as_float_array
 from aerophysics._boundary_layer_march import (
@@ -77,6 +78,8 @@ _EDGE_CONSISTENCY_TOLERANCE = 1e-6
 _VISCOUS_INTERACTION_THRESHOLD = 1.0
 _PRESSURE_LENGTH_THRESHOLD = 1.0
 _VELOCITY_THRESHOLD = 0.99
+# Uncalibrated order-of-magnitude indicator, not a validated accuracy bound.
+_TRANSVERSE_CURVATURE_THRESHOLD = 0.1
 
 
 def _read_only(values: FloatArray) -> FloatArray:
@@ -111,6 +114,24 @@ def _station_array(value: ArrayLike, count: int, *, name: str) -> FloatArray:
         raise ValueError(f"{name} must match the shape of distance")
     if np.any(array <= 0.0):
         raise ValueError(f"{name} must be greater than zero")
+    return np.array(array, dtype=np.float64, copy=True)
+
+
+def _radius_array(value: ArrayLike, count: int) -> FloatArray:
+    try:
+        array, scalar = as_float_array(value, name="wall_radius")
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "wall_radius must contain only finite real numeric values"
+        ) from error
+    if scalar:
+        if float(array) <= 0.0:
+            raise ValueError("wall_radius must be greater than zero when scalar")
+        array = np.full(count, float(array), dtype=np.float64)
+    if array.shape != (count,):
+        raise ValueError("wall_radius must match the shape of edge.distance")
+    if array[0] < 0.0 or np.any(array[1:] <= 0.0):
+        raise ValueError("wall_radius must have r[0] >= 0 and r[1:] > 0")
     return np.array(array, dtype=np.float64, copy=True)
 
 
@@ -297,7 +318,20 @@ class _EdgeInterpolant:
         edge: BoundaryLayerEdge,
         wall_temperature: FloatArray | None,
         edge_sa_ratio: float | None = None,
+        wall_radius: FloatArray | None = None,
     ) -> None:
+        # Linear panels preserve a cone-to-cylinder kink exactly. Own both
+        # coefficients and knots so caller mutation cannot change the geometry.
+        self.radius = (
+            None
+            if wall_radius is None
+            else PPoly(
+                np.array(
+                    [np.diff(wall_radius) / np.diff(edge.distance), wall_radius[:-1]]
+                ),
+                edge.distance.copy(),
+            )
+        )
         self.edge_sa_ratio = edge_sa_ratio
         self.initial_nu = float(
             edge.viscosity_model.dynamic_viscosity(edge.temperature[0])
@@ -334,13 +368,18 @@ class _EdgeInterpolant:
         self.xi_at_panels = np.concatenate(([0.0], np.cumsum(increments)))
 
     def _flux(self, distance: FloatArray) -> FloatArray:
-        """Return ``rho_e mu_e U_e``."""
+        """Return ``rho_e mu_e U_e r_w^(2j)``."""
         pressure = np.exp(self.log_pressure(distance))
         temperature, velocity = _isentropic_state(
             pressure, self.total_pressure, self.total_temperature, self.gas
         )
         density = pressure / (self.gas.specific_gas_constant * temperature)
         viscosity = np.asarray(self.viscosity_model.dynamic_viscosity(temperature))
+        if self.radius is not None:
+            return np.asarray(
+                density * viscosity * velocity * self.radius(distance) ** 2,
+                dtype=np.float64,
+            )
         return np.asarray(density * viscosity * velocity, dtype=np.float64)
 
     def _integral(self, left: float, right: float) -> float:
@@ -349,7 +388,7 @@ class _EdgeInterpolant:
         return float(half * np.dot(_GAUSS_WEIGHTS, self._flux(nodes)))
 
     def xi(self, distance: float) -> float:
-        """Return ``int_0^s rho_e mu_e U_e ds``."""
+        """Return ``int_0^s rho_e mu_e U_e r_w^(2j) ds``."""
         index = int(np.searchsorted(self.panels, distance, side="right")) - 1
         index = min(max(index, 0), len(self.panels) - 1)
         left = float(self.panels[index])
@@ -402,6 +441,16 @@ class _EdgeInterpolant:
             )
             growth = 2.0 * xi * log_nu_slope / (density * viscosity * velocity)
             sa_ratio = self.edge_sa_ratio * self.initial_nu * density / viscosity
+        reynolds_root = float(np.sqrt(2.0 * xi) / viscosity)
+        if self.radius is not None:
+            if xi == 0.0:
+                # Sharp-tip limits: never evaluate a quotient with r_w = 0.
+                beta = growth = reynolds_root = 0.0
+            else:
+                radius = float(self.radius(distance))
+                beta /= radius**2
+                growth /= radius**2
+                reynolds_root /= radius
         return StationEdge(
             xi,
             velocity,
@@ -409,7 +458,7 @@ class _EdgeInterpolant:
             heating,
             temperature,
             wall_ratio,
-            float(np.sqrt(2.0 * xi) / viscosity),
+            reynolds_root,
             float(growth),
             sa_ratio,
         )
@@ -457,6 +506,8 @@ def _result(
         density = pressure / (gas.specific_gas_constant * temperature)
         viscosity = float(edge.viscosity_model.dynamic_viscosity(temperature))
         root = np.sqrt(2.0 * xi)
+        if interpolant.radius is not None:
+            root /= float(interpolant.radius(distance))
         scale = root / (state.velocity * density)
         u, g = velocity_ratio[index], temperature_ratio[index]
         wall = g[0] * temperature
@@ -524,6 +575,19 @@ def _warn_applicability(
             ApplicabilityWarning,
             stacklevel=3,
         )
+    if interpolant.radius is not None:
+        curvature = result.boundary_layer_thickness / interpolant.radius(
+            result.distance
+        )
+        maximum = int(np.argmax(curvature))
+        if curvature[maximum] > _TRANSVERSE_CURVATURE_THRESHOLD:
+            warnings.warn(
+                "transverse curvature is neglected but delta99/r_w = "
+                f"{curvature[maximum]:.6g} (maximum at s = "
+                f"{result.distance[maximum]:.6g} m)",
+                ApplicabilityWarning,
+                stacklevel=3,
+            )
     pressure = np.exp(interpolant.log_pressure(result.distance))
     gas = edge.gas
     temperature, velocity = _isentropic_state(
@@ -570,6 +634,7 @@ def marching_boundary_layer(
     prandtl_number: float = 0.72,
     turbulent_prandtl_number: float = 0.9,
     edge_sa_ratio: float = 3.0,
+    wall_radius: ArrayLike | None = None,
 ) -> MarchingBoundaryLayerResult:
     """March a boundary layer along a wall from a sharp leading edge.
 
@@ -595,6 +660,14 @@ def marching_boundary_layer(
         ``nu_tilde`` is conserved along the edge streamline. Zero gives the
         laminar limit. Validated in every regime and used only for ``TURBULENT``.
 
+    wall_radius:
+        Local distance from the symmetry axis in m. None keeps the planar
+        computation. A positive scalar describes a cylinder with a sharp
+        leading edge. An array matching ``edge.distance`` may start at zero
+        (sharp tip); all later radii must be positive. Radii are copied and
+        interpolated piecewise linearly in wall distance. Curved bodies need
+        sufficiently dense geometry nodes; include shoulders explicitly.
+
     Returns
     -------
     MarchingBoundaryLayerResult
@@ -618,9 +691,24 @@ def marching_boundary_layer(
         If the pressure changes over a distance comparable to the boundary-layer
         thickness, laminar viscous interaction is strong, or the turbulent
         first wall-normal node has ``y+ > 1`` using local wall properties.
+        For axisymmetric flow, ``delta99/r_w > 0.1`` warns about neglected
+        transverse curvature. This is an uncalibrated order-of-magnitude
+        indicator; near a sharp tip the ratio diverges, so a warning is
+        expected for output stations near the tip. The thin-layer
+        ``delta99 |d ln p/ds|`` warning still applies.
 
     Notes
     -----
+    Axisymmetric flow uses the Mangler / Levy--Lees transformation with j=1.
+    The transformed PDEs and planar thin-layer definitions of displacement
+    and momentum thickness are unchanged; no transverse-curvature factor is
+    included. Distance is along the wall from the tip or sharp leading edge,
+    y is wall-normal outward, Cf uses local edge dynamic pressure, heat flux
+    into the wall is positive, and beta > 0 means acceleration. Longitudinal
+    curvature and normal pressure gradients are neglected. SA outer-grid sizing
+    uses the axisymmetric ``R = sqrt(2 xi)/(r_w mu_e)``; for a constant-edge
+    cone ``R**2/2 = Re_s/3``.
+
     Turbulent flow requires the viscosity model to accept ``T_e * exp(+/-1e-5)``
     for an edge viscosity derivative, even when ``edge_sa_ratio=0``. Near a
     model's temperature-range limit, these evaluations can raise its range
@@ -668,7 +756,10 @@ def marching_boundary_layer(
         )
     )
     interpolant = _EdgeInterpolant(
-        edge, wall, sa_ratio if regime is BoundaryLayerRegime.TURBULENT else None
+        edge,
+        wall,
+        sa_ratio if regime is BoundaryLayerRegime.TURBULENT else None,
+        None if wall_radius is None else _radius_array(wall_radius, edge.distance.size),
     )
     eta = eta_grid(
         _LAMINAR_ETA_FIRST,

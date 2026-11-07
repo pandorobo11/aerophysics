@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sys
+from difflib import unified_diff
 from html import escape
+from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -31,13 +33,23 @@ def write_or_check(path: Path, content: str, *, check: bool) -> bool:
     """Write ``content`` or return whether an existing file is current."""
     normalized = content.rstrip() + "\n"
     if check:
-        current = path.exists() and path.read_text(encoding="utf-8") == normalized
+        existing = path.read_text(encoding="utf-8") if path.exists() else None
+        current = existing == normalized
         if not current:
             try:
                 display_path = path.relative_to(Path.cwd())
             except ValueError:
                 display_path = path
             print(f"out of date or missing: {display_path}", file=sys.stderr)
+            diff = unified_diff(
+                (existing or "").splitlines(),
+                normalized.splitlines(),
+                fromfile=str(display_path),
+                tofile=f"{display_path} (regenerated)",
+                lineterm="",
+            )
+            for line in islice(diff, 80):
+                print(line, file=sys.stderr)
         return current
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(normalized, encoding="utf-8")

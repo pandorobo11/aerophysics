@@ -25,8 +25,9 @@ therefore have different skin friction, because their upstream histories differ.
 This solver follows that history. It starts at a sharp leading edge and marches
 downstream, using each solved station as the upstream state of the next one.
 
-The outer flow is an input. The solver does not calculate it, does not represent
-a body shape, and does not feed the boundary layer back into the outer flow.
+The outer flow is an input. The solver does not calculate it or feed the
+boundary layer back into it. Optional wall radii describe thin axisymmetric
+geometry. The equations below first show the planar form.
 
 Governing equations
 -------------------
@@ -133,6 +134,118 @@ temperature gradient, not from the Reynolds analogy that
 
 :math:`\delta_{99}` is the first wall distance where :math:`u/U_e = 0.99`.
 
+Thin axisymmetric geometry
+--------------------------
+
+``wall_radius=None`` retains the planar computation bit for bit. A positive
+scalar radius represents a cylinder beginning at a sharp leading edge, such as
+a thin-walled tube. An array matching ``edge.distance`` gives the local wall
+distance from the symmetry axis, in metres. Its first value may be zero for a
+sharp tip; all subsequent values must be strictly positive and finite.
+The input is copied. The result dataclass is unchanged.
+
+Radius is interpolated **piecewise linearly** in wall distance, preserving a
+cone-to-cylinder shoulder when its station is included. Curved bodies require
+nodes dense enough to resolve their radius with linear segments. Pressure still
+uses PCHIP in log pressure. The quadrature panels split at every input station.
+No explicit derivative of radius is used.
+
+For :math:`r=r_w(s)` and :math:`j=1`, the Mangler / Levy--Lees variables are
+
+.. math::
+
+   \xi(s) = \int_0^s \rho_e\mu_e U_e r^2\,ds, \qquad
+   \eta = \frac{U_e r}{\sqrt{2\xi}}\int_0^y\rho\,dy,
+
+.. math::
+
+   \beta = 2\xi\frac{d\ln U_e}{d\xi}
+     = \frac{2\xi\,d\ln U_e/ds}{\rho_e\mu_e U_e r^2},\qquad
+   \Lambda = \frac{2\xi\,d\ln\nu_e/ds}{\rho_e\mu_e U_e r^2},
+
+.. math::
+
+   R = \frac{\sqrt{2\xi}}{r\mu_e},\qquad
+   y = \frac{\sqrt{2\xi}Y}{U_e r\rho_e},\qquad
+   C_f = \frac{2 C_w f''_w}{R},\qquad
+   q_w = \frac{C_w\rho_e U_e c_p T_e g'_w}{Pr R}.
+
+The transformed PDEs above are unchanged. Only at :math:`\xi=0` we use the
+sharp-tip limits :math:`\beta=\Lambda=R=0`, without dividing by zero radius.
+The SA outer grid uses this axisymmetric :math:`R` in
+``Re_equivalent = max(R)^2/2``. For a constant-edge cone it equals
+:math:`Re_s/3`, not :math:`Re_s`.
+
+Thicknesses retain their planar thin-layer definitions, without a
+:math:`1+y\cos(\alpha)/r` factor:
+
+.. math::
+
+   \delta^* = \int\left(1-\frac{\rho u}{\rho_e U_e}\right)dy,\qquad
+   \theta = \int\frac{\rho u}{\rho_e U_e}\left(1-\frac{u}{U_e}\right)dy.
+
+The corresponding integral balances are
+
+.. math::
+
+   \frac{d(r\rho_e U_e^2\theta)}{ds}
+     + r\rho_e U_e\delta^*\frac{dU_e}{ds}=r\tau_w,\qquad
+   \frac{d(rF_H)}{ds}=-r q_w,\qquad
+   F_H=\int\rho u(H-H_e)dy.
+
+All quantities use SI. Distance follows the wall from the tip or sharp leading
+edge; :math:`y` points outward normal to the wall. Cf uses local edge dynamic
+pressure, heat flux into the wall is positive, and positive beta means
+acceleration. This is a thin-layer, perfect-gas, isentropic-edge model. It
+neglects transverse curvature, longitudinal curvature and normal pressure
+gradients; it does not cover blunt-nose entropy layers or separated flow.
+
+An ``ApplicabilityWarning`` reports the largest :math:`\delta_{99}/r_w` and
+its output station when the ratio exceeds 0.1. This threshold is an
+**uncalibrated order-of-magnitude indicator**, not an accuracy limit.
+Near a sharp tip the ratio grows without bound, so warnings are expected for
+stations near the tip. The :math:`\delta_{99}|d\ln p/ds|` thin-layer warning
+and all other existing warnings remain active.
+
+The laminar constant-edge cone has local Cf and heat flux equal to
+:math:`\sqrt{3}` times their plate values at the same wall distance; all
+thicknesses are divided by :math:`\sqrt{3}`. Adiabatic wall temperature is
+unchanged. The transformation itself yields these relations analytically.
+The original :ref:`Mangler (1948) <ref-mangler-1948>` paper was not obtained.
+The relation is confirmed through :ref:`Tauber, NASA TP-2914, equation (47),
+page 9 <ref-tauber-1989>`, :ref:`Seiff, NACA TN 3284, equation (C13), page 24
+<ref-seiff-1954>` (mean-friction ratio :math:`2/\sqrt{3}`), and
+:ref:`Moore, NACA TN 2521 <ref-moore-1951>`.
+
+For variable radius, the laminar planar equivalent uses
+:math:`X=\int_0^s(r/L)^2ds`. Thus :math:`C_{f,a}=C_{f,p}r/L`,
+:math:`q_a=q_pr/L` and :math:`\theta_a=\theta_pL/r`.
+SA is not invariant under this mapping: its source contains :math:`R`, and
+:math:`R_a=(L/r)R_p`. No exact turbulent cone-to-plate ratio is imposed.
+
+The measured cone relation errors are below 6e-12 percent. With 801 nodes,
+the variable-radius laminar mapping differs by at most 0.000827 percent in Cf;
+the interpolation is performed in different distance variables. Axisymmetric
+momentum residual medians are below 0.05 percent. Streamwise and wall-normal
+refinement are recorded separately in the development memo, section 12.
+The :ref:`R&M 3633 worked example <rm3633-example>` reaches delta99/r_w=0.4774
+and differs from measured Cf by up to 0.0004443 (measurement accuracy
++/-0.0002). This comparison does not establish a physical validity range.
+
+The synthetic cone-to-cylinder shoulder stress test uses a tanh pressure drop;
+it is **not a physical shoulder edge condition**. With input nodes locally spaced
+at most width/5, the pressure-length warning fires for SA at width 0.001 m
+(maximum delta99 times abs(d ln p/ds) 1.24051--1.26509), and for both regimes
+at width 0.0002 m (1.33059--6.29451). Widths 0.02 and 0.005 m do not trigger
+that warning. All 16 cases completed in 2.82--8.85 s in the recorded run,
+with zero Picard fallbacks. This is a timing observation, not a performance bound.
+The curvature maxima occur near the tip or downstream end, so that warning
+alone does not identify a shoulder problem. At s=0.31 m, relative SA-variable
+oscillations reach 1.46404%; the final station has no evaluable extrema triplets.
+Some oscillations occur without a pressure-length warning. These applicability
+warnings therefore do not establish local profile convergence or physical
+accuracy; the need for an additional oscillation diagnostic remains open.
+
 Edge state
 ----------
 
@@ -150,12 +263,13 @@ directly in the solution.
 Assumptions and range
 ---------------------
 
-* Steady, planar, laminar or SA-noft2, attached flow from a sharp leading edge.
+* Steady planar or thin axisymmetric laminar or SA-noft2 attached flow from a
+  sharp tip or sharp leading edge.
 * Calorically perfect gas with constant :math:`Pr`, and pressure constant across
   the layer.
 * Isentropic edge flow with constant total enthalpy. Entropy layers from blunt
   noses are not represented.
-* No specified transition, roughness, suction, blowing, wall curvature, or chemical
+* No specified transition, roughness, suction, blowing, transverse or longitudinal curvature terms, or chemical
   reactions, and no interaction with the outer flow.
 * Wall temperature changes over distances much longer than the boundary-layer
   thickness. Unlike a pressure change, a shorter change does not raise a warning.

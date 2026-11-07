@@ -23,9 +23,9 @@ Choose a workflow
      - ``flat_plate_boundary_layer``
      - Distance and edge velocity, density, and viscosity
      - :doc:`../models/flat_plate_boundary_layer`
-   * - Follow a laminar boundary layer through a changing edge pressure
+   * - Follow a laminar or SA-noft2 layer through a changing edge pressure
      - ``marching_boundary_layer``
-     - Edge pressure along the wall and edge total pressure and temperature
+     - Edge pressure and total state; optional wall radii for thin axisymmetric flow
      - :doc:`../models/marching_boundary_layer`
    * - Transform a measured or computed compressible velocity profile
      - ``transform_compressible_velocity_profile``
@@ -180,6 +180,88 @@ established; agreement with CFD using the same model does not establish it.
 An adverse pressure gradient can separate the boundary layer. The march then
 raises ``BoundaryLayerSeparationError``, which holds ``separation_distance`` and
 the ``result`` at the stations upstream.
+
+Thin axisymmetric boundary layers
+---------------------------------
+
+Supply ``wall_radius`` in metres at the edge nodes. Here a 20 degree cone
+with constant edge conditions demonstrates the laminar Mangler relation:
+
+>>> cone_edge = BoundaryLayerEdge.from_pressure(
+...     [0.0, 1.0], [20000.0, 20000.0],
+...     total_pressure=160000.0, total_temperature=500.0,
+... )
+>>> plate = marching_boundary_layer(cone_edge, regime=BoundaryLayerRegime.LAMINAR)
+>>> cone = marching_boundary_layer(
+...     cone_edge, regime=BoundaryLayerRegime.LAMINAR,
+...     wall_radius=cone_edge.distance * np.sin(np.radians(20.0)),
+... )
+>>> round(float(cone.local_skin_friction_coefficient[0]
+...             / plate.local_skin_friction_coefficient[0]), 6)
+1.732051
+
+The ratio is sqrt(3) at equal wall distance; the cone thickness is divided by
+sqrt(3). This is an analytical verification example. Radius uses piecewise
+linear interpolation, so curved bodies need sufficiently dense nodes.
+``wall_radius=None`` keeps the planar calculation; a positive scalar describes
+a constant-radius wall beginning at a sharp edge. Only the first array radius
+may be zero. Results exclude the singular tip.
+
+Transverse curvature is neglected. A warning reports delta99/r_w above 0.1,
+an uncalibrated indicator; near-tip stations commonly trigger it. Longitudinal
+curvature and normal pressure gradients are also neglected. Use SI units and
+wall arc length, local-edge Cf, and positive-into-wall heat flux.
+
+A cone-to-cylinder worked flow example is not supplied: downstream of its
+shoulder, edge conditions require external Euler/CFD or measured data that are
+not available here. ``flow_sequence`` cannot provide that distribution.
+The synthetic shoulder verification is only a numerical stress test.
+
+.. _rm3633-example:
+
+Worked measured body: R&M 3633
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:ref:`Winter, Rotta and Smith <ref-winter-rotta-smith-1968>` measured a waisted
+body of revolution, with a 20 degree conical nose, at M_inf=1.700 and
+Re_l=10.08e6. Length is 60 in (1.524 m). The comparison below is generated,
+not executed as a doctest. The generator contains the five Fig. 1 polynomials
+for R/l versus X/l, with the final segment cubic, and checks all radius
+junctions to 1e-5. Wall distance is the accurate quadrature of
+``sqrt(1+(dR/dX)^2)`` using analytic polynomial derivatives.
+
+The Table 1 phi=0 values are transcribed without alteration in
+``tests/reference_data/viscous_flow/rm3633_m17.csv``. The total-pressure ratios
+0.9926--0.9962 calculated from Cp and M_delta check transcription consistency.
+Static edge
+pressure uses ``p/p_inf = 1 + 0.7 M_inf**2 Cp`` and the edge total pressure is
+the freestream total pressure times the Taylor--Maccoll loss for a 20 degree
+cone at M1.7 (ratio 0.9957049344). At the added tip, pressure equals the X=3 in
+value. Measured Cp is unsmoothed. PCHIP of ln(p) in wall distance supplies a
+dense grid at approximately 0.25 in axial spacing, with measured stations and
+geometry junctions included; radii on those nodes use the body polynomials.
+The march ends at the last measured pressure station, X=59 in.
+
+Total temperature and wall thermal condition are not stated. We assume
+T0=310 K and an adiabatic wall, consistent with the paper's zero-heat-transfer
+analysis, and scale freestream pressure to the measured Reynolds number.
+The table includes 290 K and 330 K sensitivities and a separate substitution
+of Taylor--Maccoll cone pressure at X<=6 in. ``edge_sa_ratio=3``.
+
+The 0.005 in ballotini trip was at 1.5 in from the nose and was inadequate at
+Mach numbers of 1.4 and above. X=3 in is transitional (Cf=0.00140 versus
+0.00393 at 6 in); comparisons use X>=12 in only. Cf is based on local dynamic
+pressure. SA-noft2 develops its own transition; prescribed transition is out
+of scope. The source gives Cf accuracy +/-0.0002 and Cp accuracy +/-0.005.
+A missing Cf at 15 in is not interpolated or treated as zero.
+
+The calculated delta99/r_w is large near the waist, consistent with the
+paper's warning that the layer is not small relative to radius there. Wall Cp
+may also differ from edge Cp through normal pressure gradients. Thus the
+comparison exposes limits of the thin-layer model; it is not an accuracy
+certification or a fitted correlation.
+
+.. include:: ../_generated/marching_axisymmetric_verification.rst
 
 Check applicability before using the result
 -------------------------------------------

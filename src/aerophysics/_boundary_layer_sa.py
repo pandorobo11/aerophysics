@@ -10,8 +10,9 @@ The model is SA-noft2 in its standard form, in which density does not appear
     ((C g + n/g) n')'/(sigma g) + cb2 n'^2/(sigma g^2) + f n'
         + cb1 St n - cw1 fw n^2/Y^2 - Lambda f' n = 2 xi (f' n_xi - n' f_xi)
 
-with ``St = R |f''|/g + n fv2/(kappa^2 Y^2)``, ``R = sqrt(2 xi)/mu_e``, and
-``Lambda = 2 xi d(ln nu_e)/d(xi)``. The dimensional ``nu_tilde`` is conserved along
+with ``St = R |f''|/g + n fv2/(kappa^2 Y^2)``, ``R = sqrt(2 xi)/(r_w^j mu_e)``,
+and ``Lambda = 2 xi d(ln nu_e)/d(xi)``. Here j=0 is planar and j=1 is thin-layer
+axisymmetric. The dimensional ``nu_tilde`` is conserved along
 the edge streamline, so ``n`` at the outer boundary varies as ``1/nu_e``.
 
 Newton stalls where the positivity limit binds near the outer turbulent front. A
