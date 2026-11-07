@@ -37,10 +37,25 @@ not modify source files.
 
 The slow marching-solver tier runs automatically when solver-relevant files
 changed relative to `origin/main`, including staged, unstaged, and untracked
-files. `scripts/needs-solver-verification.sh` owns the path rules and runs the
-tier if the base cannot be resolved. Use `scripts/check.sh --full` to force it,
-and use `--full` before changes whose impact on the solver is unclear. The
-`--full` and `--check-only` options can be combined.
+files. `scripts/needs-verification.sh solver` owns the path rules and runs the
+tier if the base cannot be resolved. Use `scripts/check.sh --full` to force
+both solver and package verification, and use `--full` before changes whose
+impact on the solver or distribution is unclear. The `--full` and
+`--check-only` options can be combined.
+
+By explicit user decision on 2026-11-07, package building and clean-install
+verification are also conditional locally and in pull-request CI.
+`scripts/needs-verification.sh package` owns these rules: packaging metadata,
+the `hatch_build.py` hook, entry points/documentation lookup, packaging tests,
+documentation configuration, README/license files, gate scripts/workflows,
+and additions/deletions/renames under `src/` or `docs/`. The wheel hook's
+documentation generators and reference data also trigger verification because
+they are copied and executed in its isolated build tree. Ordinary source or
+documentation content edits outside these rules do not trigger the package
+tier. Main and release CI always run it; skipped PR jobs report the reason and
+remain subject to `ci-gate`. Both modes use `origin/main` by default;
+`VERIFICATION_BASE` overrides it (the former `SOLVER_VERIFICATION_BASE` remains
+a fallback). Missing bases or failed comparisons run verification conservatively.
 
 Generated and verification assets are deliberately excluded from the normal
 cross-platform pytest matrix. Run `scripts/check-generated.sh` as part of the

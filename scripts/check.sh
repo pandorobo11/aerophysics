@@ -60,7 +60,7 @@ if [[ "$full" == true ]]; then
     solver_decision=yes
     solver_reason="forced by --full"
 else
-    solver_check="$(bash scripts/needs-solver-verification.sh 2>&1)"
+    solver_check="$(bash scripts/needs-verification.sh solver 2>&1)"
     solver_decision="${solver_check%%$'\n'*}"
     solver_reason="${solver_check#*$'\n'}"
 fi
@@ -74,9 +74,23 @@ run_step "Build HTML documentation" \
     uv run sphinx-build -E -a -W --keep-going -b html docs docs/_build/html
 run_step "Run documentation doctests" \
     uv run sphinx-build -E -a -W --keep-going -b doctest docs docs/_build/doctest
-run_step "Build Python distributions" uv run python -m build
-run_step "Verify clean wheel and sdist installations" \
-    env AEROPHYSICS_TEST_ARTIFACT_DIRECTORY=dist \
-    uv run pytest -m package_artifact --no-cov
+if [[ "$full" == true ]]; then
+    package_decision=yes
+    package_reason="forced by --full"
+else
+    package_check="$(bash scripts/needs-verification.sh package 2>&1)"
+    package_decision="${package_check%%$'\n'*}"
+    package_reason="${package_check#*$'\n'}"
+fi
+if [[ "$package_decision" == yes ]]; then
+    printf '\nPackage verification: %s\n' "$package_reason"
+    run_step "Build Python distributions" uv run python -m build
+    run_step "Verify clean wheel and sdist installations" \
+        env AEROPHYSICS_TEST_ARTIFACT_DIRECTORY=dist \
+        uv run pytest -m package_artifact --no-cov
+else
+    printf '\nSKIPPED: Build Python distributions (%s)\n' "$package_reason"
+    printf 'SKIPPED: Verify clean wheel and sdist installations (%s)\n' "$package_reason"
+fi
 
 exit "$status"

@@ -139,7 +139,7 @@ jobs:
           if [[ "$EVENT_NAME" == pull_request ]]; then
             # A failed fetch leaves the decision script to fail safe on a missing ref.
             git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" || true
-            decision="$(SOLVER_VERIFICATION_BASE="origin/${BASE_REF}" bash scripts/needs-solver-verification.sh 2>&1)"
+            decision="$(VERIFICATION_BASE="origin/${BASE_REF}" bash scripts/needs-verification.sh solver 2>&1)"
             needed="${decision%%$'\n'*}"
             reason="${decision#*$'\n'}"
           else
@@ -183,6 +183,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -191,8 +193,32 @@ jobs:
           version: "0.9.13"
           enable-cache: true
       - run: uv sync --all-groups --all-extras --locked
-      - run: uv run python -m build
+      - name: Decide whether package verification is needed
+        id: package
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" || true
+            decision="$(VERIFICATION_BASE="origin/${BASE_REF}" bash scripts/needs-verification.sh package 2>&1)"
+            needed="${decision%%$'\n'*}"
+            reason="${decision#*$'\n'}"
+          else
+            needed=yes
+            reason="always run on main"
+          fi
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+          if [[ "$needed" == yes ]]; then
+            printf 'Package verification: %s\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'Package build and installation verification skipped: %s\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Build Python distributions
+        if: steps.package.outputs.needed == 'yes'
+        run: uv run python -m build
       - name: Verify clean wheel and sdist installations
+        if: steps.package.outputs.needed == 'yes'
         env:
           AEROPHYSICS_TEST_ARTIFACT_DIRECTORY: dist
         run: uv run pytest -m package_artifact --no-cov

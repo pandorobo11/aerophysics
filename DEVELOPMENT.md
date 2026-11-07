@@ -76,9 +76,10 @@ scripts/check.sh
 
 The gate synchronizes the locked environment, formats Python in write mode,
 and then runs Ruff lint and format checks, mypy, the normal test suite, the
-generated-asset checks, warning-as-error Sphinx HTML and doctest builds, and
-the wheel and source-distribution builds. It then installs the wheel with its
-GUI extra and the sdist into separate clean virtual environments. Those
+generated-asset checks, and warning-as-error Sphinx HTML and doctest builds.
+When package verification is selected, it builds the wheel and source
+distribution, then installs the wheel with its GUI extra and the sdist into
+separate clean virtual environments. Those
 installed-package checks run from outside the checkout and cover metadata,
 runtime dependencies, a public calculation, the console entry point, and
 bundled documentation lookup. To run the same checks without rewriting Python
@@ -90,10 +91,28 @@ scripts/check.sh --check-only
 
 Slow marching-solver verification runs automatically for solver-relevant
 changes relative to `origin/main`, including staged, unstaged, and untracked
-files. The path rules are in `scripts/needs-solver-verification.sh`; a missing
+files. The path rules are in `scripts/needs-verification.sh solver`; a missing
 base or failed comparison runs the tier conservatively. Force it with
 `scripts/check.sh --full` (combinable with `--check-only`), and use `--full`
-when a change's solver impact is unclear.
+when a change's solver or distribution impact is unclear. `--full` forces
+both solver and package verification.
+
+By explicit user decision on 2026-11-07, package builds and clean-install
+checks also run conditionally, using `scripts/needs-verification.sh package`.
+They run for changes to packaging metadata, `hatch_build.py`, public package
+initialization, GUI launcher/documentation lookup, package tests, `docs/conf.py`,
+README/license files, and gate scripts/workflows. File additions, deletions,
+and renames anywhere under `src/` or `docs/` also trigger them, including
+untracked files. Ordinary content edits elsewhere in those trees do not.
+`docs/scripts/` and `tests/reference_data/` also trigger the package tier:
+the wheel hook copies these inputs into an isolated tree and runs the
+generators before bundling HTML. Main and release CI always verify packages;
+PR CI may skip the build/install steps with a reason in the job summary.
+
+Both decision modes compare with `origin/main` and inspect the working tree.
+Set `VERIFICATION_BASE` to use another base; `SOLVER_VERIFICATION_BASE` is
+retained as a fallback for existing callers. Missing bases and Git failures
+run verification conservatively.
 
 The test tiers are mutually exclusive:
 
