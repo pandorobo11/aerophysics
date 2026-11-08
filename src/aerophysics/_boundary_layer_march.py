@@ -460,6 +460,15 @@ def march(
     output_positions: list[float] = []
     output_stations: list[Station] = []
     for target in (float(value) for value in stations):
+        if (
+            internal_stations
+            and (position in internal_stations or target in internal_stations)
+            and edge_at(target).xi == history[-1].xi
+        ):
+            # An internal station and its neighbour can share a rounded xi even
+            # at distinct wall distances. Reuse the solved state without a zero
+            # BDF interval, retaining history and the last actual step size.
+            position = target
         while position < target:
             trial = min(step, _MAX_STEP_RATIO * last_step)
             if position > 0.0:

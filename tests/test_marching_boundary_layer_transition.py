@@ -17,6 +17,7 @@ from aerophysics import (
     BoundaryLayerEdge,
     BoundaryLayerRegime,
     MarchingBoundaryLayerResult,
+    PerfectGas,
     TurbulentModel,
     flat_plate_boundary_layer,
     marching_boundary_layer,
@@ -32,6 +33,7 @@ from aerophysics.marching_boundary_layer import (
     _turbulent_eta_grid,
     _warn_applicability,
 )
+from aerophysics.transport import SutherlandModel
 
 LAMINAR = BoundaryLayerRegime.LAMINAR
 TURBULENT = BoundaryLayerRegime.TURBULENT
@@ -479,3 +481,101 @@ def test_t8_transition_on_and_between_output_stations(
         error = relative_difference(getattr(a, field), getattr(b, field)[ix])
         print(f"T8 {field}={100 * error:.9g}%")
         assert error < 1e-8
+
+
+@pytest.fixture(scope="module")
+def rounded_transition_case() -> tuple[BoundaryLayerEdge, MarchingBoundaryLayerResult]:
+    """PR #88 public-API reproducer, including its exact gas and viscosity."""
+    gas = PerfectGas(287.0, 1.4)
+    viscosity = SutherlandModel(1.716e-5, 273.15, 110.4)
+    gamma, temperature, mach = gas.heat_capacity_ratio, 300.0, 0.3
+    velocity = mach * np.sqrt(gamma * gas.specific_gas_constant * temperature)
+    density = 1e7 * viscosity.dynamic_viscosity(temperature) / velocity
+    pressure = density * gas.specific_gas_constant * temperature
+    ratio = 1.0 + (gamma - 1.0) * mach**2 / 2.0
+    edge = BoundaryLayerEdge.from_pressure(
+        [0.0, 0.1, 1.0],
+        [pressure] * 3,
+        total_pressure=pressure * ratio ** (gamma / (gamma - 1.0)),
+        total_temperature=temperature * ratio,
+        gas=gas,
+        viscosity_model=viscosity,
+    )
+    reference = marching_boundary_layer(
+        edge, regime=TRANSITIONAL, transition_distance=0.1, wall_temperature=250.0
+    )
+    return edge, reference
+
+
+def test_rounded_transition_public_api_in_normal_suite(
+    rounded_transition_case: tuple[BoundaryLayerEdge, MarchingBoundaryLayerResult],
+) -> None:
+    """Exercise the zero-xi-interval fix in every OS/Python matrix job."""
+    edge, reference = rounded_transition_case
+    result = marching_boundary_layer(
+        edge,
+        regime=TRANSITIONAL,
+        transition_distance=0.3 / 3,
+        wall_temperature=250.0,
+    )
+    np.testing.assert_array_equal(result.distance, edge.distance[1:])
+    for field in ["local_skin_friction_coefficient", "wall_heat_flux"]:
+        assert (
+            relative_difference(getattr(result, field), getattr(reference, field))
+            < 1e-6  # 0.0001%, the same bound as the detailed verification.
+        )
+
+
+@pytest.mark.solver_verification
+@pytest.mark.parametrize(
+    "transition",
+    [
+        pytest.param(0.3 / 3, id="review-reproducer"),
+        pytest.param(0.1, id="exact-output"),
+        pytest.param(float(np.nextafter(0.1, 0)), id="previous-float"),
+        pytest.param(float(np.nextafter(0.1, 1)), id="next-float"),
+        pytest.param(0.1 * (1 - 1e-12), id="resolvable-short-interval"),
+        pytest.param(0.05, id="before-first-output"),
+    ],
+)
+def test_rounded_internal_station_preserves_output_and_resolvable_intervals(
+    rounded_transition_case: tuple[BoundaryLayerEdge, MarchingBoundaryLayerResult],
+    monkeypatch: pytest.MonkeyPatch,
+    transition: float,
+) -> None:
+    edge, reference = rounded_transition_case
+    interp = _EdgeInterpolant(edge, None)
+    visited: list[float] = []
+    original = march_module._streamwise_stencil
+
+    def observe(
+        xi: float, history: list[march_module.Station]
+    ) -> tuple[float, FloatArray]:
+        assert xi > history[-1].xi
+        if xi >= interp.xi(0.05):
+            assert len(history) == 2  # Coalescing must not restart BDF1.
+        visited.append(xi)
+        return original(xi, history)
+
+    monkeypatch.setattr(march_module, "_streamwise_stencil", observe)
+    result = marching_boundary_layer(
+        edge,
+        regime=TRANSITIONAL,
+        transition_distance=transition,
+        wall_temperature=250.0,
+    )
+    np.testing.assert_array_equal(result.distance, edge.distance[1:])
+    # Every resolvable internal point and output point still reaches the stencil,
+    # including the 1e-13 m gap that a coordinate-isclose filter would discard.
+    assert interp.xi(transition) in visited
+    assert interp.xi(0.1) in visited
+    assert np.all(np.isfinite(result.local_skin_friction_coefficient))
+    assert np.all(np.isfinite(result.wall_heat_flux))
+    if transition != 0.05:
+        for field in ["local_skin_friction_coefficient", "wall_heat_flux"]:
+            difference = relative_difference(
+                getattr(result, field), getattr(reference, field)
+            )
+            print(f"PR88 tr={transition!r} {field}={100 * difference:.9g}%")
+            # Largest measured near-output difference is below 7e-5% in heat flux.
+            assert difference < 1e-6  # 0.0001%, not a physical accuracy bound.
