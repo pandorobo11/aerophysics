@@ -66,6 +66,11 @@ visible in the output.
 By explicit user decision on 2026-11-07, slow `solver_verification` tests run
 in CI only on Ubuntu / Python 3.12, separately from generated assets. They run
 for solver-relevant pull-request changes and always on main and in releases.
+In CI the tier runs as two matrix shards of the one `solver-verification` job
+(`ci-gate` checks their aggregated result): the SA and planar marching files,
+and every other file through `--ignore`, so new verification files land in the
+second shard. Rebalance the shards from measured `--durations` when one becomes
+much slower. Releases and the local gate run the tier unsharded.
 Representative fast marching tests stay in the full Python/OS matrix. In the
 local write-mode gate, verification assets are regenerated before the asset
 tests; only their redundant currency test is skipped after successful
