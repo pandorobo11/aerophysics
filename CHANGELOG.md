@@ -60,6 +60,7 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Stop bundling documentation in editable installs; standard wheels still include it.
 - Solve the Spalding--Coles thickness closure of
   `TurbulentModel.SCHLICHTING_LOG_WAKE` and
   `VAN_DRIEST_II_WALL_TEMPERATURE` for all points at once. A safeguarded

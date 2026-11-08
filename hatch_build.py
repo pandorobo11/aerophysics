@@ -18,6 +18,10 @@ class CustomBuildHook(BuildHookInterface):
 
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
         """Build the documentation before Hatchling selects wheel files."""
+        if version == "editable":
+            # Editable installs omit bundled docs; the GUI uses DOCS_DIR_ENV
+            # or the source checkout's docs/_build/html instead.
+            return
         project_root = Path(self.root)
         source_directory = TemporaryDirectory(prefix="aerophysics-docs-source-")
         generated_root = Path(source_directory.name)
@@ -81,6 +85,8 @@ class CustomBuildHook(BuildHookInterface):
         self, version: str, build_data: dict[str, Any], artifact_path: str
     ) -> None:
         """Remove the temporary documentation tree after the wheel is built."""
+        if version == "editable":
+            return
         temporary_directories = getattr(self, "_temporary_directories", ())
         for temporary_directory in temporary_directories:
             temporary_directory.cleanup()

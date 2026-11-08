@@ -38,6 +38,11 @@ Whenever a required CI job is added, removed, renamed, or changed in
 result checks in the same pull request. `CI gate` must remain an exhaustive
 summary of every required CI job.
 
+The documentation and package jobs run independently alongside the test matrix;
+neither waits for the tests or consumes their outputs or artifacts. `CI gate`
+waits for the test matrix, lint, format, typecheck, generated assets, solver
+verification, documentation, and package jobs, and requires each to succeed.
+
 ## Environment
 
 The project requires Python 3.12 or newer. Local development does not require
@@ -128,11 +133,16 @@ Ubuntu / Python 3.12 CI job for solver-relevant PR changes, and always on main
 and in releases. Representative fast marching tests remain in the full
 Python/OS matrix.
 
-The slow solver tier runs in parallel with pytest-xdist (`-n auto`) in CI,
-releases, and `scripts/check.sh`, using the default `load` scheduling across individual tests.
+The normal test suite and slow solver tier run in parallel with pytest-xdist
+(`-n auto`) in CI, releases, and `scripts/check.sh`, using the default `load`
+scheduling across individual tests. CI matrix jobs without coverage also use
+`-n auto` for the normal suite. Tests must isolate temporary files, environment
+variables, and mutable module state; local servers bind to port 0 so concurrent
+workers do not compete for a fixed port.
 
-The normal test suite collects branch coverage once and applies independent
-gates to the two product layers:
+For the normal suite, `scripts/check-coverage.sh` erases previous coverage data,
+then pytest-cov combines branch coverage from all workers before applying
+independent gates to the two product layers:
 
 - the numerical core (top-level modules under ``src/aerophysics``) must remain
   at or above 95%;
@@ -162,8 +172,11 @@ uv run sphinx-build -W --keep-going -b doctest docs docs/_build/doctest
 ```
 
 When launched from a source checkout, `aerophysics-gui` automatically uses a
-valid `docs/_build/html` tree. Wheel builds render the same manual into
-`aerophysics/_docs/`, which lets the installed GUI serve it offline.
+valid `docs/_build/html` tree, or the directory set by `AEROPHYSICS_DOCS_DIR`
+(`DOCS_DIR_ENV`). Editable installs do not bundle documentation; to open it
+from the GUI in a development checkout, build the HTML manual using the
+documentation preview command above. Standard wheel builds render the same
+manual into `aerophysics/_docs/`, which lets the installed GUI serve it offline.
 
 ## Generated and verification assets
 
