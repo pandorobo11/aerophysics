@@ -91,6 +91,7 @@ markers = [
   "generated_assets: checks deterministic generated documentation and verification assets",
   "solver_verification: slow numerical verification of the marching boundary-layer solver; runs when solver-relevant files change (scripts/needs-verification.sh solver) and always on main and in releases",
   "package_artifact: checks clean installations of the built wheel and sdist",
+  "package_sdist: clean installation of the sdist (builds a wheel from the sdist); a subset of package_artifact",
 ]
 
 [tool.coverage.run]

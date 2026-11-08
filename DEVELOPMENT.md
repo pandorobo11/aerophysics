@@ -38,10 +38,11 @@ Whenever a required CI job is added, removed, renamed, or changed in
 result checks in the same pull request. `CI gate` must remain an exhaustive
 summary of every required CI job.
 
-The documentation and package jobs run independently alongside the test matrix;
-neither waits for the tests or consumes their outputs or artifacts. `CI gate`
-waits for the test matrix, lint, format, typecheck, generated assets, solver
-verification, documentation, and package jobs, and requires each to succeed.
+The documentation job and two parallel package jobs (wheel and sdist) run
+independently alongside the test matrix; none waits for the tests or consumes
+their outputs or artifacts. `CI gate` waits for the test matrix, lint, format,
+typecheck, generated assets, solver verification, documentation, and both package
+jobs, and requires each to succeed.
 
 ## Environment
 
@@ -126,7 +127,7 @@ The test tiers are mutually exclusive:
 | Normal tests and coverage | `scripts/check-coverage.sh` (excludes the other three markers) |
 | Generated assets | `scripts/check-generated.sh` |
 | Slow solver verification | `uv run pytest -m solver_verification --no-cov -n auto` |
-| Installed packages | `uv run pytest -m package_artifact --no-cov` (after building) |
+| Installed packages | `uv run pytest -m package_artifact --no-cov -n 2` (after building; `package_sdist` selects the sdist subset) |
 
 By explicit user decision on 2026-11-07, slow solver verification runs in one
 Ubuntu / Python 3.12 CI job for solver-relevant PR changes, and always on main
@@ -188,6 +189,10 @@ Regenerate the complete verification set with:
 ```console
 uv run python docs/scripts/generate_verification.py
 ```
+
+Set `AEROPHYSICS_VERIFICATION_JOBS` to a positive integer to limit viscous-flow
+computation workers (default: CPU count capped by task count; `1` runs in-process
+without a pool).
 
 The viscosity comparison is generated separately:
 

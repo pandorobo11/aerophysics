@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import multiprocessing
+import os
 import sys
 import warnings
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from itertools import pairwise
 from pathlib import Path
 
@@ -857,8 +861,8 @@ def _marching_laminar_verification(api: tuple[object, ...]) -> str:
     return "\n".join(lines)
 
 
-def _marching_sa_verification() -> str:
-    """Frozen ZPG regression and an unfitted external same-model comparison."""
+def _marching_sa_zpg_verification() -> str:
+    """Frozen ZPG regression part of the SA verification record."""
     from aerophysics import (
         AIR,
         BoundaryLayerEdge,
@@ -936,6 +940,15 @@ def _marching_sa_verification() -> str:
         "delta99 and is excluded here. Unit Reynolds number is 1e7 per metre,",
         "gamma is 1.4, Pr is 0.72, Prt is 0.9, and Sutherland S is 110.4 K.",
         "",
+    ]
+    return "\n".join(lines)
+
+
+def _marching_sa_tmr_verification(
+    rows: list[tuple[str, str, float, float, float]],
+) -> str:
+    """Format and check the unfitted external same-model comparison."""
+    lines = [
         ".. list-table:: NASA TMR bump: local wall shear / freestream dynamic pressure",
         "   :header-rows: 1",
         "",
@@ -945,7 +958,7 @@ def _marching_sa_verification() -> str:
         "     - Maximum absolute difference [%]",
         "     - Maximum code spread [%]",
     ]
-    for row in _tmr_bump_comparison():
+    for row in rows:
         if row[3] >= 3.0:
             raise AssertionError(
                 f"SA TMR {row[0]} {row[1]}: {row[3]:.6g}% exceeds 3.0%"
@@ -979,6 +992,15 @@ def _marching_sa_verification() -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def _marching_sa_verification() -> str:
+    """Frozen ZPG regression and an unfitted external same-model comparison."""
+    return (
+        _marching_sa_zpg_verification()
+        + "\n"
+        + _marching_sa_tmr_verification(_tmr_bump_comparison())
+    )
 
 
 def _tmr_bump_comparison(
@@ -1263,7 +1285,9 @@ def _axisymmetric_display(value: float, digits: int, *, signed: bool = False) ->
     return format(value, f"{'+' if signed else ''}.{digits}f")
 
 
-def _marching_axisymmetric_verification() -> str:
+def _marching_axisymmetric_verification(
+    records: tuple[dict, dict, dict, dict] | None = None,
+) -> str:
     """Generated V19 table; geometry and comparison regressions run on regeneration."""
     lines = [
         ".. list-table:: R&M 3633, M_inf=1.7, Re_l=10.08e6: local Cf",
@@ -1276,7 +1300,14 @@ def _marching_axisymmetric_verification() -> str:
         "     - abs difference / 0.0002",
         "     - delta99/r_w",
     ]
-    base = _rm3633_comparison()
+    if records is None:
+        records = (
+            _rm3633_comparison(),
+            _rm3633_comparison(290.0),
+            _rm3633_comparison(330.0),
+            _rm3633_comparison(cone_pressure=True),
+        )
+    base, cold, hot, cone = records
     for row, curvature in zip(
         base["rows"], base.get("curvature_at_stations", []), strict=True
     ):
@@ -1305,9 +1336,9 @@ def _marching_axisymmetric_verification() -> str:
     ]
     for label, record in [
         ("T0=310 K", base),
-        ("T0=290 K", _rm3633_comparison(290.0)),
-        ("T0=330 K", _rm3633_comparison(330.0)),
-        ("T0=310 K, cone Cp replaced", _rm3633_comparison(cone_pressure=True)),
+        ("T0=290 K", cold),
+        ("T0=330 K", hot),
+        ("T0=310 K, cone Cp replaced", cone),
     ]:
         # This is a regression bound, not the measurement-accuracy tolerance.
         if record["failure"] is not None or record["max_absolute_difference"] > 0.0006:
@@ -1336,8 +1367,51 @@ def _marching_axisymmetric_verification() -> str:
     return "\n".join(lines)
 
 
+def _verification_jobs(task_count: int) -> int:
+    value = os.environ.get("AEROPHYSICS_VERIFICATION_JOBS")
+    if value is None:
+        return min(os.cpu_count() or 1, task_count)
+    try:
+        jobs = int(value)
+    except ValueError:
+        jobs = 0
+    if jobs <= 0:
+        raise SystemExit("AEROPHYSICS_VERIFICATION_JOBS must be a positive integer")
+    return min(jobs, task_count)
+
+
+def _initialize_worker(warning_filters: list) -> None:
+    # Spawned workers must resolve the checkout (or isolated wheel-build tree)
+    # before unpickling task arguments containing aerophysics objects.
+    sys.path.insert(0, str(ROOT / "src"))
+    warnings.filters[:] = warning_filters
+
+
 def generate(*, check: bool) -> bool:
     api = _api()
+    tasks = {
+        "tmr": _tmr_bump_comparison,
+        "sa_zpg": _marching_sa_zpg_verification,
+        "rm_base": _rm3633_comparison,
+        "rm_cold": partial(_rm3633_comparison, 290.0),
+        "rm_hot": partial(_rm3633_comparison, 330.0),
+        "rm_cone": partial(_rm3633_comparison, cone_pressure=True),
+        "marching_laminar": partial(_marching_laminar_verification, api),
+        "laminar_similarity": partial(_laminar_similarity_accuracy, api),
+        "turbulent_sa": partial(_turbulent_sa_comparison, api),
+    }
+    jobs = _verification_jobs(len(tasks))
+    if jobs == 1:
+        results = {name: task() for name, task in tasks.items()}
+    else:
+        with ProcessPoolExecutor(
+            max_workers=jobs,
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=_initialize_worker,
+            initargs=(warnings.filters.copy(),),
+        ) as pool:
+            futures = {name: pool.submit(task) for name, task in tasks.items()}
+            results = {name: future.result() for name, future in futures.items()}
     source = _source_comparison(api)
     chart = _chart_comparison(api)
     invariants = _invariants(api)
@@ -1378,27 +1452,29 @@ def generate(*, check: bool) -> bool:
     current = True
     current &= write_or_check(
         ROOT / "docs/_generated/laminar_similarity_accuracy.rst",
-        _laminar_similarity_accuracy(api),
+        results["laminar_similarity"],
         check=check,
     )
     current &= write_or_check(
         ROOT / "docs/_generated/turbulent_sa_comparison.rst",
-        _turbulent_sa_comparison(api),
+        results["turbulent_sa"],
         check=check,
     )
     current &= write_or_check(
         ROOT / "docs/_generated/marching_laminar_verification.rst",
-        _marching_laminar_verification(api),
+        results["marching_laminar"],
         check=check,
     )
     current &= write_or_check(
         ROOT / "docs/_generated/marching_sa_verification.rst",
-        _marching_sa_verification(),
+        results["sa_zpg"] + "\n" + _marching_sa_tmr_verification(results["tmr"]),
         check=check,
     )
     current &= write_or_check(
         ROOT / "docs/_generated/marching_axisymmetric_verification.rst",
-        _marching_axisymmetric_verification(),
+        _marching_axisymmetric_verification(
+            tuple(results[name] for name in ("rm_base", "rm_cold", "rm_hot", "rm_cone"))
+        ),
         check=check,
     )
     current &= write_or_check(TABLE_PATH, _rst(source, chart, invariants), check=check)

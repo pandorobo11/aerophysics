@@ -176,8 +176,8 @@ jobs:
       - name: Run documentation doctests
         run: uv run sphinx-build -W --keep-going -b doctest docs docs/_build/doctest
 
-  package:
-    name: Python package build and verification
+  package-wheel:
+    name: Python wheel build and verification
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -215,11 +215,56 @@ jobs:
       - name: Build Python distributions
         if: steps.package.outputs.needed == 'yes'
         run: uv run python -m build
-      - name: Verify clean wheel and sdist installations
+      - name: Verify clean wheel installation
         if: steps.package.outputs.needed == 'yes'
         env:
           AEROPHYSICS_TEST_ARTIFACT_DIRECTORY: dist
-        run: uv run pytest -m package_artifact --no-cov
+        run: uv run pytest -m "package_artifact and not package_sdist" --no-cov
+
+  package-sdist:
+    name: Python sdist build and verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: "0.9.13"
+          enable-cache: true
+      - run: uv sync --all-groups --all-extras --locked
+      - name: Decide whether package verification is needed
+        id: package
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" || true
+            decision="$(VERIFICATION_BASE="origin/${BASE_REF}" bash scripts/needs-verification.sh package 2>&1)"
+            needed="${decision%%$'\n'*}"
+            reason="${decision#*$'\n'}"
+          else
+            needed=yes
+            reason="always run on main"
+          fi
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+          if [[ "$needed" == yes ]]; then
+            printf 'Package verification: %s\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'Package build and installation verification skipped: %s\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Build source distribution
+        if: steps.package.outputs.needed == 'yes'
+        run: uv run python -m build --sdist
+      - name: Verify clean sdist installation
+        if: steps.package.outputs.needed == 'yes'
+        env:
+          AEROPHYSICS_TEST_ARTIFACT_DIRECTORY: dist
+        run: uv run pytest -m "package_artifact and package_sdist" --no-cov
 
   ci-gate:
     name: CI gate
@@ -233,7 +278,8 @@ jobs:
       - generated-assets
       - solver-verification
       - docs
-      - package
+      - package-wheel
+      - package-sdist
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to succeed
@@ -245,7 +291,8 @@ jobs:
           GENERATED_ASSETS_RESULT: ${{ needs['generated-assets'].result }}
           SOLVER_VERIFICATION_RESULT: ${{ needs['solver-verification'].result }}
           DOCS_RESULT: ${{ needs.docs.result }}
-          PACKAGE_RESULT: ${{ needs.package.result }}
+          PACKAGE_WHEEL_RESULT: ${{ needs['package-wheel'].result }}
+          PACKAGE_SDIST_RESULT: ${{ needs['package-sdist'].result }}
         run: |
           failed=0
           for check in \
@@ -256,7 +303,8 @@ jobs:
             "generated-assets=${GENERATED_ASSETS_RESULT}" \
             "solver-verification=${SOLVER_VERIFICATION_RESULT}" \
             "docs=${DOCS_RESULT}" \
-            "package=${PACKAGE_RESULT}"
+            "package-wheel=${PACKAGE_WHEEL_RESULT}" \
+            "package-sdist=${PACKAGE_SDIST_RESULT}"
           do
             name="${check%%=*}"
             result="${check#*=}"
