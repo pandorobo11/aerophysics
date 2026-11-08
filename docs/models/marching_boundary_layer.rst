@@ -69,11 +69,12 @@ At the wall, :math:`f = f' = 0`, and :math:`g` is either the specified wall
 temperature ratio or follows from a zero wall heat flux. At the outer boundary,
 :math:`f' = g = 1`.
 
-The laminar station solve uses an analytic Jacobian for the built-in Sutherland
-and Keyes viscosity models. Other viscosity models and the SA equations use
-finite-difference Jacobians. These linearizations solve the same discrete
-equations with the same convergence tolerances; they do not change the physical
-model or its applicability.
+The laminar and SA-noft2 station solves use analytic Jacobians for the exact
+built-in Sutherland and Keyes viscosity model types. Other viscosity models,
+including subclasses, use finite-difference Jacobians. SA differentiates the
+active nonsmooth branch, with right-sided derivatives at exact ties. These
+linearizations solve the same discrete equations with the same convergence
+tolerances; they do not change the physical model or its applicability.
 
 SA-noft2 transport
 ~~~~~~~~~~~~~~~~~~

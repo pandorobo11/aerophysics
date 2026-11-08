@@ -158,24 +158,57 @@ def test_unsupported_models_keep_finite_differences(
     )
 
 
-def test_sa_explicitly_keeps_finite_differences(
+@pytest.mark.parametrize("model", MODELS)
+def test_five_unknowns_without_analytic_override_keep_finite_differences(
+    model: SutherlandModel | KeyesModel,
+) -> None:
+    class FiveUnknownDiscretization(Discretization):
+        unknowns = 5
+
+        def residual(
+            self,
+            state: FloatArray,
+            edge: StationEdge,
+            coefficient: float,
+            lagged: FloatArray,
+        ) -> FloatArray:
+            return state**2
+
+    solver = FiveUnknownDiscretization(ETA[:7], 0.72, model)
+    assert solver._analytic_jacobian_enabled
+    assert type(solver)._analytic_jacobian is Discretization._analytic_jacobian
+    state = np.random.default_rng(1123).uniform(0.2, 1.3, (5, 7))
+    edge = StationEdge(0.37, 1.0, 0.23, 1.8, 290.0, None)
+    lagged = np.zeros_like(state)
+    residual = solver.residual(state, edge, 1.3, lagged)
+    np.testing.assert_array_equal(
+        solver.jacobian(state, residual, edge, 1.3, lagged),
+        solver._finite_difference_jacobian(state, residual, edge, 1.3, lagged),
+    )
+
+
+def test_sa_dispatch_never_uses_laminar_assembly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     solver = TurbulentDiscretization(ETA, 0.72, 0.9, AIR_VISCOSITY)
-    assert not solver._analytic_jacobian_enabled
+    assert solver._analytic_jacobian_enabled
     edge = StationEdge(0.37, 1.0, 0.23, 1.8, 290.0, None, 1000.0, 0.1, 3.0)
     state = solver.starting_guess(edge)
     lagged = -0.8 * state
     residual = solver.residual(state, edge, 1.3, lagged)
-    expected = solver._finite_difference_jacobian(state, residual, edge, 1.3, lagged)
+
+    def forbidden(*args: object) -> FloatArray:
+        pytest.fail("five unknowns reached the laminar analytic assembly")
+
+    monkeypatch.setattr(Discretization, "_analytic_jacobian", forbidden)
+    analytic = solver.jacobian(state, residual, edge, 1.3, lagged)
     np.testing.assert_array_equal(
-        solver.jacobian(state, residual, edge, 1.3, lagged), expected
+        analytic, solver._analytic_jacobian(state, edge, 1.3, lagged)
     )
-    # Even a mistakenly enabled inherited switch cannot route five unknowns
-    # through the laminar analytic assembly.
-    monkeypatch.setattr(solver, "_analytic_jacobian_enabled", True)
+    monkeypatch.setattr(solver, "_analytic_jacobian_enabled", False)
     np.testing.assert_array_equal(
-        solver.jacobian(state, residual, edge, 1.3, lagged), expected
+        solver.jacobian(state, residual, edge, 1.3, lagged),
+        solver._finite_difference_jacobian(state, residual, edge, 1.3, lagged),
     )
 
 

@@ -131,11 +131,11 @@ its `total_pressure_ratio`, which only need the static states.
 
 - Each station solves `(f, u, g)` on a fixed `eta` grid with a damped Newton
   iteration. The block-tridiagonal Jacobian uses exact discrete derivatives for
-  laminar flow with exact built-in `SutherlandModel` or `KeyesModel` types.
-  Other viscosity models (including subclasses) and SA retain three-color
-  finite differences. Both paths assemble directly into expanded `gbsv` bands
-  and use the same banded LAPACK solve. Convergence requires a maximum
-  update below `1e-10` in `u` and in the relative `g`.
+  laminar flow and SA-noft2 with exact built-in `SutherlandModel` or `KeyesModel`
+  types. SA solves `(f, u, g, n, Y)`. Other viscosity models (including subclasses)
+  retain three-color finite differences. Both paths assemble directly into
+  expanded `gbsv` bands and use the same banded LAPACK solve. Laminar convergence
+  requires a maximum update below `1e-10` in `u` and in the relative `g`.
 - The analytic path uses the model's viscosity value and validation at current
   temperatures, with a private derivative in Pa s/K. For Sutherland,
   `mu_T/mu = 1.5/T - 1/(T+S)`; for Keyes, with
@@ -143,6 +143,10 @@ its `total_pressure_ratio`, which only need the static states.
   Thus `C_g = (T_e mu_T/mu_e - C)/g`. This derivative enters both face
   fluxes, dissipation, and the adiabatic half-cell balance. Convection and
   streamwise BDF terms are differentiated with edge and lagged states fixed.
+  SA also differentiates the eddy transport, production, destruction, and
+  stretched wall distance. Nonsmooth operations use the active branch, with
+  zero derivatives inside floors/caps; exact ties use the right-sided derivative
+  for a positive perturbation of each unknown (including the incoming sign).
   The residual, grids, step control, damping, and tolerances are unchanged.
   This changes no physical applicability range or coordinate convention:
   `g = T/T_e` and `eta` are dimensionless, temperatures are kelvin, positive

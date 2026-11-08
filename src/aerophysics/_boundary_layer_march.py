@@ -267,7 +267,7 @@ class Discretization:
         coefficient: float,
         lagged: FloatArray,
     ) -> FloatArray:
-        """Assemble exact laminar derivatives or three-color differences in gbsv bands.
+        """Assemble exact discrete derivatives or three-color differences in gbsv bands.
 
         Only exact built-in Sutherland/Keyes types use the analytic path;
         subclasses and other viscosity protocols retain their own behavior.
@@ -275,8 +275,12 @@ class Discretization:
         """
         if (
             self._analytic_jacobian_enabled
-            and self.unknowns == 3
             and type(self.viscosity_model) in (SutherlandModel, KeyesModel)
+            and (
+                self.unknowns == 3
+                or type(self)._analytic_jacobian
+                is not Discretization._analytic_jacobian
+            )
         ):
             return self._analytic_jacobian(state, edge, coefficient, lagged)
         return self._finite_difference_jacobian(
@@ -291,7 +295,7 @@ class Discretization:
         coefficient: float,
         lagged: FloatArray,
     ) -> FloatArray:
-        """Retain the three-color linearization for SA and unsupported models."""
+        """Retain colored differences for unsupported models and regression checks."""
         unknowns = self.unknowns
         step = np.sqrt(np.finfo(np.float64).eps) * np.maximum(np.abs(state), 1.0)
         colors = _COLORS * unknowns
