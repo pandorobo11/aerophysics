@@ -82,8 +82,8 @@ def test_first_update_failure_becomes_local_complementarity(
     actual = solver.newton(guess, edge, coefficient, lagged)
     reference = solver.picard(guess, edge, coefficient, lagged)
     assert actual is not None and reference is not None
-    # Observed maxima (f,u,g,n,Y): 2.19e-10, 1.69e-9, 3.16e-10,
-    # 1.26e-5, 8.88e-11. The n discrepancy is a different fixed point,
+    # Analytic-Jacobian maxima (f,u,g,n,Y): 2.18e-10, 1.68e-9, 3.15e-10,
+    # 1.26e-5, 8.83e-11. The n discrepancy is a different fixed point,
     # not just Picard's 1e-9 stopping tolerance.
     for variable, tolerance in enumerate([1e-9, 4e-9, 1e-9, 3e-5, 5e-10]):
         np.testing.assert_allclose(
@@ -191,7 +191,7 @@ def test_complete_marches_and_legacy_switch(
         assert old.nu_tilde_ratio[0, front + 1] < 1e-12
         assert new.nu_tilde_ratio[0, front + 1] < 1e-12
         weights = instances[-1].wall_weights
-        # Observed relative wall velocity slope difference: 1.537e-7.
+        # Analytic-Jacobian relative wall velocity slope difference: 1.535e-7.
         np.testing.assert_allclose(
             new.velocity_ratio[:, :3] @ weights,
             old.velocity_ratio[:, :3] @ weights,
@@ -259,6 +259,29 @@ def test_small_station_and_legacy_switch(
     assert legacy is not None and direct is not None
     np.testing.assert_array_equal(legacy.state, direct.state)
     np.testing.assert_allclose(active_set.state, legacy.state, rtol=1e-12, atol=1e-12)
+
+
+def test_small_station_analytic_and_finite_difference_active_set(
+    small_station: StationInput, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    solver, guess, edge, coefficient, lagged = small_station
+    residual = solver.residual(guess, edge, coefficient, lagged)
+    analytic_bands = solver.jacobian(guess, residual, edge, coefficient, lagged)
+    analytic = solver.newton(guess, edge, coefficient, lagged)
+    monkeypatch.setattr(solver, "_analytic_jacobian_enabled", False)
+    finite_bands = solver.jacobian(guess, residual, edge, coefficient, lagged)
+    finite = solver.newton(guess, edge, coefficient, lagged)
+    # Both assemblies put interior SA diagonals at gbsv row 2*band, column 5*j+3.
+    diagonal = (2 * solver.band, slice(8, -5, 5))
+    assert np.all(analytic_bands[diagonal] < 0.0)
+    # sqrt(eps) forward steps introduce truncation and residual cancellation.
+    np.testing.assert_allclose(
+        analytic_bands[diagonal], finite_bands[diagonal], rtol=2e-6, atol=0.0
+    )
+    assert analytic is not None and finite is not None
+    # This smooth station converges well below the 1e-9 stopping threshold;
+    # 1e-12 allows roundoff from different linearizations of the same equations.
+    np.testing.assert_allclose(analytic.state, finite.state, rtol=1e-12, atol=1e-12)
 
 
 def test_explicit_zero_seed_preserves_legacy_laminar_limit(
@@ -373,6 +396,8 @@ def test_projection_stagnation_requires_scaled_complementarity(
         return result
 
     monkeypatch.setattr(solver, "residual", residual)
+    # Differentiate the synthetic residual rather than the physical SA equations.
+    monkeypatch.setattr(solver, "_analytic_jacobian_enabled", False)
     monkeypatch.setattr(sa_module, "solve_banded", solve)
     station = solver.newton(guess, edge, coefficient, lagged)
     assert len(updates) == 2
@@ -417,6 +442,8 @@ def test_active_row_exact_zero_only_for_full_step(
         return result
 
     monkeypatch.setattr(solver, "residual", residual)
+    # Differentiate the synthetic residual rather than the physical SA equations.
+    monkeypatch.setattr(solver, "_analytic_jacobian_enabled", False)
     monkeypatch.setattr(sa_module, "solve_banded", solve)
     monkeypatch.setattr(Discretization, "damping", lambda *args: damping)
     monkeypatch.setattr(solver, "enforce_boundaries", boundaries)
@@ -447,6 +474,8 @@ def test_small_damped_updates_continue_until_phi_converges(
         return -(state - target)
 
     monkeypatch.setattr(solver, "residual", residual)
+    # Differentiate the synthetic residual rather than the physical SA equations.
+    monkeypatch.setattr(solver, "_analytic_jacobian_enabled", False)
     monkeypatch.setattr(Discretization, "damping", lambda *args: 0.25)
     station = solver.newton(guess, edge, coefficient, lagged)
     assert station is not None

@@ -69,11 +69,12 @@ At the wall, :math:`f = f' = 0`, and :math:`g` is either the specified wall
 temperature ratio or follows from a zero wall heat flux. At the outer boundary,
 :math:`f' = g = 1`.
 
-The laminar station solve uses an analytic Jacobian for the built-in Sutherland
-and Keyes viscosity models. Other viscosity models and the SA equations use
-finite-difference Jacobians. These linearizations solve the same discrete
-equations with the same convergence tolerances; they do not change the physical
-model or its applicability.
+The laminar and SA-noft2 station solves use analytic Jacobians for the exact
+built-in Sutherland and Keyes viscosity model types. Other viscosity models,
+including subclasses, use finite-difference Jacobians. SA differentiates the
+active nonsmooth branch, with right-sided derivatives at exact ties. These
+linearizations solve the same discrete equations with the same convergence
+tolerances; they do not change the physical model or its applicability.
 
 SA-noft2 transport
 ~~~~~~~~~~~~~~~~~~
@@ -130,9 +131,9 @@ zero-SA limit.
 Picard projects the result of a coupled tridiagonal solve, satisfying
 :math:`\min(n,A(n)^{-1}R)=0` at its fixed point. This differs from Newton's
 local complementarity condition: clipping can leave residuals at positive
-neighbors of clipped nodes. In the measured M2--3 fixed-wall and adiabatic
-marches, the maximum difference in ``n`` was less than :math:`2.12\times10^{-6}`
-of maximum ``n``; other output fields differed by less than
+neighbors of clipped nodes. Remeasured with the analytic Jacobian in M2--3
+fixed-wall and adiabatic marches, the maximum difference in ``n`` was less than
+:math:`2.12\times10^{-6}` of maximum ``n``; other output fields differed by less than
 :math:`7.08\times10^{-8}` of their respective maxima. These are not general
 bounds: remeasured with the wall guard at :math:`Re=10^{10}`, M2, edge 220 K
 and wall 300 K, the largest ``n`` difference is 8.099

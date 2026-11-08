@@ -26,12 +26,13 @@ turbulent front. Explicitly zero edge SA seeds retain the legacy Newton path.
 The unchanged relaxed Picard fallback solves a different projected-solve problem:
 ``min(n, A(n)^(-1) R) = 0``, with ``A`` its frozen tridiagonal SA matrix.
 Clipping after that coupled solve can leave nonzero residuals at positive
-neighbors of clipped nodes. On a captured outer-front station, the two methods
-differed by 1.26e-5 in n (3.32e-8 of the maximum n); they are not identical
-discrete fixed points. This is not a general bound: at Re=1e10, M=2, the largest
-n difference was 8.099 (6.03e-5 of the profile maximum), two nodes before
-clipping. The last positive node changed from n=1996.166 to 2002.957. Mean-flow
-profile differences were below 8.2e-8 of their maxima in that comparison.
+neighbors of clipped nodes. Measured with the analytic Jacobian on a captured
+outer-front station, the two methods differed by 1.26e-5 in n (3.32e-8 of the
+maximum n); they are not identical discrete fixed points. This is not a
+general bound: at Re=1e10, M=2, the largest n difference was 8.099 (6.03e-5 of
+the profile maximum), two nodes before clipping. The last positive node
+changed from n=1996.166 to 2002.957. Mean-flow profile differences were below
+8.2e-8 of their maxima in that comparison.
 """
 
 from typing import cast
@@ -40,8 +41,13 @@ import numpy as np
 
 from aerophysics._array import FloatArray
 from aerophysics._banded import solve_banded, solve_tridiagonal
-from aerophysics._boundary_layer_march import Discretization, Station, StationEdge
-from aerophysics.transport import DynamicViscosityModel
+from aerophysics._boundary_layer_march import (
+    Discretization,
+    Station,
+    StationEdge,
+    _viscosity_with_derivative,
+)
+from aerophysics.transport import DynamicViscosityModel, KeyesModel, SutherlandModel
 
 _CB1 = 0.1355
 _CB2 = 0.622
@@ -94,11 +100,85 @@ def _source_terms(
     return modified, extra, fw
 
 
+def _floor_derivative(
+    value: FloatArray, derivative: FloatArray, floor: float
+) -> FloatArray:
+    """Differentiate max(value, floor) in each positive column direction."""
+    return np.where(
+        value > floor,
+        derivative,
+        np.where(value == floor, np.maximum(derivative, 0.0), 0.0),
+    )
+
+
+def _source_derivatives(
+    vorticity: FloatArray,
+    n: FloatArray,
+    c: FloatArray,
+    g: FloatArray,
+    distance: FloatArray,
+    directions: tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray],
+) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
+    """Return modified, fw and their directional derivatives, node-vectorized.
+
+    Keep the residual's _source_terms untouched. At nonsmooth ties each column
+    uses the right-sided derivative (a positive perturbation of that unknown),
+    including the sign of the incoming direction. Strictly clipped directions
+    have zero derivative; at a floor/cap only directions leaving it survive.
+    """
+    dv, dn, dc, dg, dy = directions
+    chi = n / (c * g**2)
+    dchi = dn / (c * g**2) - chi * (dc / c + 2.0 * dg / g)
+    fv1 = _fv1(chi)
+    dfv1 = 3.0 * chi**2 * _CV1**3 / (chi**3 + _CV1**3) ** 2
+    fv2 = 1.0 - chi / (1.0 + chi * fv1)
+    dfv2 = -(1.0 - chi**2 * dfv1) / (1.0 + chi * fv1) ** 2 * dchi
+    extra = n * fv2 / (_KAPPA**2 * distance**2)
+    de = (dn * fv2 + n * dfv2) / (_KAPPA**2 * distance**2) - 2.0 * extra * dy / distance
+    denominator = (_CV3 - 2.0 * _CV2) * vorticity - extra
+    dd = _floor_derivative(denominator, (_CV3 - 2.0 * _CV2) * dv - de, 1e-30)
+    denominator = np.maximum(denominator, 1e-30)
+    numerator = vorticity * (_CV2**2 * vorticity + _CV3 * extra)
+    limited = vorticity + numerator / denominator
+    dl = (
+        dv
+        + ((2.0 * _CV2**2 * vorticity + _CV3 * extra) * dv + _CV3 * vorticity * de)
+        / denominator
+        - numerator / denominator * dd / denominator
+    )
+    # The two modified-vorticity branches have matching derivatives at their
+    # positive-vorticity join; retain np.where's >= choice, as in the residual.
+    regular = extra >= -_CV2 * vorticity
+    raw_modified = np.where(regular, vorticity + extra, limited)
+    dm = _floor_derivative(
+        raw_modified, np.where(regular, dv + de, dl), _MINIMUM_VORTICITY
+    )
+    modified = np.maximum(raw_modified, _MINIMUM_VORTICITY)
+    denominator = modified * _KAPPA**2 * distance**2
+    dd = _floor_derivative(
+        denominator,
+        _KAPPA**2 * (dm * distance**2 + 2.0 * modified * distance * dy),
+        1e-30,
+    )
+    denominator = np.maximum(denominator, 1e-30)
+    raw_r = n / denominator
+    dr = dn / denominator - raw_r * dd / denominator
+    dr = np.where(
+        raw_r < _MAX_R, dr, np.where(raw_r == _MAX_R, np.minimum(dr, 0.0), 0.0)
+    )
+    r = np.minimum(raw_r, _MAX_R)
+    r6 = r + _CW2 * (r**6 - r)
+    factor = ((1.0 + _CW3**6) / (r6**6 + _CW3**6)) ** (1.0 / 6.0)
+    fw = r6 * factor
+    dfw = factor * _CW3**6 / (r6**6 + _CW3**6) * (1.0 + _CW2 * (6.0 * r**5 - 1.0)) * dr
+    return modified, fw, dm, dfw
+
+
 class TurbulentDiscretization(Discretization):
     """One station of ``(f, u, g, n, Y)`` with a Picard fallback."""
 
     unknowns = 5
-    _analytic_jacobian_enabled = False
+    _analytic_jacobian_enabled = True
     _bound_constrained_newton = True
     newton_iterations = 50
     newton_tolerance = 1e-9
@@ -219,6 +299,184 @@ class TurbulentDiscretization(Discretization):
             - edge.viscosity_growth * inner_u * inner_n
         )
         return result
+
+    def _analytic_jacobian(
+        self,
+        state: FloatArray,
+        edge: StationEdge,
+        coefficient: float,
+        lagged: FloatArray,
+    ) -> FloatArray:
+        """Differentiate the unchanged five-equation discrete residual."""
+        f, u, g, n, distance = state
+        model = cast(SutherlandModel | KeyesModel, self.viscosity_model)
+        mu_edge = float(model.dynamic_viscosity(edge.temperature))
+        mu, dmu = _viscosity_with_derivative(model, edge.temperature * g)
+        c = mu / mu_edge / g
+        dc = (edge.temperature * dmu / mu_edge - c) / g
+        chi = n / (c * g**2)
+        fv1 = _fv1(chi)
+        eddy = chi * fv1
+        de = fv1 + 3.0 * chi**3 * _CV1**3 / (chi**3 + _CV1**3) ** 2
+        eddy_g = -de * chi * (dc / c + 2.0 / g)
+        eddy_n = de / (c * g**2)
+        effective = c * (1.0 + eddy)
+        effective_g = dc * (1.0 + eddy) + c * eddy_g
+        effective_n = c * eddy_n
+        pr, prt = self.prandtl_number, self.turbulent_prandtl_number
+        conductivity = c / pr * (1.0 + eddy * pr / prt)
+        conductivity_g = dc / pr * (1.0 + eddy * pr / prt) + c * eddy_g / prt
+        conductivity_n = c * eddy_n / prt
+        diffusivity = np.array([effective, conductivity, (c + n / g**2) / _SIGMA])
+        diffusivity_g = np.array(
+            [effective_g, conductivity_g, (dc - 2.0 * n / g**3) / _SIGMA]
+        )
+        diffusivity_n = np.array([effective_n, conductivity_n, 1.0 / g**2 / _SIGMA])
+        sx = 2.0 * edge.xi
+        convection = f[1:-1] + sx * (coefficient * f[1:-1] + lagged[0, 1:-1])
+        values = state[1:4]
+        centered = (values[:, 2:] - values[:, :-2]) / (2.0 * self.width)
+        slopes = np.diff(values) / self.h / 2.0
+        left_slope, right_slope = (
+            slopes[:, :-1] / self.width,
+            slopes[:, 1:] / self.width,
+        )
+        face = (diffusivity[:, 1:] + diffusivity[:, :-1]) / 2.0 / self.h
+        left, right = face[:, :-1] / self.width, face[:, 1:] / self.width
+        # Blocks are indexed by stencil offset, equation, variable, interior node.
+        blocks = np.zeros((3, 5, 5, len(g) - 2), dtype=np.float64)
+        for k, (linear, flux, weight) in enumerate(
+            (
+                (left, -left_slope, -1.0 / (2.0 * self.width)),
+                (-left - right, right_slope - left_slope, np.zeros_like(self.width)),
+                (right, right_slope, 1.0 / (2.0 * self.width)),
+            )
+        ):
+            neighbor = slice(k, len(g) - 2 + k)
+            for equation in range(1, 4):
+                blocks[k, equation, equation] = (
+                    linear[equation - 1] + convection * weight
+                )
+            blocks[k, 1:4, 2] += diffusivity_g[:, neighbor] * flux
+            blocks[k, 1:4, 3] += diffusivity_n[:, neighbor] * flux
+        blocks[1, 1:4, 0] = (1.0 + sx * coefficient) * centered
+        blocks[1, 1:4, 1] -= sx * (coefficient * values[:, 1:-1] + lagged[1:4, 1:-1])
+        for equation in range(1, 4):
+            blocks[1, equation, equation] -= sx * u[1:-1] * coefficient
+        blocks[1, 1, 1] -= 2.0 * edge.beta * u[1:-1]
+        blocks[1, 1, 2] += edge.beta
+
+        du, dg, dn = self.derivative(u), self.derivative(g), self.derivative(n)
+        blocks[:, 2, 1] += (
+            2.0 * edge.heating * effective[1:-1] * du * self.gradient_weights
+        )
+        blocks[1, 2, 2] += edge.heating * effective_g[1:-1] * du**2
+        blocks[1, 2, 3] += edge.heating * effective_n[1:-1] * du**2
+        inner_g, inner_n = g[1:-1], n[1:-1]
+        sa_diffusion = diffusivity[2, 1:-1]
+        sa_convection = _CB2 / _SIGMA * dn / inner_g**2 + sa_diffusion * dg / inner_g
+        for k, weight in enumerate(
+            (
+                -1.0 / (2.0 * self.width),
+                np.zeros_like(self.width),
+                1.0 / (2.0 * self.width),
+            )
+        ):
+            blocks[k, 3, 3] += (
+                sa_convection * weight
+                + _CB2 / _SIGMA / inner_g**2 * self.gradient_weights[k] * centered[2]
+            )
+            blocks[k, 3, 2] += (
+                sa_diffusion / inner_g * self.gradient_weights[k] * centered[2]
+            )
+        blocks[1, 3, 2] += (
+            -2.0 * _CB2 / _SIGMA * dn / inner_g**3
+            + (diffusivity_g[2, 1:-1] / inner_g - sa_diffusion / inner_g**2) * dg
+        ) * centered[2]
+        blocks[1, 3, 3] += diffusivity_n[2, 1:-1] * dg / inner_g * centered[2]
+
+        positive_n = np.maximum(inner_n, 0.0)
+        y = distance[1:-1]
+        vorticity = edge.reynolds_root * np.abs(du) / inner_g
+        # Six directions: u at i-1,i,i+1, then local g,n,Y. At du=0,
+        # d|du|/d(u_j)+ = |weight_j|, including negative stencil weights.
+        directions = np.zeros((5, 6, len(g) - 2), dtype=np.float64)
+        directions[0, :3] = (
+            edge.reynolds_root
+            / inner_g
+            * np.where(
+                du == 0.0,
+                np.abs(self.gradient_weights),
+                np.sign(du) * self.gradient_weights,
+            )
+        )
+        directions[0, 3] = -vorticity / inner_g
+        directions[1, 4] = inner_n >= 0.0
+        directions[2, 3] = dc[1:-1]
+        directions[3, 3] = 1.0
+        directions[4, 5] = 1.0
+        modified, fw, dm, dfw = _source_derivatives(
+            vorticity,
+            positive_n,
+            c[1:-1],
+            inner_g,
+            y,
+            (directions[0], directions[1], directions[2], directions[3], directions[4]),
+        )
+        source = (
+            edge.turbulence_production
+            * _CB1
+            * (dm * positive_n + modified * directions[1])
+            - _CW1
+            / y**2
+            * (dfw * positive_n**2 + 2.0 * fw * positive_n * directions[1])
+            + 2.0 * _CW1 * fw * positive_n**2 / y**3 * directions[4]
+        )
+        blocks[:, 3, 1] += source[:3]
+        blocks[1, 3, 2:5] += source[3:]
+        blocks[1, 3, 1] -= edge.viscosity_growth * inner_n
+        blocks[1, 3, 3] -= edge.viscosity_growth * u[1:-1]
+
+        bands = np.zeros((3 * self.band + 1, state.size), dtype=np.float64, order="F")
+        diagonal = 2 * self.band
+        for k in range(3):
+            for equation in range(1, 4):
+                for variable in range(5):
+                    bands[
+                        diagonal - 5 * (k - 1) + equation - variable,
+                        5 * k + variable : 5 * (len(g) - 2 + k) + variable : 5,
+                    ] = blocks[k, equation, variable]
+        # Trapezoidal f and Y integration, including their wall values.
+        for equation, variable in ((0, 1), (4, 2)):
+            bands[diagonal, equation::5] = 1.0
+            bands[diagonal + 5, equation:-5:5] = -1.0
+            bands[diagonal + 5 + equation - variable, variable:-5:5] = -self.h / 2.0
+            bands[diagonal + equation - variable, 5 + variable :: 5] = -self.h / 2.0
+        bands[diagonal, 1] = bands[diagonal, 3] = 1.0
+        bands[diagonal, -4:-1] = 1.0
+        if edge.wall_ratio is None:
+            h = self.h[0]
+            slope = (u[1] - u[0]) / h
+            wall_face = (conductivity[0] + conductivity[1]) / 2.0
+            wall_dg = (g[1] - g[0]) / h
+            bands[diagonal + 1, 1] = -edge.heating * effective[0] * slope
+            bands[diagonal - 4, 6] = edge.heating * effective[0] * slope
+            for variable, derivative, dissipation in (
+                (2, conductivity_g, effective_g),
+                (3, conductivity_n, effective_n),
+            ):
+                bands[diagonal + 2 - variable, variable] = (
+                    derivative[0] / 2.0 * wall_dg
+                    + h / 2.0 * edge.heating * dissipation[0] * slope**2
+                )
+                bands[diagonal - 3 - variable, 5 + variable] = (
+                    derivative[1] / 2.0 * wall_dg
+                )
+            bands[diagonal, 2] -= wall_face / h
+            bands[diagonal - 5, 7] += wall_face / h
+        else:
+            bands[diagonal, 2] = 1.0
+        return bands
 
     def starting_guess(self, edge: StationEdge) -> FloatArray:
         u = np.tanh(0.33 * self.eta)

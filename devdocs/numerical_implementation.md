@@ -131,11 +131,11 @@ its `total_pressure_ratio`, which only need the static states.
 
 - Each station solves `(f, u, g)` on a fixed `eta` grid with a damped Newton
   iteration. The block-tridiagonal Jacobian uses exact discrete derivatives for
-  laminar flow with exact built-in `SutherlandModel` or `KeyesModel` types.
-  Other viscosity models (including subclasses) and SA retain three-color
-  finite differences. Both paths assemble directly into expanded `gbsv` bands
-  and use the same banded LAPACK solve. Convergence requires a maximum
-  update below `1e-10` in `u` and in the relative `g`.
+  laminar flow and SA-noft2 with exact built-in `SutherlandModel` or `KeyesModel`
+  types. SA solves `(f, u, g, n, Y)`. Other viscosity models (including subclasses)
+  retain three-color finite differences. Both paths assemble directly into
+  expanded `gbsv` bands and use the same banded LAPACK solve. Laminar convergence
+  requires a maximum update below `1e-10` in `u` and in the relative `g`.
 - The analytic path uses the model's viscosity value and validation at current
   temperatures, with a private derivative in Pa s/K. For Sutherland,
   `mu_T/mu = 1.5/T - 1/(T+S)`; for Keyes, with
@@ -143,6 +143,10 @@ its `total_pressure_ratio`, which only need the static states.
   Thus `C_g = (T_e mu_T/mu_e - C)/g`. This derivative enters both face
   fluxes, dissipation, and the adiabatic half-cell balance. Convection and
   streamwise BDF terms are differentiated with edge and lagged states fixed.
+  SA also differentiates the eddy transport, production, destruction, and
+  stretched wall distance. Nonsmooth operations use the active branch, with
+  zero derivatives inside floors/caps; exact ties use the right-sided derivative
+  for a positive perturbation of each unknown (including the incoming sign).
   The residual, grids, step control, damping, and tolerances are unchanged.
   This changes no physical applicability range or coordinate convention:
   `g = T/T_e` and `eta` are dimensionless, temperatures are kelvin, positive
@@ -245,16 +249,16 @@ its `total_pressure_ratio`, which only need the static states.
   enforces zero R at every positive interior n and nonpositive R at zero n.
   Both use nondimensional `n = nu_tilde/nu_e`; the inverse Jacobian diagonal
   scales R to n units. No residual, physical model, coordinate convention, or
-  applicability range has changed. The observed difference on one captured
-  station was `1.26e-5` in n (`3.32e-8` of its maximum), but this is not a
-  general bound. Remeasured with the wall guard at `Re=1e10`, M2, edge 220 K
+  applicability range has changed. Remeasured with the analytic Jacobian,
+  the difference on one captured station was `1.26e-5` in n (`3.32e-8` of its
+  maximum), but this is not a general bound. Remeasured with the wall guard at `Re=1e10`, M2, edge 220 K
   and wall 300 K, the largest n difference is `8.098729`, or `6.03083e-5` of
   maximum n, at node 301 (zero-based), eta `632.73694`, s=100 m. The next,
   last positive node before clipping (302, eta `639.65525`) changed from
   `1996.165999` to `2002.957444`, a difference of `6.791445`; node 303 is
   effectively zero in both solutions. Velocity and temperature profile
   differences are `6.03350e-8` and `8.18300e-8` of their maxima; the wall
-  velocity slope changes by `1.53615e-7` relative, and delta99 by `7.22122e-7`.
+  velocity slope changes by `1.53488e-7` relative, and delta99 by `7.22122e-7`.
   Complete M2--3 fixed-wall and adiabatic marches differed by at most
   `2.111e-6` of maximum n; other fields differed by at most `7.072e-8` of
   their respective maxima. The tested ZPG and variable-radius M2 cases were
@@ -270,65 +274,56 @@ its `total_pressure_ratio`, which only need the static states.
   diagonal rejection, banded failures, exhaustion, projection and active-set
   convergence. The legacy-switch and laminar complete-march comparisons check
   bitwise equivalence.
-- On the rebased rounded-transition reproducer (transition at 0.1 m, wall
-  250 K), the unguarded Newton selected a zero region at nodes 1--82 on the
-  472nd SA station attempt, xi `3.4502924398659043e-4`. Its wall velocity slope
+- In the earlier finite-difference-Jacobian rounded-transition reproducer
+  (transition at 0.1 m, wall 250 K), the unguarded Newton selected a zero region
+  at nodes 1--82 on the 472nd SA station attempt, xi `3.4502924398659043e-4`. Its wall velocity slope
   was `0.469137`, versus Picard's `0.556645`. The guard rejects this state.
   The guarded reference march's Cf and heat flux match the legacy march
   exactly in the measured comparison, within the existing `1e-6` bound.
-- The original active-set change measured the **88-test
-  `solver_verification` tier**, including transition and active-set comparison
-  tests, using four workers. Two runs set the class default to legacy or guarded Newton;
-  tests that explicitly toggle the private switch retained those overrides.
-  Thus both totals include legacy comparison calls, and the legacy-default
-  run also includes explicitly requested active-set solves. SA Newton attempts
-  were `137,484` in both runs; successes were `131,896 -> 136,845`.
-  Zero-damping failures were `5,586 -> 600` (first update `4,716 -> 526`, later
-  `870 -> 74`), wall-guard rejections `2 -> 32`, and iteration exhaustion
-  `0 -> 7`. Both runs had zero invalid-diagonal, nonfinite-update, and caught
-  exception failures. Picard fallbacks were `5,586 -> 637`, total calls
-  `5,587 -> 638`, and sweeps `806,235 -> 107,160`; every Picard call converged.
-  Tests also call Newton/Picard directly, explaining why failure, fallback,
-  and call counts differ. Counts include repeated worker-local fixtures.
-- In the guarded-default run, the actual active-set path had `128,247` attempts,
-  `128,208` successes, 32 wall-guard rejections and 7 exhausted solves. The
-  legacy path (explicit comparisons plus zero-SA dispatch) had 9,237 attempts
-  and 600 zero-damping failures. Of all returned active-set stations, 5,021
-  had a nonempty active/bound set, each containing one node. Counting both
-  selected active rows and projected zeros, **zero** stations had nodes
-  disconnected from the outermost active region, and **zero** had active nodes
-  at `u < 0.99`. No stricter region rule was added. Fallback stations retain
-  Picard's different fixed point. Generated verification records remain
-  unchanged at stored precision. The serial enthalpy-refinement test was
-  remeasured on the rebased code: 40.39 s with legacy Newton and 32.50 s with
-  guarded Newton (both passed). These elapsed times are machine-dependent.
-- The PR #95 convergence fix was rechecked against pre-fix `a889e88` on the current
-  **90-test `solver_verification` tier**, with four workers on macOS arm64,
+- After integrating PR #94, the **90-test `solver_verification` tier** was
+  remeasured with the **analytic Jacobian**, using four workers on macOS arm64,
   Python 3.13.5, NumPy 2.5.1 / Accelerate and SciPy 1.18.0. Temporary in-memory
-  instrumentation counted `137,484` SA Newton attempts in each run:
-  `128,247` active-set and `9,237` legacy-dispatch attempts. Active-set failures
-  remained 32 wall-guard rejections and 7 iteration-limit failures; diagonal,
-  nonfinite-update, caught-exception and Phi-stagnation failures were all zero.
-  The new Phi bound withheld convergence on 66 iterations (about 0.052% of
-  active-set attempts); further iterations resolved all of them. Returning
-  immediately to Picard on every such small-but-nonzero update would be
-  premature. Legacy zero-damping failures remained 600. Picard fallbacks,
-  calls and sweeps remained `637`, `638` and `107,160`, respectively.
-  Comparing all 98 returned public march results at matching inputs gave
-  maximum absolute differences divided by each baseline field maximum of
-  `6.56e-15` for n, `2.04e-14` for Cf and `1.10e-11` for heat flux; all other
-  fields were below `4.66e-14`. The legacy-comparison figures above remain
-  unchanged at their quoted precision. All 14 generated-asset checks passed
-  without modifying reference data or generated files. The normal SA and
-  active-set tests passed 64 cases with 100% line and branch coverage of the
-  SA module. The six-node regression uses the real finite-difference Jacobian
-  and banded solve for the indefinite middle block `[-1, 2; 2, -1]`: its
-  negative step projects to zero but leaves positive R, so it must request
-  Picard. Separate tests cover scaled Phi acceptance, continued damped
-  progress, and exact active zeros after an undamped step despite simulated
-  one-ULP LU roundoff. The captured-station test selects both branches by
-  `n <= -R/abs(J_ii)` and bounds Phi, allowing tiny positive active values
-  after damping rather than using exact-zero equality to identify the branch.
+  counters changed no numerical decisions. Two runs set the class default to
+  legacy or guarded active-set Newton; explicit test overrides were retained.
+  Thus both totals include legacy comparison calls, and the legacy-default
+  run includes explicitly requested active-set solves. Each run passed all
+  90 tests. Counts include repeated worker-local fixtures and direct solver
+  calls, so they are observations for this tier, not per-march guarantees.
+
+  | Measurement | Previous finite-difference Jacobian | Merged analytic Jacobian |
+  | --- | --- | --- |
+  | Picard fallbacks, legacy -> guarded default | 5,586 -> 637 | 5,586 -> 634 |
+  | Picard calls, legacy -> guarded default | 5,587 -> 638 | 5,587 -> 635 |
+  | Picard sweeps, legacy -> guarded default | 806,235 -> 107,160 | 806,234 -> 105,432 |
+  | Guarded-default active-set wall rejections | 32 | 30 |
+  | Guarded-default active-set iteration exhaustion | 7 | 6 |
+  | Guarded-default Phi-withheld iterations | 66 | 67 |
+
+  Every Picard call converged. In the guarded-default run, invalid-diagonal,
+  nonfinite-update, caught-exception and Phi-stagnation failures were all zero;
+  legacy zero-damping failures remained 600. The Phi bound withheld convergence
+  on 67 iterations; small nonzero updates still allow further Newton iterations.
+  The high-Re n, u and g differences above are unchanged at their quoted precision; the
+  relative wall velocity slope difference changed from `1.53615e-7` to
+  `1.53488e-7`. The captured-station difference is `1.25960e-5` in n, or
+  `3.32343e-8` of its maximum. Generated verification records and reference
+  data were not modified; all 14 generated-asset checks passed.
+- Both Jacobian paths passed verification: the default analytic path passed
+  all 90 solver-tier tests, and forcing the private SA analytic switch off
+  passed all 29 active-set and transition solver-tier tests. The normal SA
+  and active-set tests passed 65 cases with 100% line and branch coverage of
+  the SA module. A real six-node station compares the SA diagonals in gbsv
+  storage at `rtol=2e-6` (forward-difference truncation/cancellation), and its
+  converged active-set states at `rtol=atol=1e-12` (roundoff allowance below
+  the `1e-9` stopping threshold); the maximum absolute state difference was
+  `8.88e-16`. Synthetic-residual tests explicitly disable the analytic
+  Jacobian so that derivatives match their substituted equations. The
+  stagnation regression retains the real finite-difference assembly and
+  banded solve for the indefinite middle block `[-1, 2; 2, -1]`: its negative
+  step projects to zero but leaves positive R, so it must request Picard.
+  Separate tests cover scaled Phi acceptance, continued damped progress,
+  exact active zeros despite simulated one-ULP LU roundoff, and the captured
+  station's branch criterion `n <= -R/abs(J_ii)`, including damped active rows.
 - Edge dimensional `nu_tilde` is conserved. The viscosity exponent is a central
   difference in log temperature with half-width `1e-5`, valid for any viscosity
   protocol implementation. Isentropic density and temperature derivatives give

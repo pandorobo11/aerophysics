@@ -1118,3 +1118,182 @@ def test_roundoff_cone_boundary_layer_completion(regime: BoundaryLayerRegime) ->
         "endpoint_m",
         result.distance[-1],
     )
+
+
+def test_coarse_fan_stops_unneeded_shock_extrapolation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_fit, original_state = moc._shock_point, moc._Flow.shock
+    truncated: list[tuple[moc._Point, moc._Point, float, moc._Flow]] = []
+
+    def fit(
+        a: moc._Point,
+        previous: moc._Point,
+        beta: float,
+        flow: moc._Flow,
+        *,
+        x_limit: float = np.inf,
+    ) -> tuple[moc._Point, float] | None:
+        result = original_fit(a, previous, beta, flow, x_limit=x_limit)
+        if result is None:
+            truncated.append((a, previous, beta, flow))
+        return result
+
+    def valid_shock(flow: moc._Flow, x: float, r: float, beta: float) -> moc._Point:
+        # Invalid numerical trial angles must never reach Rankine--Hugoniot.
+        assert np.arcsin(1 / flow.mach) < beta < np.pi / 2
+        return original_state(flow, x, r, beta)
+
+    monkeypatch.setattr(moc, "_shock_point", fit)
+    monkeypatch.setattr(moc._Flow, "shock", valid_shock)
+    solutions = [
+        axisymmetric_body_flow(
+            [0, 0.3, 1.3],
+            [0, 0.05, 0.05],
+            mach=3,
+            pressure=1e4,
+            temperature=220,
+            fan_angle_step=radians(step),
+        )
+        for step in (1, 3)
+    ]
+    assert len(truncated) == 1
+    positions = np.linspace(0.3, 1.3, 1001)
+    pressures = []
+    for result in solutions:
+        assert result.axial_distance[-1] == 1.3
+        assert np.all(result.mach > 1)
+        mask = result.axial_distance >= 0.3
+        pressures.append(
+            CubicSpline(result.axial_distance[mask], result.pressure[mask])(positions)
+        )
+    error = float(np.max(abs(pressures[1] / pressures[0] - 1)))
+    print("COARSE_FAN relative_pressure_difference", error)
+    # Measured 8.846e-5; 1.2e-4 allows 35% margin without relaxing any old bound.
+    assert error < 1.2e-4
+    assert solutions[1].shock_axial_distance[-1] < 1.3
+    # The identical numerical failure cannot be dropped when its continuation
+    # belongs to the requested domain. It remains a location-bearing diagnostic.
+    with pytest.raises(ModelRangeError, match=r"shock angle corrector.*x=.*r="):
+        original_fit(*truncated[0], x_limit=3.0)
+
+
+@pytest.mark.solver_verification
+@pytest.mark.parametrize(("mach", "angle"), [(3, 9.46), (6, 4.76)])
+def test_fan_step_and_characteristic_count_sweep(mach: float, angle: float) -> None:
+    start = time.perf_counter()
+    radius = tan(radians(angle))
+    end = 1 + 20 * radius
+    for count in (8, 24, 88):
+        for step in (0.5, 1, 2, 3, 4, 5):
+            result = solve(mach, angle, count, step)
+            assert result.axial_distance[-1] == end
+            assert np.all(np.isfinite(result.pressure))
+            assert np.all(result.pressure > 0)
+            assert np.all(result.mach > 1)
+    print("FAN_SWEEP", mach, "18 cases seconds", time.perf_counter() - start)
+
+
+@pytest.mark.parametrize("count", [8, 88])
+@pytest.mark.parametrize("end", [2.5, 2.8, 3.0])
+def test_long_coarse_fan_reports_missing_domain(count: int, end: float) -> None:
+    with pytest.raises(ModelRangeError, match=r"at x=[\d.]+ m, r=[\d.]+ m") as caught:
+        axisymmetric_body_flow(
+            [0, 0.3, end],
+            [0, 0.05, 0.05],
+            mach=3,
+            pressure=1e4,
+            temperature=220,
+            characteristic_count=count,
+            fan_angle_step=radians(3),
+        )
+    if end < 3:
+        assert "reduce fan_angle_step" in str(caught.value)
+    else:
+        assert "shock angle corrector" in str(caught.value)
+
+
+@pytest.mark.parametrize("offset", [-1, 0, 1])
+def test_truncation_requires_wall_foot_at_or_beyond_end(
+    monkeypatch: pytest.MonkeyPatch,
+    offset: int,
+) -> None:
+    flow = moc._Flow(3, AIR)
+    # The fan state's direction differs from the actual cylinder tangent.
+    wall = moc._Point(0.2, 0.1, radians(5), 0, flow.upstream_p0)
+    middle = moc._Point(0.4, 0.2, 0, 0, flow.upstream_p0)
+    outer = moc._Point(0.5, 0.4, 0, 0, flow.upstream_p0)
+    foot = moc._estimated_wall_foot(outer, wall, 0, flow)
+    assert foot is not None
+    assert foot == pytest.approx(0.5 + 0.3 * np.sqrt(8), rel=1e-14)
+    end = (
+        float(np.nextafter(foot, np.inf if offset > 0 else -np.inf)) if offset else foot
+    )
+    monkeypatch.setattr(moc, "_interior", lambda a, b, flow: b)
+    monkeypatch.setattr(moc, "_shock_point", lambda *a, **k: None)
+    if offset > 0:
+        with pytest.raises(
+            ModelRangeError,
+            match=r"C- wall-foot estimate.*reduce fan_angle_step.*x=0.2",
+        ):
+            moc._row(wall, [middle, outer], flow, radians(22), end, True, wall_angle=0)
+    else:
+        points, _, has_shock = moc._row(
+            wall,
+            [middle, outer],
+            flow,
+            radians(22),
+            end,
+            True,
+            wall_angle=0,
+        )
+        assert points == [wall, middle, outer]
+        assert not has_shock
+
+
+@pytest.mark.parametrize(("radius", "angle"), [(0.1, 0), (0.4, radians(30))])
+def test_unavailable_wall_foot_cannot_authorize_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+    radius: float,
+    angle: float,
+) -> None:
+    flow = moc._Flow(3, AIR)
+    wall = moc._Point(0.2, 0.1, 0, 0, flow.upstream_p0)
+    outer = moc._Point(0.5, radius, angle, 0, flow.upstream_p0)
+    assert moc._estimated_wall_foot(outer, wall, 0, flow) is None
+    monkeypatch.setattr(moc, "_interior", lambda a, b, flow: b)
+    monkeypatch.setattr(moc, "_shock_point", lambda *a, **k: None)
+    with pytest.raises(ModelRangeError, match=r"wall-foot estimate unavailable.*x=0.2"):
+        moc._row(wall, [outer, outer], flow, radians(22), 1, True)
+
+
+@pytest.mark.parametrize("operation", ["row", "inverse", "wall"])
+def test_front_exhaustion_is_checked_before_consumption(
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    flow = moc._Flow(3, AIR)
+    wall = moc._Point(0.3, 0.05, 0, 0, flow.upstream_p0)
+    with pytest.raises(
+        ModelRangeError,
+        match=r"front exhausted.*reduce fan_angle_step at x=0.3 m, r=0.05 m",
+    ):
+        if operation == "row":
+            moc._row(wall, [], flow, radians(22), 1.3, False)
+        elif operation == "inverse":
+            moc._wall_at([wall], wall, 0, 1.3, flow)
+        else:
+            # Force a one-point front immediately after the single fan row.
+            monkeypatch.setattr(
+                moc,
+                "_row",
+                lambda wall, parents, flow, beta, *a, **k: ([wall], beta, False),
+            )
+            axisymmetric_body_flow(
+                [0, 0.3, 1.3],
+                [0, 0.05, 0.05],
+                mach=3,
+                pressure=1e4,
+                temperature=220,
+                fan_angle_step=radians(10),
+            )

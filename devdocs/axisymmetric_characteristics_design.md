@@ -931,3 +931,206 @@ combined coverage is **96.95%** (6000 statements, 1434 branch exits);
 The 95% core gate passes. No test limits were changed and no skip/xfail was
 added. `scripts/check.sh --full` remains for the reviewer. No commit, push,
 privilege escalation or generated-file edit was performed.
+
+
+## Coarse-fan shock extrapolation failure (3-degree maximum fan step)
+
+Reproduced M3, (x,r)=(0,0),(0.3,0.05),(1.3,0.05) m, p_inf=10000 Pa,
+T_inf=220 K, count 88, fan_angle_step=3 degrees. The failing last interior
+point was (1.2960647601,0.4729325710) m, theta=0.030357129 rad; the previous
+shock point was (1.2470348168,0.4888831772) m, beta=21.4069926385 degrees.
+The unrestricted secant trial sequence was 21.4069926385, 21.4072067084,
+19.8709149865, then **19.3692770429 degrees**, below the free-stream Mach
+angle 19.4712206345 degrees. The last trial, not a valid physical state,
+caused the former `flow.shock` range error.
+
+The review's geometric explanation is supported, but its approximate residual
+root is not a root of the full discrete compatibility equation. With the
+complete geometric corrector, at beta_previous the intersection is x=2.8760192 m
+(outside x_limit=1.3 m), h*(x-a.x)=-0.03147338 and the full residual=+0.06788149.
+At 20.7 degrees the intersection is x=3.5089212 m and the full residual is
++0.03797845. Sampling 2001 angles between mu_inf+1e-9 and beta_previous
+found a minimum residual +0.01666599 near 19.89612 degrees, and every
+intersection beyond x=2.8760192 m. Samples through 30 degrees also remain
+positive. Thus merely bracketing between mu_inf and beta_previous does not
+provide a sign change; the large, unnecessary downstream cell is not a
+well-resolved shock continuation for this coarse fan. This is a numerical
+extrapolation failure, not a detached shock or subsonic body flow.
+
+Initial approach was **(b), applied as a fallback to preserve existing output**
+(**the continuation-only authorization below is superseded by the PR #92
+dependence and front-size checks**):
+retain the existing arithmetic and successful secant solves, but guard every
+trial angle before Rankine--Hugoniot evaluation. A private trial-angle
+exception is distinct from physical `ModelRangeError`. If that numerical
+trial leaves (mu_inf,pi/2), and the geometric continuation at the previous
+shock tangent is beyond x_limit, return no fitted point. `_row` then stops
+shock tracking with `has_shock=False`, retaining the computed characteristic
+front, as in the existing downstream truncation path. At least three front
+points are required. No artificial outer state is inserted. This initial condition restricted only
+the prospective shock point, not the entire discarded outer region; it was
+insufficient to authorize truncation on longer bodies. The corrected
+wall-dependence criterion and mandatory front guards are specified below.
+Otherwise report a location-bearing `ModelRangeError`. Subsonic states, characteristic crossing,
+geometry-corrector failures and other `ModelRangeError`s are not caught or
+silenced. The same failed unit process with x_limit=3 m is a regression check
+that the failure remains visible when its continuation is in the requested
+region. The angle guard is also checked by an observer that requires every
+actual `flow.shock` call to receive an admissible angle.
+
+Before editing, 59 representative solves were recorded: 55 successful and
+four reproductions of the error. Recomputing all of them after the fix gives
+**bit-identical arrays for all 55 previously successful cases**: maximum
+relative wall-pressure difference **0**, unchanged surface coordinates and
+unchanged shock coordinates/angles. They include the M3/9.46 and M6/4.76
+default cone--cylinders, four coupled refinement levels, both forced-cone
+marches at four counts, planar expansion, multiple corners, the rotational
+entropy/mass case, NACA geometries and the boundary-layer coupling geometry.
+For the unit-cone default cases the last shock x stays at 6.0480865521 m (M3)
+and 4.4863467839 m (M6), respectively. The four previously failed solves now
+complete. There is no new reference-data fixture or change to old thresholds.
+
+For the reported 0.3 m cone, the successful 1-degree trace still ends at
+x=1.8134098139 m. The newly successful 3-degree result stops its trace at the
+last known fitted point, **x=1.2470348168 m**, before the body endpoint. It
+does not supply the remaining shock segment, even though it supplies the
+wall flow through x=1.3 m. Public signatures are unchanged. The model page
+and solver docstring now explicitly allow either a successful trace beyond
+the endpoint or an incomplete trace ending before it. Do not extrapolate
+missing shock data to claim a terminal transverse total-pressure profile.
+The previously reported default-resolution profiles remain unchanged.
+
+The fast regression compares cylinder pressure on 1001 common axial stations,
+using separate cylinder-only cubic interpolation, never across the shoulder
+jump. Maximum 3-degree versus 1-degree difference is **0.6487273 Pa**, or
+**8.84545098e-5 relative**. Its new acceptance bound is **1.2e-4**, about 35.7%
+above the measurement. This measures finite-fan resolution difference, not
+physical validation or a globally certified error bound. The slow-marked
+sweep uses counts **8,24,88** and maximum steps **0.5,1,2,3,4,5 degrees** for
+M3/9.46 and M6/4.76 unit cones followed by ten-diameter cylinders. All **36**
+cases complete with positive pressure and supersonic surface states; isolated
+run times were **0.712 s** (18 M3 cases) and **0.539 s** (18 M6 cases).
+
+
+Final validation for this correction:
+
+- Requested `uv run --no-sync pytest -q -p no:cacheprovider
+  tests/test_characteristics.py`: **89 passed, 76.49 s**.
+- Requested solver-verification-only command: **15 passed, 74 deselected,
+  71.45 s**. Most time is the existing laminar/SA coupling verification.
+  The new sweep measured with normal coverage instrumentation takes
+  **1.810+1.202=3.012 s** for its 36 solves (3.99 s including pytest/coverage
+  reporting). The reproduction also completes for every separately checked
+  count 8,12,16,20,24,32,48,88.
+- Requested Ruff check and format check: pass (117 files); mypy: pass
+  (99 source files). Extra Sphinx HTML build with `-W` and `git diff --check`:
+  pass.
+- In the complete 89-test run, `characteristics.py` covers **391/391 statements
+  and 118/118 branch exits: 100% combined**. No whole-repository coverage
+  claim is made from these targeted commands; the full ordinary suite was
+  not repeated in this correction.
+
+The first literal uv invocation could not access
+`/Users/satoshi/.cache/uv/sdists-v9/.git` (sandbox `Operation not permitted`).
+All requested commands then succeeded with
+`UV_CACHE_DIR=/private/tmp/moc-fan-fix/uv-cache`; this requires no escalation,
+network synchronization, or environment change in the repository.
+`scripts/check.sh --full` remains assigned to the reviewer. No commit, push,
+privilege escalation, boundary-layer change, old threshold relaxation,
+skip/xfail, reference-data or generated-file edit was made.
+
+
+## PR #92: wall dependence and characteristic-front exhaustion
+
+Work started on `fix/moc-coarse-fan-shock-truncation`, HEAD `5e30f70`.
+The previous continuation-only condition was insufficient: discarding the
+outer region can deprive later wall points of incoming C- data even though
+the prospective shock intersection is farther downstream than the endpoint.
+The reported case was reproduced: at count 88, 3-degree fan step, the retained
+outer point has x=1.2960647601 m, r=0.4729325710 m and local C- slope
+**-0.3311845151**. Its straight-ray cylinder foot is **x=2.5730947895 m**,
+whereas the prospective shock intersection is x=2.8760191852 m. Terminations
+at 2.5 and 2.8 m formerly exhausted the front and raised IndexError.
+
+Truncation now needs BOTH conditions: the original shock-continuation test
+must permit a candidate truncation, and the retained outermost point's local
+C- ray must have an estimated wall foot at or beyond x_limit. Retaining the
+original test is conservative: a failed shock fit inside the requested axial
+extent is still reported, including the existing x_limit=3 m unit regression.
+For outer point a, current wall point w, local C- slope lambda_minus and
+actual body-segment slope b, the estimate is
+
+```
+gap = a.r - w.r - b * (a.x - w.x)
+x_foot = a.x + gap / (b - lambda_minus)
+```
+
+Require positive gap and closing slope b-lambda_minus; if no forward foot
+can be established, reject the truncation. The body-segment angle is supplied
+explicitly during a centered fan: the intermediate flow angle in the fan is
+not the wall tangent. On a convex piecewise linear body, future wall segments
+lie below the current segment's extension, which is conservative with respect
+to wall geometry. **The straight C- ray itself is only a local approximation,
+not a guaranteed conservative bound for the curved characteristic.** In this
+example it overestimates the available wall march: the count-88 finite front
+runs out near x=2.49225 m, before its estimated foot at 2.57309 m.
+
+Consequently front-size checks are mandatory even after the estimate passes:
+`_solve` requires two points before indexing the incoming wall characteristic;
+`_wall_at` requires two before building an inverse-wall stencil; and `_row`
+requires a nonempty parent front before interior/shock operations. The row
+entry check also covers `points[1:]` fan updates and `points[2:]` wall-step
+consumption. A shortage raises a wall-position-bearing `ModelRangeError`
+identifying front exhaustion and recommending **reduce fan_angle_step**.
+There is no broad IndexError catch, invented outer state, missing-interval
+extrapolation, or successful return before the requested wall endpoint.
+Subsonic/geometry errors and the trial-angle guard retain their behavior.
+These checks enforce the available discrete front, not a claim of a globally
+exact continuum domain-of-dependence calculation.
+
+Measured endpoint behavior at 3 degrees (M3, shoulder (0.3,0.05) m):
+
+| End x [m] | Count 8 | Count 24 | Count 88 |
+|---:|---|---|---|
+| 1.3, 2.0, 2.4 | Complete | Complete | Complete |
+| 2.5 | Front exhausted at wall x=2.49170635 | Front exhausted at wall x=2.49218854 | Front exhausted at wall x=2.49224752 |
+| 2.8 | Reject at shoulder; foot=2.56863798 | Reject at shoulder; foot=2.57260786 | Reject at shoulder; foot=2.57309479 |
+| 3.0 | Existing shock-angle diagnostic | Existing shock-angle diagnostic | Existing shock-angle diagnostic |
+
+All failures are location-bearing `ModelRangeError`s; there are no IndexErrors.
+The 2.5 m case demonstrates why the local foot test alone is not sufficient.
+Long bodies with coarse fans may therefore still fail explicitly and need a
+smaller `fan_angle_step`; they are not supplied with a fabricated continuation.
+The 1.3 m case retains its pressure difference **8.84545098e-5** against
+1 degree and the **unchanged 1.2e-4 bound**. Successful output is unchanged:
+all arrays are bit-identical for **59 comparisons against HEAD 5e30f70**,
+and also for the **55 saved successful cases from before the first coarse-fan
+fix**. Maximum relative wall-pressure difference is **0**. The public API
+is unchanged; the model page and docstrings state the revised guarantees.
+
+New fast regressions cover ends 2.5/2.8/3.0 with counts 8 and 88, the estimated
+foot one floating-point step before/equal to/after the endpoint, unavailable
+forward intersections, and each of the row/inverse-wall/direct-wall point-count
+guards. The foot test checks use of the real wall tangent during a fan. The
+existing 36-case solver-verification sweep and its settings are unchanged;
+a focused no-coverage run measured 0.785 s for M3 plus 0.596 s for M6.
+No old thresholds, skip/xfail settings, boundary-layer modules, reference data
+or generated files were changed.
+
+
+Final verification on the corrected branch:
+
+- Requested full `tests/test_characteristics.py` command: **103 passed,
+  82.58 s**, including all unchanged numerical and boundary-layer checks.
+- Requested `-m solver_verification` command: **15 passed, 88 deselected,
+  86.97 s**. The 36-condition sweep remains unchanged and successful.
+- Requested Ruff check/format: pass (121 files); mypy: pass (103 source files).
+  Extra Sphinx HTML build with `-W` and `git diff --check`: pass.
+- In the 103-test run, `characteristics.py` has **409/409 statements and
+  128/128 branch exits covered: 100% combined**. These targeted commands
+  do not measure whole-repository coverage or exercise the GUI socket server.
+
+Commands used `UV_CACHE_DIR=/private/tmp/moc-domain-fix/uv-cache`, preserving
+`uv run --no-sync` and avoiding the known sandbox restriction on the default
+cache. No privilege escalation, commit, push, or environment synchronization
+was performed. `scripts/check.sh --full --check-only` remains for the reviewer.

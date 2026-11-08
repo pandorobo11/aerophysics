@@ -116,8 +116,25 @@ jobs:
         run: bash scripts/check-generated.sh
 
   solver-verification:
-    name: Solver verification (Ubuntu, Python 3.12)
+    name: Solver verification (${{ matrix.shard }}, Ubuntu, Python 3.12)
     runs-on: ubuntu-24.04
+    # Two shards halve the CI critical path; ci-gate sees one aggregated
+    # result for this job id, which fails if either shard fails. The "other"
+    # shard ignores the first shard's files, so new verification files run
+    # there automatically. Balanced by measured CPU time (2026-11-09: 172 s
+    # versus 194 s of 366 s).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: SA and planar
+            selection: >-
+              tests/test_marching_boundary_layer_sa.py
+              tests/test_marching_boundary_layer.py
+          - shard: other
+            selection: >-
+              --ignore=tests/test_marching_boundary_layer_sa.py
+              --ignore=tests/test_marching_boundary_layer.py
     steps:
       - uses: actions/checkout@v6
         with:
@@ -154,7 +171,9 @@ jobs:
           fi
       - name: Run solver verification
         if: steps.solver.outputs.needed == 'yes'
-        run: uv run pytest -m solver_verification --no-cov -n auto
+        run: >-
+          uv run pytest -m solver_verification --no-cov -n auto --durations=15
+          ${{ matrix.selection }}
 
   docs:
     name: Documentation build
