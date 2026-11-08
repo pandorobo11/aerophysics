@@ -82,9 +82,20 @@ a corner's leading wave can first reach the shock farther downstream.
 Characteristics that do not reach the shock within the needed downstream
 region are truncated without imposing an outflow state. Successful downstream
 shock extrapolations are retained. If an angle iteration leaves the admissible
-shock interval and the geometric continuation at the previous shock tangent
-is beyond the body endpoint, that extrapolation is abandoned. The trace then
-stops at the last fitted shock point, which can be before the body endpoint;
+shock interval, stopping its extrapolation requires both the geometric
+continuation beyond the body endpoint and a wall-dependence check: the local
+C- ray from the retained outermost point must meet the current body segment's
+extension at or beyond the endpoint. The actual body tangent is used even
+inside a centered fan. Future convex segments lie below that extension, but
+the straight-ray estimate does not include characteristic curvature. Every
+wall/row operation therefore checks that enough front points remain; a
+shortage raises a location-bearing ``ModelRangeError`` with advice to reduce
+``fan_angle_step``. Long bodies with coarse fans can require this refinement.
+No exterior states are invented, missing wall intervals are not extrapolated,
+and an incomplete wall march is never returned as a successful result.
+
+An accepted truncation leaves the trace at its last fitted shock point,
+which can be before the body endpoint;
 no terminal shock state or complete outer flow field is promised. Do not
 extrapolate missing shock data to construct a terminal transverse profile.
 Subsonic states, crossed characteristics and failures inside the requested

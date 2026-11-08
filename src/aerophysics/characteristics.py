@@ -293,7 +293,11 @@ def _shock_point(
     *,
     x_limit: float = np.inf,
 ) -> tuple[_Point, float] | None:
-    """Fit the shock; optionally abandon an unsolved downstream extrapolation."""
+    """Fit the shock; None marks a failed downstream trial, not wall coverage.
+
+    The caller must also check the retained front's C- wall-foot estimate
+    before accepting truncation, and check front sizes throughout the march.
+    """
     ca = flow.coefficients(a, 1)
     continuation_x: float | None = None
 
@@ -425,7 +429,14 @@ def _row(
     beta: float,
     x_limit: float,
     has_shock: bool,
+    *,
+    wall_angle: float | None = None,
 ) -> tuple[list[_Point], float, bool]:
+    if not parents:
+        raise _failure(
+            wall,
+            "characteristic front exhausted before row update; reduce fan_angle_step",
+        )
     points = [wall]
     for parent in parents:
         points.append(_interior(points[-1], parent, flow))
@@ -440,10 +451,38 @@ def _row(
             x_limit=x_limit if len(points) >= 3 else np.inf,
         )
         if fitted is None:
+            foot = _estimated_wall_foot(
+                points[-1], wall, wall.theta if wall_angle is None else wall_angle, flow
+            )
+            if foot is None or foot < x_limit:
+                location = "unavailable" if foot is None else f"x={foot:.12g} m"
+                raise _failure(
+                    wall,
+                    "shock fit failed: truncated front cannot cover the requested wall "
+                    f"(C- wall-foot estimate {location}, end x={x_limit:g} m); "
+                    "reduce fan_angle_step",
+                )
             return points, beta, False
         shock, beta = fitted
         points.append(shock)
     return points, beta, has_shock
+
+
+def _estimated_wall_foot(
+    outer: _Point, wall: _Point, wall_angle: float, flow: _Flow
+) -> float | None:
+    """Straight local C- ray meets the current body segment's extension.
+
+    Future convex segments lie below this wall extension. The ray itself may
+    curve, so this estimate does not replace the front-size checks in the march.
+    """
+    slope = flow.coefficients(outer, -1)[0]
+    wall_slope = tan(wall_angle)
+    gap = outer.r - wall.r - wall_slope * (outer.x - wall.x)
+    closing = wall_slope - slope
+    if gap <= 0 or closing <= 0:
+        return None
+    return outer.x + gap / closing
 
 
 def _body_inputs(
@@ -489,7 +528,10 @@ def axisymmetric_body_flow(
     a corner may first reach the shock farther downstream. No outflow state
     is imposed. An unsolved downstream extrapolation may instead leave the
     shock trace ending before the body's last x; no terminal shock state is
-    guaranteed. All input lengths are in metres, pressure in Pa and
+    guaranteed. Truncation also requires the retained outer point's estimated
+    C- wall foot to reach the body endpoint. If the finite front cannot support
+    further wall steps, raise ModelRangeError; reduce ``fan_angle_step`` for
+    long bodies with coarse fans. All input lengths are in metres, pressure in Pa and
     temperature in K; angles and ``fan_angle_step`` are in radians.
 
     Raises
@@ -663,13 +705,25 @@ def _solve(
                     start.p0,
                 )
                 points, beta, has_shock = _row(
-                    wall, points[1:], flow, beta, float(x[-1]), has_shock
+                    wall,
+                    points[1:],
+                    flow,
+                    beta,
+                    float(x[-1]),
+                    has_shock,
+                    wall_angle=angle,
                 )
                 if has_shock:
                     shocks.append((points[-1].x, points[-1].r, beta))
                     last_complete = points
             surface[-1] = wall
         while wall.x < x[segment + 1]:
+            if len(points) < 2:
+                raise _failure(
+                    wall,
+                    "characteristic front exhausted before wall march; "
+                    "reduce fan_angle_step",
+                )
             new = _wall(points[1], wall, angle, flow)
             target_x, target_r = float(x[segment + 1]), float(r[segment + 1])
             target_index = int(np.searchsorted(original_x, target_x))
@@ -748,6 +802,12 @@ def _wall_at(
     points: list[_Point], wall: _Point, angle: float, target: float, flow: _Flow
 ) -> _Point:
     """Inverse wall operation with quadratic interpolation on the C+ edge."""
+    if len(points) < 2:
+        raise _failure(
+            wall,
+            "characteristic front exhausted before inverse wall operation; "
+            "reduce fan_angle_step",
+        )
     a, b = points[:2]
     scale = b.x - a.x
     z = (points[2].x - a.x) / scale if len(points) >= 3 else 0.0
