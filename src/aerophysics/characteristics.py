@@ -474,6 +474,37 @@ def axisymmetric_body_flow(
     )[0]
 
 
+def _coincident_vertex(
+    coordinate: float, vertices: FloatArray, tolerances: FloatArray
+) -> int | None:
+    """Identify roundoff overlap using the vertex's adjacent input intervals."""
+    index = min(int(np.searchsorted(vertices, coordinate)), len(vertices) - 1)
+    if index > 0 and abs(coordinate - vertices[index - 1]) < abs(
+        coordinate - vertices[index]
+    ):
+        index -= 1
+    return index if abs(coordinate - vertices[index]) <= tolerances[index] else None
+
+
+def _append_surface(
+    surface: list[_Point],
+    point: _Point,
+    vertices: FloatArray,
+    radii: FloatArray,
+    tolerances: FloatArray,
+) -> None:
+    """Give input geometry priority over roundoff-close automatic stations."""
+    index = _coincident_vertex(point.x, vertices, tolerances)
+    if index is not None:
+        point = _Point(
+            float(vertices[index]), float(radii[index]), point.theta, point.p, point.p0
+        )
+    if surface[-1].x == point.x:
+        surface[-1] = point
+    else:
+        surface.append(point)
+
+
 def _solve(
     axial_distance: ArrayLike,
     radius: ArrayLike,
@@ -488,6 +519,17 @@ def _solve(
     starting_distance: float | None = None,
 ) -> tuple[AxisymmetricBodyFlowResult, list[_Point]]:
     original_x, original_r, original_angles = _body_inputs(axial_distance, radius)
+    intervals = np.diff(original_x)
+    # A few rounding units relative to the SMALLER adjacent input interval.
+    # Never merge two input vertices, or use the full body length as tolerance.
+    vertex_tolerances = np.maximum(
+        32
+        * np.finfo(float).eps
+        * np.minimum(np.r_[intervals[0], intervals], np.r_[intervals, intervals[-1]]),
+        # Coordinate subtraction cannot resolve below representation spacing,
+        # even when an adjacent input interval is extremely short.
+        4 * np.spacing(original_x),
+    )
     # Collinear vertices are output locations, not new characteristic fronts.
     # Nearly coincident fronts have poor intersection conditioning near a shock.
     keep = np.concatenate(
@@ -540,16 +582,20 @@ def _solve(
         )
     except (NoAttachedShockError, ShockConvergenceError) as error:
         raise ModelRangeError(f"starting cone at x=0 m, r=0 m: {error}") from error
+    cone_samples = [
+        float(xx)
+        for xx in np.linspace(0, x[cone_end], characteristic_count + 1)
+        if _coincident_vertex(float(xx), original_x, vertex_tolerances) is None
+    ]
     surface = [
-        _Point(float(xx), float(xx * tan(angles[0])), wall.theta, wall.p, wall.p0)
-        for xx in np.unique(
-            np.concatenate(
-                (
-                    np.linspace(0, x[cone_end], characteristic_count + 1),
-                    original_x[original_x <= x[cone_end]],
-                )
-            )
+        _Point(
+            float(xx),
+            float(np.interp(xx, original_x, original_r)),
+            wall.theta,
+            wall.p,
+            wall.p0,
         )
+        for xx in np.sort(np.r_[cone_samples, original_x[original_x <= x[cone_end]]])
     ]
     shocks = [(0.0, 0.0, beta), (points[-1].x, points[-1].r, beta)]
     corner_states: list[tuple[int, float]] = []
@@ -585,24 +631,41 @@ def _solve(
                     shocks.append((points[-1].x, points[-1].r, beta))
                     last_complete = points
             surface[-1] = wall
-        while wall.x < x[segment + 1] - 1e-12 * x[-1]:
+        while wall.x < x[segment + 1]:
             new = _wall(points[1], wall, angle, flow)
-            for vertex in original_x[
-                (original_x > wall.x) & (original_x < min(new.x, x[segment + 1]))
-            ]:
-                at_vertex = _wall_at(points, wall, angle, float(vertex), flow)
-                surface.append(
+            target_x, target_r = float(x[segment + 1]), float(r[segment + 1])
+            target_index = int(np.searchsorted(original_x, target_x))
+            at_end = abs(new.x - target_x) <= vertex_tolerances[target_index]
+            output_end = target_x if at_end else min(new.x, target_x)
+            for index in np.flatnonzero(
+                (original_x > wall.x) & (original_x < output_end)
+            ):
+                vertex = float(original_x[index])
+                # At either endpoint the inverse problem becomes ill-conditioned.
+                # Reuse its limiting state; only the output geometry is snapped.
+                if abs(vertex - wall.x) <= vertex_tolerances[index]:
+                    at_vertex = wall
+                elif abs(vertex - new.x) <= vertex_tolerances[index]:
+                    at_vertex = new
+                else:
+                    at_vertex = _wall_at(points, wall, angle, vertex, flow)
+                _append_surface(
+                    surface,
                     _Point(
-                        float(vertex),
-                        float(np.interp(vertex, original_x, original_r)),
-                        angle,
-                        at_vertex.p,
-                        wall.p0,
-                    )
+                        vertex, float(original_r[index]), angle, at_vertex.p, wall.p0
+                    ),
+                    original_x,
+                    original_r,
+                    vertex_tolerances,
                 )
-            if new.x >= x[segment + 1]:
+            if at_end:
+                # A full wall step reaches the segment endpoint to roundoff.
+                wall = _Point(target_x, target_r, angle, new.p, new.p0)
+                points, beta, has_shock = _row(
+                    wall, points[2:], flow, beta, float(x[-1]), has_shock
+                )
+            elif new.x >= target_x:
                 # Inverse wall point: interpolate incoming C- foot on first edge.
-                target_x, target_r = float(x[segment + 1]), float(r[segment + 1])
                 new = _wall_at(points, wall, angle, target_x, flow)
                 wall = _Point(target_x, target_r, angle, new.p, new.p0)
                 points, beta, has_shock = _row(
@@ -613,7 +676,7 @@ def _solve(
                 points, beta, has_shock = _row(
                     wall, points[2:], flow, beta, float(x[-1]), has_shock
                 )
-            surface.append(wall)
+            _append_surface(surface, wall, original_x, original_r, vertex_tolerances)
             if has_shock:
                 shocks.append((points[-1].x, points[-1].r, beta))
                 last_complete = points

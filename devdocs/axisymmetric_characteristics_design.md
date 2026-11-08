@@ -871,3 +871,63 @@ physical separation; its detailed nonlinear cause was not established.
 
 `scripts/check.sh --full`, generated-asset and package verification remain
 assigned to the reviewer; no `uv` or elevated command was run.
+
+
+## PR #89: roundoff-close output stations
+
+The reviewed 30 m cone (`x=linspace(0,30,11)`, `r=0.4*x`, M3, default
+count 88) retained automatic x=14.999999999999998 beside input x=15.
+Before correction the minimum dx/ds was 1.77636e-15/3.55271e-15 m.
+A downstream collinear vertex one ULP below a MOC wall point likewise
+created duplicate-scale spacing; one ULP above it failed the inverse-wall
+root bracket. Both paths now give exact input geometry priority.
+
+For an input vertex v use the local overlap tolerance
+`max(32*eps*min(h_left,h_right), 4*spacing(v))`, with the available adjacent
+interval at an endpoint. The 4-ULP floor accounts for coordinate subtraction
+when a neighboring interval is much shorter than the coordinate magnitude;
+it is not a fixed absolute rounding scale. Only automatic output stations
+are coalesced with input vertices. Two supplied vertices are never merged.
+Cone sampling retains the exact input coordinates and radii. Downstream,
+roundoff-close inverse-wall queries use the existing endpoint state and
+output the exact input vertex, avoiding a nearly singular root bracket.
+A full wall step reaching a segment end to roundoff is placed exactly there;
+all intervening input vertices are retained, and the loop terminates at the
+exact endpoint rather than skipping a small remainder by total body length.
+Collinear output insertion otherwise leaves the characteristic net unchanged.
+No global coordinate rounding, relaxed edge-distance validation, or changes
+to boundary-layer modules, existing test limits, or reference data are used.
+
+For the reported case the corrected minimum dx/ds is
+**0.0681818182/0.0734340656 m**, with 97 surface stations and each of the 11
+input vertices present exactly once. The paired edge/radius conversion
+succeeds. At wall temperature 300 K, both laminar and SA reach surface
+s=32.310988842807 m (initial isolated timings 0.515/6.721 s). Regression
+checks also cover scale factors 1e-6/1/1e6, downstream +/-1 ULP vertices,
+segment endpoints, explicitly adjacent input vertices, meaningful 1e-10 m
+intervals and two distinct nearby corners. Collinear insertion preserves
+cone states and the downstream pressure/Mach/shock arrays exactly in the
+comparisons. Intentionally tiny *input* intervals are preserved, not promised
+to be suitable boundary-layer marching intervals.
+
+Commits `1306b42` and `69809ed` and their verification-gate changes are
+retained without modification. In an isolated local clone at HEAD, using
+`VERIFICATION_BASE=HEAD`, the pristine solver gate returns `no`. After copying
+only the changed `tests/test_characteristics.py`, `git status` lists only
+that file and `scripts/needs-verification.sh solver` returns `yes` with
+`solver-relevant change: tests/test_characteristics.py`.
+
+
+Final verification of this fix: Ruff check/format (117 files), mypy
+(99 source files), `git diff --check`, and Sphinx HTML with `-W` all pass.
+The requested characteristics command passes **86 tests in 31.35 s**,
+including the unmodified cone, multiple-corner, refinement, mass, coupling
+and NACA checks. The requested ordinary command gives **1339 passed,
+1 failed, 16 warnings in 34.36 s**; the sole failure remains the sandbox's
+`socket.bind` prohibition in `test_local_documentation_server`
+(`PermissionError: [Errno 1] Operation not permitted`). Numerical-core
+combined coverage is **96.95%** (6000 statements, 1434 branch exits);
+`characteristics.py` is **100%** (377 statements, 110 branch exits).
+The 95% core gate passes. No test limits were changed and no skip/xfail was
+added. `scripts/check.sh --full` remains for the reviewer. No commit, push,
+privilege escalation or generated-file edit was performed.

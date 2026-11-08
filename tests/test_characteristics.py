@@ -991,3 +991,130 @@ def test_default_marched_cone_accuracy_and_minimum_count() -> None:
         [0, 1], [0, 0.1], mach=3, pressure=10000, temperature=220
     )
     assert public.axial_distance.size == 89
+
+
+@pytest.mark.parametrize("scale", [1e-6, 1.0, 1e6])
+def test_cone_roundoff_stations_preserve_input_vertices(scale: float) -> None:
+    x = np.linspace(0.0, 30.0, 11) * scale
+    flow = axisymmetric_body_flow(x, 0.4 * x, mach=3, pressure=10000, temperature=220)
+    plain = axisymmetric_body_flow(
+        [0, x[-1]], [0, 0.4 * x[-1]], mach=3, pressure=10000, temperature=220
+    )
+    assert np.min(np.diff(flow.axial_distance)) > 0.06 * scale
+    assert np.min(np.diff(flow.surface_distance)) > 0.06 * scale
+    for vertex, radius in zip(x, 0.4 * x, strict=True):
+        indices = np.flatnonzero(flow.axial_distance == vertex)
+        assert indices.size == 1
+        assert flow.radius[indices[0]] == radius
+    for name in ("pressure", "mach", "temperature", "flow_angle"):
+        np.testing.assert_array_equal(getattr(flow, name), getattr(plain, name)[0])
+    np.testing.assert_array_equal(flow.shock_radius, plain.shock_radius)
+    edge, radius = flow.boundary_layer_inputs()
+    np.testing.assert_array_equal(edge.distance, flow.surface_distance)
+    np.testing.assert_array_equal(radius, flow.radius)
+    assert np.all(np.diff(edge.distance) > 0)
+
+
+@pytest.mark.parametrize("direction", [-np.inf, np.inf])
+def test_downstream_roundoff_vertex(direction: float) -> None:
+    plain = axisymmetric_body_flow(
+        [0, 1, 3], [0, 0.15, 0.15], mach=3, pressure=10000, temperature=220
+    )
+    index = int(np.flatnonzero(plain.axial_distance > 1.2)[0])
+    vertex = float(np.nextafter(plain.axial_distance[index], direction))
+    flow = axisymmetric_body_flow(
+        [0, 1, vertex, 3],
+        [0, 0.15, 0.15, 0.15],
+        mach=3,
+        pressure=10000,
+        temperature=220,
+    )
+    expected = plain.axial_distance.copy()
+    expected[index] = vertex
+    np.testing.assert_array_equal(flow.axial_distance, expected)
+    assert np.min(np.diff(flow.surface_distance)) > 0.01
+    # A collinear output vertex must not change the characteristic net.
+    for name in ("pressure", "mach", "shock_radius", "shock_angle"):
+        np.testing.assert_array_equal(getattr(flow, name), getattr(plain, name))
+    inputs = flow.boundary_layer_inputs()
+    np.testing.assert_array_equal(
+        inputs.wall_radius,
+        np.interp(inputs.edge.distance, flow.surface_distance, flow.radius),
+    )
+    # Also exercise the near-coincident point as a true segment endpoint.
+    truncated = axisymmetric_body_flow(
+        [0, 1, vertex], [0, 0.15, 0.15], mach=3, pressure=10000, temperature=220
+    )
+    assert truncated.axial_distance[-1] == vertex
+    assert np.count_nonzero(truncated.axial_distance == vertex) == 1
+    assert np.min(np.diff(truncated.surface_distance)) > 0.01
+    np.testing.assert_allclose(
+        truncated.pressure, flow.pressure[: index + 1], rtol=2e-13
+    )
+    # Only automatic points may be coalesced: even explicitly adjacent input
+    # coordinates must survive when the last full wall step reaches the end.
+    adjacent = float(np.nextafter(vertex, -np.inf))
+    explicit_pair = axisymmetric_body_flow(
+        [0, 1, adjacent, vertex],
+        [0, 0.15, 0.15, 0.15],
+        mach=3,
+        pressure=10000,
+        temperature=220,
+    )
+    for original in (adjacent, vertex):
+        assert np.count_nonzero(explicit_pair.axial_distance == original) == 1
+
+
+def test_meaningful_short_intervals_and_corners_are_retained() -> None:
+    x = np.array([0, 15, 15 + 1e-10, 30])
+    flow = axisymmetric_body_flow(x, 0.5 * x, mach=3, pressure=10000, temperature=220)
+    assert flow.axial_distance.size == 90  # 89 automatic, coalesce 15, add 15+1e-10
+    for vertex in x:
+        assert np.count_nonzero(flow.axial_distance == vertex) == 1
+    assert np.min(np.diff(flow.axial_distance)) > 0.9e-10
+    # A genuine automatic station near, but not roundoff-close to, an input
+    # vertex must also survive. Do not round all coordinates to fixed digits.
+    distinct = axisymmetric_body_flow(
+        x[[0, 2, 3]], (0.5 * x)[[0, 2, 3]], mach=3, pressure=10000, temperature=220
+    )
+    assert distinct.axial_distance.size == 90
+    assert np.min(np.diff(distinct.axial_distance)) > 0.9e-10
+    corners = axisymmetric_body_flow(
+        [0, 1, 1 + 1e-10, 2],
+        [0, 0.15, 0.15, 0.14],
+        mach=3,
+        pressure=10000,
+        temperature=220,
+    )
+    for vertex in (1, 1 + 1e-10):
+        assert np.count_nonzero(corners.axial_distance == vertex) == 1
+    assert len(corners._corner_states) == 2
+
+
+@pytest.mark.solver_verification
+@pytest.mark.parametrize(
+    "regime", [BoundaryLayerRegime.LAMINAR, BoundaryLayerRegime.TURBULENT]
+)
+def test_roundoff_cone_boundary_layer_completion(regime: BoundaryLayerRegime) -> None:
+    x = np.linspace(0.0, 30.0, 11)
+    flow = axisymmetric_body_flow(x, 0.4 * x, mach=3, pressure=10000, temperature=220)
+    inputs = flow.boundary_layer_inputs()
+    start = time.perf_counter()
+    with warnings.catch_warnings(record=True):
+        result = marching_boundary_layer(
+            inputs.edge,
+            regime=regime,
+            wall_radius=inputs.wall_radius,
+            wall_temperature=300,
+        )
+    assert result.distance[-1] == flow.surface_distance[-1]
+    assert np.all(np.isfinite(result.wall_heat_flux))
+    assert np.all(result.local_skin_friction_coefficient > 0)
+    print(
+        "ROUNDOFF_CONE_BL",
+        str(regime),
+        "seconds",
+        time.perf_counter() - start,
+        "endpoint_m",
+        result.distance[-1],
+    )
