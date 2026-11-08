@@ -19,10 +19,12 @@ Newton stalls where the positivity limit binds near the outer turbulent front. A
 relaxed Picard iteration with the same discrete operators then takes over.
 """
 
+from typing import cast
+
 import numpy as np
-from scipy.linalg import solve_banded
 
 from aerophysics._array import FloatArray
+from aerophysics._banded import solve_tridiagonal
 from aerophysics._boundary_layer_march import Discretization, Station, StationEdge
 from aerophysics.transport import DynamicViscosityModel
 
@@ -50,7 +52,7 @@ _PICARD_UNDER_RELAXATION = 0.5
 
 
 def _fv1(chi: FloatArray) -> FloatArray:
-    return np.asarray(chi**3 / (chi**3 + _CV1**3), dtype=np.float64)
+    return chi**3 / (chi**3 + _CV1**3)
 
 
 def _source_terms(
@@ -74,7 +76,7 @@ def _source_terms(
     r = np.minimum(n / np.maximum(modified * _KAPPA**2 * distance**2, 1e-30), _MAX_R)
     r6 = r + _CW2 * (r**6 - r)
     fw = r6 * ((1.0 + _CW3**6) / (r6**6 + _CW3**6)) ** (1.0 / 6.0)
-    return modified, extra, np.asarray(fw, dtype=np.float64)
+    return modified, extra, fw
 
 
 class TurbulentDiscretization(Discretization):
@@ -122,9 +124,7 @@ class TurbulentDiscretization(Discretization):
         inner_n = n[..., 1:-1]
 
         def centered(value: FloatArray) -> FloatArray:
-            return np.asarray(
-                (value[..., 2:] - value[..., :-2]) / (2.0 * width), dtype=np.float64
-            )
+            return (value[..., 2:] - value[..., :-2]) / (2.0 * width)
 
         def transport(
             value: FloatArray, diffusivity: FloatArray, history: FloatArray
@@ -132,13 +132,13 @@ class TurbulentDiscretization(Discretization):
             flux = (
                 (diffusivity[..., 1:] + diffusivity[..., :-1])
                 / 2.0
-                * (np.diff(value) / h)
+                * ((value[..., 1:] - value[..., :-1]) / h)
             )
-            return np.asarray(
-                np.diff(flux) / width
+            return cast(
+                FloatArray,
+                (flux[..., 1:] - flux[..., :-1]) / width
                 + convection * centered(value)
                 - scaled_xi * inner_u * (coefficient * value[..., 1:-1] + history),
-                dtype=np.float64,
             )
 
         velocity_slope = self.derivative(u)
@@ -155,9 +155,13 @@ class TurbulentDiscretization(Discretization):
 
         result = np.empty_like(state)
         result[..., 0, 0] = f[..., 0]
-        result[..., 0, 1:] = np.diff(f) - h / 2.0 * (u[..., 1:] + u[..., :-1])
+        result[..., 0, 1:] = (f[..., 1:] - f[..., :-1]) - h / 2.0 * (
+            u[..., 1:] + u[..., :-1]
+        )
         result[..., 4, 0] = stretched[..., 0]
-        result[..., 4, 1:] = np.diff(stretched) - h / 2.0 * (g[..., 1:] + g[..., :-1])
+        result[..., 4, 1:] = (stretched[..., 1:] - stretched[..., :-1]) - h / 2.0 * (
+            g[..., 1:] + g[..., :-1]
+        )
 
         result[..., 1, 0] = u[..., 0]
         result[..., 1, -1] = u[..., -1] - 1.0
@@ -282,7 +286,7 @@ class TurbulentDiscretization(Discretization):
 
     @staticmethod
     def _solve_tridiagonal(bands: FloatArray, vector: FloatArray) -> FloatArray:
-        return np.asarray(solve_banded((1, 1), bands, vector), dtype=np.float64)
+        return solve_tridiagonal(bands, vector)
 
     def picard(
         self,

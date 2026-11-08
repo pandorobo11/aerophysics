@@ -14,11 +14,12 @@ is assembled by three-color finite differences and solved with banded LAPACK.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
-from scipy.linalg import solve_banded
 
 from aerophysics._array import FloatArray
+from aerophysics._banded import solve_banded
 from aerophysics.exceptions import BoundaryLayerConvergenceError
 from aerophysics.transport import DynamicViscosityModel
 
@@ -165,15 +166,15 @@ class Discretization:
         wall_normal = np.asarray(
             model.dynamic_viscosity(edge_temperature * g), dtype=np.float64
         )
-        return np.asarray(wall_normal / edge / g, dtype=np.float64)
+        return wall_normal / edge / g
 
     def derivative(self, value: FloatArray) -> FloatArray:
         weights = self.gradient_weights
-        return np.asarray(
+        return cast(
+            FloatArray,
             weights[0] * value[..., :-2]
             + weights[1] * value[..., 1:-1]
             + weights[2] * value[..., 2:],
-            dtype=np.float64,
         )
 
     def residual(
@@ -196,15 +197,17 @@ class Discretization:
             flux = (
                 (diffusivity[..., 1:] + diffusivity[..., :-1])
                 / 2.0
-                * (np.diff(value) / h)
+                * ((value[..., 1:] - value[..., :-1]) / h)
             )
-            return np.asarray(np.diff(flux) / width, dtype=np.float64)
+            return (flux[..., 1:] - flux[..., :-1]) / width
 
         velocity_slope = self.derivative(u)
         inner_u, inner_g = u[..., 1:-1], g[..., 1:-1]
         result = np.empty_like(state)
         result[..., 0, 0] = f[..., 0]
-        result[..., 0, 1:] = np.diff(f) - h / 2.0 * (u[..., 1:] + u[..., :-1])
+        result[..., 0, 1:] = (f[..., 1:] - f[..., :-1]) - h / 2.0 * (
+            u[..., 1:] + u[..., :-1]
+        )
         result[..., 1, 0] = u[..., 0]
         result[..., 1, -1] = u[..., -1] - 1.0
         result[..., 1, 1:-1] = (
@@ -251,9 +254,10 @@ class Discretization:
         perturbed[unknowns * (nodes % _COLORS) + variables, variables, nodes] += step
         difference = self.residual(perturbed, edge, coefficient, lagged) - residual
         row, column, equation, variable = self.band_indices
-        bands = np.zeros((2 * self.band + 1, state.size), dtype=np.float64)
+        # Assemble directly into gbsv's expanded, Fortran-contiguous workspace.
+        bands = np.zeros((3 * self.band + 1, state.size), dtype=np.float64, order="F")
         bands[
-            self.band + unknowns * (row - column) + equation - variable,
+            2 * self.band + unknowns * (row - column) + equation - variable,
             unknowns * column + variable,
         ] = (
             difference[unknowns * (column % _COLORS) + variable, equation, row]
@@ -323,10 +327,12 @@ class Discretization:
                 bands = self.jacobian(state, residual, edge, coefficient, lagged)
                 update = (
                     solve_banded(
-                        (self.band, self.band),
+                        self.band,
+                        self.band,
                         bands,
                         -residual.T.ravel(),
-                        check_finite=False,
+                        overwrite_ab=True,
+                        overwrite_b=True,
                     )
                     .reshape(-1, self.unknowns)
                     .T
