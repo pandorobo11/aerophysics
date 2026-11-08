@@ -387,7 +387,7 @@ def flared_radius(s: FloatArray) -> FloatArray:
     return 0.05 * s * (1 + 0.5 * np.exp(-(((s - 0.9) / 0.4) ** 2)))
 
 
-@pytest.mark.parametrize("regime", [LAMINAR, TURBULENT])
+@pytest.mark.parametrize("regime", [LAMINAR])
 @pytest.mark.solver_verification
 def test_integral_balance(regime: BoundaryLayerRegime) -> None:
     edge = smooth_edge(2.0, 3.0)

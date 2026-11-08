@@ -154,7 +154,7 @@ jobs:
           fi
       - name: Run solver verification
         if: steps.solver.outputs.needed == 'yes'
-        run: uv run pytest -m solver_verification --no-cov
+        run: uv run pytest -m solver_verification --no-cov -n auto
 
   docs:
     name: Documentation build
