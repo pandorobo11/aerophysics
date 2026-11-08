@@ -169,13 +169,37 @@ Use ``regime=BoundaryLayerRegime.TURBULENT`` for SA-noft2. The defaults are
 ``turbulent_prandtl_number=0.9`` and ``edge_sa_ratio=3.0`` at the first edge
 station; dimensional ``nu_tilde`` is conserved along the outer streamline.
 ``edge_sa_ratio=0`` gives the laminar limit. Both options are validated in every
-regime, and only the turbulent regime uses them. The result's read-only
+regime, and both SA regimes use them. The result's read-only
 ``nu_tilde_ratio`` array has shape ``(N_s, N_eta)``; laminar results use None.
 Omit ``wall_temperature`` for an adiabatic wall.
 
 SA-noft2 develops its own laminar start and transition near the leading edge.
 This is not a transition prediction. Accuracy against experiment is not
 established; agreement with CFD using the same model does not establish it.
+
+To prescribe where SA production starts, provide a wall distance explicitly::
+
+    layer = marching_boundary_layer(
+        edge,
+        regime=BoundaryLayerRegime.TRANSITIONAL,
+        transition_distance=0.3,  # metres from the leading edge along the wall
+        wall_temperature=300.0,
+    )
+
+Choose a finite scalar strictly between zero and the final edge distance.
+``transition_distance`` is required for ``TRANSITIONAL`` and rejected in other
+regimes. This mode requires ``edge_sa_ratio > 0`` and supports ``wall_radius``.
+It solves SA-noft2 everywhere, suppressing only production at and upstream of
+the specified position. The solver visits that position even if it is absent
+from the output stations. Small upstream eddy viscosity remains, so the
+upstream solution is not exactly the separate ``LAMINAR`` result.
+
+The resulting transition length is a numerical SA-noft2 response, **not a
+prediction of physical transition length**. Inspect the onset region with
+streamwise and wall-normal refinement. Natural-transition prediction,
+intermittency, roughness, and SA trip functions are not included. For the
+method, measured upstream differences and separate checks of transition
+implementation and the laminar limit, see :ref:`marching-boundary-layer-model`.
 
 An adverse pressure gradient can separate the boundary layer. The march then
 raises ``BoundaryLayerSeparationError``, which holds ``separation_distance`` and
@@ -212,9 +236,10 @@ an uncalibrated indicator; near-tip stations commonly trigger it. Longitudinal
 curvature and normal pressure gradients are also neglected. Use SI units and
 wall arc length, local-edge Cf, and positive-into-wall heat flux.
 
-A cone-to-cylinder worked flow example is not supplied: downstream of its
-shoulder, edge conditions require external Euler/CFD or measured data that are
-not available here. ``flow_sequence`` cannot provide that distribution.
+For a sharp convex cone--cylinder with an attached supersonic flow, see
+`Cone--cylinder outer flow and boundary layer`_ below for an inviscid
+characteristic solution and one-way boundary-layer connection.
+``flow_sequence`` cannot provide the shoulder's edge distribution.
 The synthetic shoulder verification is only a numerical stress test.
 
 .. _rm3633-example:
@@ -251,8 +276,8 @@ of Taylor--Maccoll cone pressure at X<=6 in. ``edge_sa_ratio=3``.
 The 0.005 in ballotini trip was at 1.5 in from the nose and was inadequate at
 Mach numbers of 1.4 and above. X=3 in is transitional (Cf=0.00140 versus
 0.00393 at 6 in); comparisons use X>=12 in only. Cf is based on local dynamic
-pressure. SA-noft2 develops its own transition; prescribed transition is out
-of scope. The source gives Cf accuracy +/-0.0002 and Cp accuracy +/-0.005.
+pressure. This comparison retains the original all-SA calculation; no
+prescribed transition is applied to these experimental data. The source gives Cf accuracy +/-0.0002 and Cp accuracy +/-0.005.
 A missing Cf at 15 in is not interpolated or treated as zero.
 
 The calculated delta99/r_w is large near the waist, consistent with the

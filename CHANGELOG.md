@@ -7,6 +7,10 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add `transition_distance` to `marching_boundary_layer` with
+  `regime=TRANSITIONAL` for a user-specified transition position.
+  The resulting SA-noft2 transition length is not a physical prediction.
+
 - Add `axisymmetric_body_flow` for the supersonic, zero-incidence flow around
   sharp, convex, piecewise linear bodies of revolution, such as cone-cylinders.
   It uses the rotational method of characteristics with a fitted leading shock.

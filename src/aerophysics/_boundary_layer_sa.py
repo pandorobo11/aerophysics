@@ -193,7 +193,7 @@ class TurbulentDiscretization(Discretization):
                 / inner_g
             )
             * centered(n)
-            + _CB1 * modified * positive_n
+            + edge.turbulence_production * _CB1 * modified * positive_n
             - _CW1 * fw * positive_n**2 / distance**2
             - edge.viscosity_growth * inner_u * inner_n
         )
@@ -377,7 +377,7 @@ class TurbulentDiscretization(Discretization):
             destruction = _CW1 * fw * positive_n / distance**2
             relaxation = (
                 4.0 * scaled_xi * coefficient
-                + _CB1 * (vorticity + 2.0 * np.abs(extra))
+                + edge.turbulence_production * _CB1 * (vorticity + 2.0 * np.abs(extra))
                 + destruction
             )
             diffusivity = c + n / g**2
@@ -398,7 +398,7 @@ class TurbulentDiscretization(Discretization):
                 wall_nu,
                 edge.sa_ratio,
                 scaled_xi * u_new[1:-1] * lagged[3, 1:-1]
-                - _CB1 * modified * positive_n
+                - edge.turbulence_production * _CB1 * modified * positive_n
                 - relaxation * positive_n
                 + (growth - implicit_growth) * u_new[1:-1] * positive_n,
             )
