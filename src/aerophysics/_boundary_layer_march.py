@@ -8,7 +8,8 @@ fixed ``eta`` grid, with ``xi`` as the marching variable:
 
 Streamwise derivatives use variable-step BDF2 (BDF1 on the first step). Each
 station is solved with a damped Newton iteration; the block-tridiagonal Jacobian
-is assembled by three-color finite differences and solved with banded LAPACK.
+is analytic for the built-in Sutherland and Keyes viscosity models, and otherwise
+uses three-color finite differences. Both paths assemble expanded LAPACK bands.
 ``_boundary_layer_sa`` adds the Spalart--Allmaras equations on the same march.
 """
 
@@ -21,7 +22,7 @@ import numpy as np
 from aerophysics._array import FloatArray
 from aerophysics._banded import solve_banded
 from aerophysics.exceptions import BoundaryLayerConvergenceError
-from aerophysics.transport import DynamicViscosityModel
+from aerophysics.transport import DynamicViscosityModel, KeyesModel, SutherlandModel
 
 _COLORS = 3
 _MAX_VELOCITY_UPDATE = 0.5
@@ -111,12 +112,33 @@ def eta_grid(
     return np.asarray(nodes, dtype=np.float64)
 
 
+def _viscosity_with_derivative(
+    model: SutherlandModel | KeyesModel, temperature: FloatArray
+) -> tuple[FloatArray, FloatArray]:
+    """Return mu and d(mu)/dT (Pa s/K), retaining model validation and warnings."""
+    viscosity = np.asarray(model.dynamic_viscosity(temperature), dtype=np.float64)
+    if isinstance(model, SutherlandModel):
+        logarithmic = 1.5 / temperature - 1.0 / (
+            temperature + model.sutherland_temperature
+        )
+    else:
+        term = model.additive_temperature * 10.0 ** (
+            -model.exponential_temperature / temperature
+        )
+        denominator_derivative = (
+            1.0 + term * np.log(10.0) * model.exponential_temperature / temperature**2
+        )
+        logarithmic = 1.5 / temperature - denominator_derivative / (temperature + term)
+    return viscosity, viscosity * logarithmic
+
+
 class Discretization:
     """Residual, Jacobian, and Newton solve of one station on a fixed ``eta`` grid."""
 
     unknowns = 3
     newton_iterations = 20
     newton_tolerance = 1e-10
+    _analytic_jacobian_enabled = True
 
     def __init__(
         self,
@@ -245,7 +267,31 @@ class Discretization:
         coefficient: float,
         lagged: FloatArray,
     ) -> FloatArray:
-        """Assemble a three-color finite-difference Jacobian in LAPACK bands."""
+        """Assemble exact laminar derivatives or three-color differences in gbsv bands.
+
+        Only exact built-in Sutherland/Keyes types use the analytic path;
+        subclasses and other viscosity protocols retain their own behavior.
+        The private switch also permits finite-difference regression comparisons.
+        """
+        if (
+            self._analytic_jacobian_enabled
+            and self.unknowns == 3
+            and type(self.viscosity_model) in (SutherlandModel, KeyesModel)
+        ):
+            return self._analytic_jacobian(state, edge, coefficient, lagged)
+        return self._finite_difference_jacobian(
+            state, residual, edge, coefficient, lagged
+        )
+
+    def _finite_difference_jacobian(
+        self,
+        state: FloatArray,
+        residual: FloatArray,
+        edge: StationEdge,
+        coefficient: float,
+        lagged: FloatArray,
+    ) -> FloatArray:
+        """Retain the three-color linearization for SA and unsupported models."""
         unknowns = self.unknowns
         step = np.sqrt(np.finfo(np.float64).eps) * np.maximum(np.abs(state), 1.0)
         colors = _COLORS * unknowns
@@ -263,6 +309,95 @@ class Discretization:
             difference[unknowns * (column % _COLORS) + variable, equation, row]
             / step[variable, column]
         )
+        return bands
+
+    def _analytic_jacobian(
+        self,
+        state: FloatArray,
+        edge: StationEdge,
+        coefficient: float,
+        lagged: FloatArray,
+    ) -> FloatArray:
+        """Differentiate the discrete residual, vectorized over all interior nodes."""
+        f, u, g = state
+        model = cast(SutherlandModel | KeyesModel, self.viscosity_model)
+        mu_edge = float(model.dynamic_viscosity(edge.temperature))
+        mu, dmu = _viscosity_with_derivative(model, edge.temperature * g)
+        c = mu / mu_edge / g
+        dc = (edge.temperature * dmu / mu_edge - c) / g
+        pr = self.prandtl_number
+        sx = 2.0 * edge.xi
+        convection = f[1:-1] + sx * (coefficient * f[1:-1] + lagged[0, 1:-1])
+        du, dg = self.derivative(u), self.derivative(g)
+        face = (c[1:] + c[:-1]) / 2.0 / self.h
+        left, right = face[:-1] / self.width, face[1:] / self.width
+        su = np.diff(u) / self.h / 2.0
+        sg = np.diff(g) / self.h / 2.0 / pr
+        su_left, su_right = su[:-1] / self.width, su[1:] / self.width
+        sg_left, sg_right = sg[:-1] / self.width, sg[1:] / self.width
+        dissipation = 2.0 * edge.heating * c[1:-1] * du
+
+        bands = np.zeros((3 * self.band + 1, state.size), dtype=np.float64, order="F")
+        # For row node i and column node i+d, equation e and variable v:
+        # gbsv row = 2*band - 3*d + e-v; column = 3*(i+d)+v.
+        # The three stencil offsets are fixed; there is no Python loop over nodes.
+        diagonal = 2 * self.band
+        for offset, weight, diffusion, momentum_g, energy_g in (
+            (
+                -1,
+                self.gradient_weights[0],
+                left,
+                -dc[:-2] * su_left,
+                -dc[:-2] * sg_left,
+            ),
+            (
+                0,
+                self.gradient_weights[1],
+                -left - right,
+                dc[1:-1] * (su_right - su_left) + edge.beta,
+                dc[1:-1] * (sg_right - sg_left)
+                + edge.heating * dc[1:-1] * du**2
+                - sx * u[1:-1] * coefficient,
+            ),
+            (1, self.gradient_weights[2], right, dc[2:] * su_right, dc[2:] * sg_right),
+        ):
+            start, stop = 3 * (1 + offset), 3 * (len(g) - 1 + offset)
+            band_row = diagonal - 3 * offset
+            bands[band_row, start + 1 : stop + 1 : 3] = diffusion + convection * weight
+            bands[band_row - 1, start + 2 : stop + 2 : 3] = momentum_g
+            bands[band_row + 1, start + 1 : stop + 1 : 3] = dissipation * weight
+            bands[band_row, start + 2 : stop + 2 : 3] = (
+                diffusion / pr + energy_g + convection * weight
+            )
+        bands[diagonal, 4:-2:3] -= (
+            sx * (2.0 * coefficient * u[1:-1] + lagged[1, 1:-1])
+            + 2.0 * edge.beta * u[1:-1]
+        )
+        bands[diagonal + 1, 4:-2:3] -= sx * (coefficient * g[1:-1] + lagged[2, 1:-1])
+        bands[diagonal + 1, 3:-3:3] = (1.0 + sx * coefficient) * du
+        bands[diagonal + 2, 3:-3:3] = (1.0 + sx * coefficient) * dg
+
+        # Trapezoidal f integration and prescribed velocity/outer temperature.
+        bands[diagonal, 0::3] = 1.0
+        bands[diagonal + 3, 0:-3:3] = -1.0
+        bands[diagonal + 2, 1:-2:3] = -self.h / 2.0
+        bands[diagonal - 1, 4::3] = -self.h / 2.0
+        bands[diagonal, 1] = bands[diagonal, -2] = bands[diagonal, -1] = 1.0
+        if edge.wall_ratio is None:
+            h = self.h[0]
+            slope = (u[1] - u[0]) / h
+            wall_face = (c[0] / pr + c[1] / pr) / 2.0
+            wall_dg = (g[1] - g[0]) / h
+            bands[diagonal + 1, 1] = -edge.heating * c[0] * slope
+            bands[diagonal - 2, 4] = edge.heating * c[0] * slope
+            bands[diagonal, 2] = (
+                dc[0] / pr / 2.0 * wall_dg
+                - wall_face / h
+                + h / 2.0 * edge.heating * dc[0] * slope**2
+            )
+            bands[diagonal - 3, 5] = dc[1] / pr / 2.0 * wall_dg + wall_face / h
+        else:
+            bands[diagonal, 2] = 1.0
         return bands
 
     def station(self, state: FloatArray, xi: float) -> Station:
