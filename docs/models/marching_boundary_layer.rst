@@ -112,7 +112,16 @@ The five unknowns per node are ``(f, u, g, n, Y)``. Projected active-set Newton
 solves the local interior SA conditions :math:`n \geq 0`, :math:`R \leq 0`,
 and :math:`nR=0`, where :math:`R` is the discrete SA residual. Positive
 interior values satisfy the SA equation; zero values admit a nonpositive
-residual. Newton falls back to relaxed Picard with nonnegative ``n`` clipping.
+residual. Convergence requires a small applied update, the same active set in
+two consecutive linearizations, and
+:math:`\max_i|\min(n_i,-R_i/|J_{ii}|)|/\max(1,\max n)<10^{-9}`
+over interior SA rows. This uses the existing pre-update linearization and the
+same ``n`` scale as the update tolerance. If Phi fails this bound, a nonzero
+applied update permits further iteration within the iteration limit; a zero
+update requests Picard. Projection or damping stagnation cannot count as
+convergence. Undamped active rows are assigned exactly zero; damped rows
+retain the partial step toward zero. Newton falls back to relaxed Picard
+with nonnegative ``n`` clipping.
 At convergence, an active or projected-zero first interior SA node also
 requests Picard. Such wall-attached zero regions select the trivial partially
 laminar branch; the intended clipped set is the outer turbulent front.

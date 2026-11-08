@@ -18,6 +18,8 @@ the edge streamline, so ``n`` at the outer boundary varies as ``1/nu_e``.
 Projected active-set Newton solves the local interior SA complementarity problem
 ``n >= 0, R <= 0, n R = 0``, where ``R = residual[3]``. It uses
 ``Phi = min(n, -R/abs(dR/dn))`` and requires negative SA diagonal derivatives.
+Convergence also bounds Phi by the update tolerance with the same n scaling;
+a small projected update alone cannot establish complementarity.
 At convergence, an active or projected-zero first interior node requests Picard
 to avoid the trivial wall-attached branch; clipping is intended for the outer
 turbulent front. Explicitly zero edge SA seeds retain the legacy Newton path.
@@ -283,7 +285,14 @@ class TurbulentDiscretization(Discretization):
         Only velocity and temperature limit the step. No SA positivity fraction
         is needed: projection admits exact zeros and the next iteration can
         activate them. Convergence requires a small actually applied update
-        and the same active set in two consecutive linearizations.
+        and the same active set in two consecutive linearizations. It also
+        requires ``max(abs(Phi))/max(1, max(n)) < newton_tolerance`` at the
+        current (pre-update) linearization, using the same n scale as
+        ``update_size``. A larger Phi requires another iteration if the update
+        size is nonzero; a zero size requests Picard. Projection or damping
+        stagnation is not convergence. No extra residual or Jacobian evaluation
+        is needed. Undamped active rows are set to
+        exactly zero; damped rows retain their partial step toward zero.
         At convergence, an active or projected-zero first interior SA node
         requests Picard (projection can reach zero on the residual branch):
         wall-attached zero regions select the trivial partially laminar branch,
@@ -305,7 +314,11 @@ class TurbulentDiscretization(Discretization):
                 ]
                 if not np.all(np.isfinite(diagonal) & (diagonal < 0.0)):
                     return None
-                active = state[3, 1:-1] <= -residual[3, 1:-1] / np.abs(diagonal)
+                scaled_residual = -residual[3, 1:-1] / np.abs(diagonal)
+                active = state[3, 1:-1] <= scaled_residual
+                phi_size = float(
+                    np.max(np.abs(np.minimum(state[3, 1:-1], scaled_residual)))
+                ) / max(1.0, float(np.max(state[3])))
                 rows = self.unknowns * (np.flatnonzero(active) + 1) + 3
                 for index in rows:
                     row = int(index)
@@ -333,6 +346,9 @@ class TurbulentDiscretization(Discretization):
                     return None
                 damping = super().damping(state, update)
                 updated = state + damping * update
+                if damping == 1.0:
+                    # Enforce the active branch independently of LU roundoff.
+                    updated[3, 1:-1][active] = 0.0
                 updated[3] = np.maximum(updated[3], 0.0)
                 self.enforce_boundaries(updated, edge)
                 size = self.update_size(state, updated - state)
@@ -344,7 +360,10 @@ class TurbulentDiscretization(Discretization):
                 ):
                     if active[0] or state[3, 1] == 0.0:
                         return None
-                    return self.station(state, edge.xi)
+                    if phi_size < self.newton_tolerance:
+                        return self.station(state, edge.xi)
+                    if size == 0.0:
+                        return None
                 previous_active = active
         except (ValueError, FloatingPointError, np.linalg.LinAlgError):
             return None

@@ -14,6 +14,7 @@ from aerophysics import (
 )
 from aerophysics import _boundary_layer_sa as sa_module
 from aerophysics._array import FloatArray
+from aerophysics._banded import solve_banded
 from aerophysics._boundary_layer_march import Discretization, Station, StationEdge
 from aerophysics._boundary_layer_sa import TurbulentDiscretization
 from aerophysics.transport import AIR_VISCOSITY
@@ -92,10 +93,18 @@ def test_first_update_failure_becomes_local_complementarity(
     bands = solver.jacobian(actual.state, residual, edge, coefficient, lagged)
     diagonal = bands[2 * solver.band, 8:-5:5]
     n = actual.state[3, 1:-1]
-    active = n == 0.0
+    scaled_residual = -residual[3, 1:-1] / np.abs(diagonal)
+    active = n <= scaled_residual
     assert np.any(active)
+    assert np.any(~active)
     assert np.all(n >= 0.0)
     assert np.all(diagonal < 0.0)
+    # Use the solver's branch criterion, including damped active rows that
+    # may still have tiny positive n. LU roundoff must not select the branch.
+    phi = np.minimum(n, scaled_residual)
+    scale = max(1.0, float(np.max(actual.state[3])))
+    assert np.max(np.abs(phi)) / scale < solver.newton_tolerance
+    assert np.max(n[active]) / scale < solver.newton_tolerance
     assert np.all(residual[3, 1:-1][active] <= 0.0)
     np.testing.assert_allclose(
         residual[3, 1:-1][~active] / diagonal[~active], 0.0, atol=1e-8
@@ -327,6 +336,122 @@ def test_iteration_exhaustion(
     solver, guess, edge, coefficient, lagged = small_station
     monkeypatch.setattr(solver, "newton_iterations", 0)
     assert solver.newton(guess, edge, coefficient, lagged) is None
+
+
+@pytest.mark.parametrize("scale", [1.0, 1e6])
+@pytest.mark.parametrize("relative_residual", [1.0, 2e-9, 0.5e-9])
+def test_projection_stagnation_requires_scaled_complementarity(
+    small_station: StationInput,
+    monkeypatch: pytest.MonkeyPatch,
+    scale: float,
+    relative_residual: float,
+) -> None:
+    """Negative Newton steps at inactive zeros do not solve complementarity."""
+    solver, guess, edge, coefficient, lagged = small_station
+    guess[3] = [0.0, scale, 0.0, 0.0, 0.1, 0.1]
+    residual_value = relative_residual * scale
+
+    def residual(
+        state: FloatArray, edge: StationEdge, coefficient: float, lagged: FloatArray
+    ) -> FloatArray:
+        # Broadcast over the real three-color finite-difference Jacobian batch.
+        result = -(state - guess)
+        n = state[..., 3, :]
+        result[..., 3, 2] = residual_value - n[..., 2] + 2.0 * n[..., 3]
+        result[..., 3, 3] = residual_value + 2.0 * n[..., 2] - n[..., 3]
+        return result
+
+    updates: list[FloatArray] = []
+
+    def solve(
+        lower: int, upper: int, bands: FloatArray, vector: FloatArray, **kwargs: bool
+    ) -> FloatArray:
+        # Exercise the real gbsv solve, including the indefinite [-1,2;2,-1]
+        # middle block. Recording its result must not prescribe the update.
+        result = solve_banded(lower, upper, bands, vector, **kwargs)
+        updates.append(result.reshape(-1, solver.unknowns).T.copy())
+        return result
+
+    monkeypatch.setattr(solver, "residual", residual)
+    monkeypatch.setattr(sa_module, "solve_banded", solve)
+    station = solver.newton(guess, edge, coefficient, lagged)
+    assert len(updates) == 2
+    np.testing.assert_allclose(updates[0][3, 2:4], -residual_value, rtol=1e-7)
+    np.testing.assert_array_equal(updates[0][[0, 1, 2, 4]], 0.0)
+    if relative_residual < solver.newton_tolerance:
+        assert station is not None
+        np.testing.assert_array_equal(station.state, guess)
+    else:
+        assert station is None
+        fallback = solver.station(guess, edge.xi)
+        monkeypatch.setattr(solver, "picard", lambda *args: fallback)
+        assert solver.solve(guess, edge, coefficient, lagged) is fallback
+        assert solver.picard_fallbacks == 1
+
+
+@pytest.mark.parametrize("damping", [1.0, 0.5])
+def test_active_row_exact_zero_only_for_full_step(
+    small_station: StationInput, monkeypatch: pytest.MonkeyPatch, damping: float
+) -> None:
+    solver, guess, edge, coefficient, lagged = small_station
+    original_boundaries = solver.enforce_boundaries
+    updated_states: list[FloatArray] = []
+
+    def residual(
+        state: FloatArray, edge: StationEdge, coefficient: float, lagged: FloatArray
+    ) -> FloatArray:
+        result = -(state - guess)
+        result[..., 3, 2] = -1.0 - state[..., 3, 2]
+        return result
+
+    def boundaries(state: FloatArray, edge: StationEdge) -> None:
+        original_boundaries(state, edge)
+        updated_states.append(state.copy())
+
+    def solve(
+        lower: int, upper: int, bands: FloatArray, vector: FloatArray, **kwargs: bool
+    ) -> FloatArray:
+        result = solve_banded(lower, upper, bands, vector, **kwargs)
+        # Reproduce a one-ULP LU cancellation remnant on every platform.
+        result[5 * 2 + 3] = np.nextafter(result[5 * 2 + 3], 0.0)
+        return result
+
+    monkeypatch.setattr(solver, "residual", residual)
+    monkeypatch.setattr(sa_module, "solve_banded", solve)
+    monkeypatch.setattr(Discretization, "damping", lambda *args: damping)
+    monkeypatch.setattr(solver, "enforce_boundaries", boundaries)
+    monkeypatch.setattr(solver, "newton_iterations", 1)
+    assert solver.newton(guess, edge, coefficient, lagged) is None
+    assert len(updated_states) == 1
+    if damping == 1.0:
+        assert updated_states[0][3, 2] == 0.0
+    else:
+        assert updated_states[0][3, 2] == guess[3, 2] + damping * np.nextafter(
+            -guess[3, 2], 0.0
+        )
+
+
+def test_small_damped_updates_continue_until_phi_converges(
+    small_station: StationInput, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    solver, guess, edge, coefficient, lagged = small_station
+    target = guess.copy()
+    guess[3, 2] += 2.0 * solver.newton_tolerance
+    calls = 0
+
+    def residual(
+        state: FloatArray, edge: StationEdge, coefficient: float, lagged: FloatArray
+    ) -> FloatArray:
+        nonlocal calls
+        calls += state.ndim == 2
+        return -(state - target)
+
+    monkeypatch.setattr(solver, "residual", residual)
+    monkeypatch.setattr(Discretization, "damping", lambda *args: 0.25)
+    station = solver.newton(guess, edge, coefficient, lagged)
+    assert station is not None
+    assert calls == 4  # Updates are small from the start; Phi needs four iterations.
+    assert np.max(np.abs(station.state[3] - target[3])) < solver.newton_tolerance
 
 
 @pytest.mark.parametrize("wall_attached", ["none", "active", "projected"])

@@ -75,7 +75,10 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 - Use projected active-set Newton for the SA station's `nu_tilde >= 0` bound,
   returning wall-attached zero regions to Picard and preserving legacy Newton
-  for explicitly zero SA seeds. On the current solver-verification tier,
+  for explicitly zero SA seeds. Require the scaled local complementarity
+  residual at convergence and set undamped active rows exactly to zero,
+  preventing projection stagnation and BLAS-dependent cancellation remnants.
+  On the current solver-verification tier,
   including legacy comparison calls, Picard fallbacks decrease 5,586 -> 637.
   Remeasured outer-front `nu_tilde_ratio` differences reach 6.03e-5 of the
   profile maximum; velocity/temperature differences stay below 8.2e-8 in the

@@ -211,9 +211,18 @@ its `total_pressure_ratio`, which only need the static states.
   the finite-difference Newton equations. A nonnegative or nonfinite SA
   diagonal conservatively requests Picard. Velocity and temperature retain
   the base damping limits; SA is projected onto `n >= 0` after the update,
-  with no SA positivity fraction. Exact boundary values are restored, and
-  convergence also requires an unchanged active set in the last two
-  linearizations. At convergence, an active **or projected-zero** first interior
+  with no SA positivity fraction. For an undamped step, active n values are
+  assigned exactly zero rather than relying on LU cancellation; damped active
+  rows retain the partial step toward zero. Exact boundary values are restored.
+  Convergence also requires an unchanged active set in the last two
+  linearizations and `max(abs(Phi))/max(1, max(n)) < 1e-9`. Phi and its scale
+  use the already computed pre-update linearization, before active-row
+  replacement. This is the same n scaling and tolerance as `update_size`,
+  requiring no additional residual/Jacobian evaluation. If the applied update
+  is small and the active set is stable but Phi fails this bound, Newton
+  continues if the applied update is nonzero; a zero update requests Picard.
+  The iteration limit still applies. Projection/damping stagnation is not
+  convergence. At convergence, an active **or projected-zero** first interior
   SA node requests Picard: wall-attached zero regions select the trivial
   partially laminar branch, not the intended outer-front clipping. The actual
   projected n must also be checked because a residual-branch update can be
@@ -267,9 +276,9 @@ its `total_pressure_ratio`, which only need the static states.
   was `0.469137`, versus Picard's `0.556645`. The guard rejects this state.
   The guarded reference march's Cf and heat flux match the legacy march
   exactly in the measured comparison, within the existing `1e-6` bound.
-- Counts were remeasured on the **88-test `solver_verification` tier as of
-  this change**, including transition and active-set comparison tests, using
-  four workers. Two runs set the class default to legacy or guarded Newton;
+- The original active-set change measured the **88-test
+  `solver_verification` tier**, including transition and active-set comparison
+  tests, using four workers. Two runs set the class default to legacy or guarded Newton;
   tests that explicitly toggle the private switch retained those overrides.
   Thus both totals include legacy comparison calls, and the legacy-default
   run also includes explicitly requested active-set solves. SA Newton attempts
@@ -293,6 +302,33 @@ its `total_pressure_ratio`, which only need the static states.
   unchanged at stored precision. The serial enthalpy-refinement test was
   remeasured on the rebased code: 40.39 s with legacy Newton and 32.50 s with
   guarded Newton (both passed). These elapsed times are machine-dependent.
+- The PR #95 convergence fix was rechecked against pre-fix `a889e88` on the current
+  **90-test `solver_verification` tier**, with four workers on macOS arm64,
+  Python 3.13.5, NumPy 2.5.1 / Accelerate and SciPy 1.18.0. Temporary in-memory
+  instrumentation counted `137,484` SA Newton attempts in each run:
+  `128,247` active-set and `9,237` legacy-dispatch attempts. Active-set failures
+  remained 32 wall-guard rejections and 7 iteration-limit failures; diagonal,
+  nonfinite-update, caught-exception and Phi-stagnation failures were all zero.
+  The new Phi bound withheld convergence on 66 iterations (about 0.052% of
+  active-set attempts); further iterations resolved all of them. Returning
+  immediately to Picard on every such small-but-nonzero update would be
+  premature. Legacy zero-damping failures remained 600. Picard fallbacks,
+  calls and sweeps remained `637`, `638` and `107,160`, respectively.
+  Comparing all 98 returned public march results at matching inputs gave
+  maximum absolute differences divided by each baseline field maximum of
+  `6.56e-15` for n, `2.04e-14` for Cf and `1.10e-11` for heat flux; all other
+  fields were below `4.66e-14`. The legacy-comparison figures above remain
+  unchanged at their quoted precision. All 14 generated-asset checks passed
+  without modifying reference data or generated files. The normal SA and
+  active-set tests passed 64 cases with 100% line and branch coverage of the
+  SA module. The six-node regression uses the real finite-difference Jacobian
+  and banded solve for the indefinite middle block `[-1, 2; 2, -1]`: its
+  negative step projects to zero but leaves positive R, so it must request
+  Picard. Separate tests cover scaled Phi acceptance, continued damped
+  progress, and exact active zeros after an undamped step despite simulated
+  one-ULP LU roundoff. The captured-station test selects both branches by
+  `n <= -R/abs(J_ii)` and bounds Phi, allowing tiny positive active values
+  after damping rather than using exact-zero equality to identify the branch.
 - Edge dimensional `nu_tilde` is conserved. The viscosity exponent is a central
   difference in log temperature with half-width `1e-5`, valid for any viscosity
   protocol implementation. Isentropic density and temperature derivatives give
