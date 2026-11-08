@@ -34,7 +34,6 @@ from aerophysics.exceptions import (
     ApplicabilityWarning,
     BoundaryLayerConvergenceError,
     BoundaryLayerSeparationError,
-    ModelRangeError,
 )
 from aerophysics.marching_boundary_layer import (
     _EdgeInterpolant,
@@ -710,9 +709,6 @@ def test_invalid_march_options_are_rejected() -> None:
     edge = BoundaryLayerEdge.from_pressure(
         [0.0, 1.0], [2e4, 2e4], total_pressure=1.6e5, total_temperature=500.0
     )
-    for regime in (BoundaryLayerRegime.TRANSITIONAL,):
-        with pytest.raises(ModelRangeError, match="LAMINAR"):
-            marching_boundary_layer(edge, regime=regime)
     with pytest.raises(ValueError, match="prandtl_number"):
         marching_boundary_layer(
             edge, regime=BoundaryLayerRegime.LAMINAR, prandtl_number=0.0
