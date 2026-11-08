@@ -325,6 +325,7 @@ def test_wheel_clean_install_metadata_entry_point_and_docs(
 
 
 @pytest.mark.package_artifact
+@pytest.mark.package_sdist
 def test_sdist_installs_into_separate_clean_environment(
     tmp_path: Path,
     artifact_directory: Path,

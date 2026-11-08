@@ -9,6 +9,11 @@ if [[ "$#" -ne 0 ]]; then
     exit 2
 fi
 
+if [[ -z "${COVERAGE_CORE+x}" ]] && uv run python -c 'import sys; sys.exit(sys.version_info < (3, 14))'; then
+    export COVERAGE_CORE=sysmon
+fi
+echo "Coverage core: ${COVERAGE_CORE-default}"
+
 uv run coverage erase
 uv run pytest -m "not generated_assets and not package_artifact and not solver_verification" -n auto
 
