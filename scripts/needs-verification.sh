@@ -27,7 +27,7 @@ answer() {
 
 changed_path() {
     local display
-    printf -v display '%q' "$1" "$1"
+    printf -v display '%q' "$1"
     answer yes "$tier-relevant $2: $display"
 }
 
