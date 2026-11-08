@@ -47,10 +47,11 @@ _EDGE_TOLERANCE = 1e-4
 class StationEdge:
     """Edge parameters at one streamwise position.
 
-    ``wall_ratio`` is ``T_w/T_e``, or None for an adiabatic wall. The last three
+    ``wall_ratio`` is ``T_w/T_e``, or None for an adiabatic wall. The last four
     fields are used by the turbulent equations only: ``reynolds_root`` is
     ``sqrt(2 xi)/(r_w^j mu_e)``, ``viscosity_growth`` is ``2 xi d(ln nu_e)/d(xi)``, and
     ``sa_ratio`` is ``nu_tilde/nu_e`` at the outer boundary.
+    ``turbulence_production`` multiplies only the SA production term.
     """
 
     xi: float
@@ -62,6 +63,7 @@ class StationEdge:
     reynolds_root: float = 0.0
     viscosity_growth: float = 0.0
     sa_ratio: float = 0.0
+    turbulence_production: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -428,9 +430,11 @@ def march(
     discretization: Discretization,
     *,
     relative_step: float = _RELATIVE_STEP,
+    internal_stations: tuple[float, ...] = (),
 ) -> MarchSolution:
-    """March from the leading edge at zero through the increasing ``targets``."""
+    """March through targets and optional internal stations, returning only targets."""
     eta = discretization.eta
+    stations = np.union1d(targets, internal_stations) if internal_stations else targets
     end = float(targets[-1])
     start_edge = edge_at(0.0)
     if start_edge.xi != 0.0:
@@ -449,13 +453,13 @@ def march(
     history = [start]
     position = 0.0
     velocity = start_edge.velocity
-    step = last_step = _FIRST_STEP_FRACTION * min(float(targets[0]), end)
+    step = last_step = _FIRST_STEP_FRACTION * min(float(stations[0]), end)
     minimum_step = _MINIMUM_STEP_FRACTION * end
     accepted_positions = [0.0]
     accepted_shear = [start.wall_velocity_slope]
     output_positions: list[float] = []
     output_stations: list[Station] = []
-    for target in (float(value) for value in targets):
+    for target in (float(value) for value in stations):
         while position < target:
             trial = min(step, _MAX_STEP_RATIO * last_step)
             if position > 0.0:
@@ -511,6 +515,7 @@ def march(
             step = trial * _STEP_GROWTH
             accepted_positions.append(position)
             accepted_shear.append(station.wall_velocity_slope)
-        output_positions.append(position)
-        output_stations.append(history[-1])
+        if not internal_stations or target in targets:
+            output_positions.append(position)
+            output_stations.append(history[-1])
     return _build_solution(discretization, output_positions, output_stations)

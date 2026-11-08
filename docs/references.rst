@@ -683,3 +683,35 @@ Boundary Layers at Supersonic Speeds from the Point of View of Reynolds
 Analogy*. NACA TN 3284, August 1954. Appendix C, equation (C13), printed page 24.
 
 https://ntrs.nasa.gov/citations/19930083971
+
+.. _ref-hildebrand-2022:
+
+Specified transition with FUN3D
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Hildebrand, N., Chang, C.-L., Choudhari, M. M., Li, F., Nielsen, E.,
+Venkatachari, B. S., and Paredes, P. *Coupling of the FUN3D Unstructured Flow
+Solver and the LASTRAC Stability Code to Model Transition*. AIAA SCITECH 2022
+Forum, AIAA Paper 2022-1952, 2022. Section II.A describes disabling turbulent
+production in the prescribed laminar region. The marching solver uses that
+prescription only; it does not implement the paper's stability analysis or
+iterative transition prediction. This is a conference paper, without a journal
+volume or issue. NTRS records the online publication date as 29 December 2021.
+
+https://doi.org/10.2514/6.2022-1952
+
+https://ntrs.nasa.gov/citations/20210024887
+
+.. _ref-rumsey-spalart-2009:
+
+Turbulence-model activation at low Reynolds number
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Rumsey, C. L., and Spalart, P. R. *Turbulence Model Behavior in Low Reynolds
+Number Regions of Aerodynamic Flowfields*. AIAA Journal, 47(4), 982--993, 2009.
+SA activation and its extent are not predictions of physical transition.
+The NTRS download is a preprint.
+
+https://doi.org/10.2514/1.39947
+
+https://ntrs.nasa.gov/citations/20090017753

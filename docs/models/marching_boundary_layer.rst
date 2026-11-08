@@ -112,6 +112,54 @@ this is the original 312-node grid. These are geometric spacings, not
 geometrically positioned nodes. The outer-boundary check remains active:
 a compression can grow beyond this estimate and stop the march.
 
+Specified transition
+~~~~~~~~~~~~~~~~~~~~
+
+Use ``regime=BoundaryLayerRegime.TRANSITIONAL`` with an explicit
+``transition_distance`` in metres along the wall from the leading edge.
+The distance must be a finite scalar with
+``0 < transition_distance < edge.distance[-1]``. There is no default
+transition position; specifying it in another regime raises ``ValueError``.
+``edge_sa_ratio`` must be positive: production is proportional to
+:math:`\widetilde\nu`, so an initially zero field cannot grow.
+
+SA-noft2 is solved over the entire domain on the same grid as ``TURBULENT``.
+Only :math:`c_{b1}\widetilde S n` is multiplied by zero for
+:math:`s \le s_{tr}` and by one downstream. Destruction, diffusion, convection,
+and the outer boundary condition remain active. The implementation applies
+the multiplier in the residual, its numerical Newton Jacobian, and Picard's
+lagged source and source-based relaxation. No profile or grid is replaced at
+the switch. The march passes through the transition position internally; the
+returned stations remain exactly ``edge.distance[1:]``.
+
+This follows the production suppression described for FUN3D by
+:ref:`Hildebrand et al. (2022) <ref-hildebrand-2022>`. It supplies a user-chosen
+onset, not natural-transition prediction, a roughness trip, or an intermittency
+model. **The transition length produced by SA-noft2 is a numerical model
+response, not a prediction of physical transition length.** The limitations of
+SA activation discussed by :ref:`Rumsey and Spalart (2009)
+<ref-rumsey-spalart-2009>` still apply.
+
+The upstream solution retains small eddy viscosity supplied from the edge.
+For ``edge_sa_ratio=3`` the measured maximum upstream departures from the
+laminar solver are 0.374% in Cf and 0.356% in wall heat flux over the four
+uniform-edge verification cases (M0.3, M2 cooled/adiabatic, M6 cooled).
+These are case-specific numerical measurements, not physical accuracy bounds.
+Reducing the seed reduces eddy viscosity but does not remove differences
+between the two existing discretizations: at M2, Te=220 K and Tw=300 K,
+``edge_sa_ratio=1e-3`` gives a 0.05304% upstream heat-flux difference from
+``LAMINAR``. This difference is recorded as a discretization diagnostic, without
+a pass/fail criterion. The laminar-limit check retains the V6 Cf target of 0.05%.
+The transition implementation is checked separately against
+``TURBULENT(edge_sa_ratio=0)`` on the same SA grid and with the same operators,
+using a maximum relative-difference limit of 1e-8% for both Cf and heat flux.
+
+The result includes read-only ``nu_tilde_ratio`` profiles. The ``y+ > 1``
+warning considers only output stations strictly downstream of the specified
+transition; all other applicability checks remain active throughout the flow.
+Planar and thin axisymmetric geometry, perfect-gas and isentropic-edge
+assumptions, and the existing separation and outer-boundary limits still apply.
+
 Results
 ~~~~~~~
 

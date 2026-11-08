@@ -7,6 +7,10 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add `transition_distance` to `marching_boundary_layer` with
+  `regime=TRANSITIONAL` for a user-specified transition position.
+  The resulting SA-noft2 transition length is not a physical prediction.
+
 - Add optional `wall_radius` to `marching_boundary_layer` for thin axisymmetric
   laminar and SA-noft2 flow from a sharp tip or leading edge. Radii use SI metres
   and linear interpolation in wall distance; Cf uses local edge dynamic pressure,

@@ -319,7 +319,9 @@ class _EdgeInterpolant:
         wall_temperature: FloatArray | None,
         edge_sa_ratio: float | None = None,
         wall_radius: FloatArray | None = None,
+        transition_distance: float | None = None,
     ) -> None:
+        self.transition_distance = transition_distance
         # Linear panels preserve a cone-to-cylinder kink exactly. Own both
         # coefficients and knots so caller mutation cannot change the geometry.
         self.radius = (
@@ -461,6 +463,9 @@ class _EdgeInterpolant:
             reynolds_root,
             float(growth),
             sa_ratio,
+            float(
+                self.transition_distance is None or distance > self.transition_distance
+            ),
         )
 
 
@@ -608,7 +613,9 @@ def _warn_applicability(
             * np.sqrt(wall_density * np.maximum(result.wall_shear_stress, 0.0))
             / wall_viscosity
         )
-        if np.max(y_plus) > 1.0:
+        if interpolant.transition_distance is not None:
+            y_plus = y_plus[result.distance > interpolant.transition_distance]
+        if y_plus.size and np.max(y_plus) > 1.0:
             warnings.warn(
                 "the first wall-normal node has y+ > 1 "
                 f"(maximum y+ = {np.max(y_plus):.6g})",
@@ -635,6 +642,7 @@ def marching_boundary_layer(
     turbulent_prandtl_number: float = 0.9,
     edge_sa_ratio: float = 3.0,
     wall_radius: ArrayLike | None = None,
+    transition_distance: float | None = None,
 ) -> MarchingBoundaryLayerResult:
     """March a boundary layer along a wall from a sharp leading edge.
 
@@ -644,9 +652,9 @@ def marching_boundary_layer(
         Edge state along the wall. Resolve pressure changes smoothly, because
         the march follows a monotone interpolation of the supplied pressure.
     regime:
-        ``LAMINAR`` or ``TURBULENT`` (SA-noft2). ``TRANSITIONAL`` is not
-        implemented. SA-noft2 develops its own laminar start and transition
-        near the leading edge; this is not a transition prediction.
+        ``LAMINAR``, ``TURBULENT`` (SA-noft2), or ``TRANSITIONAL`` (SA-noft2
+        with production suppressed through ``transition_distance``).
+        SA-noft2 activation is not a physical transition prediction.
     wall_temperature:
         Wall temperature in K, as a scalar or an array with the shape of
         ``edge.distance``. None selects an adiabatic wall.
@@ -654,11 +662,12 @@ def marching_boundary_layer(
         Constant Prandtl number.
     turbulent_prandtl_number:
         Constant turbulent Prandtl number, greater than zero. Validated in
-        every regime and used only for ``TURBULENT``.
+        every regime and used for both SA regimes.
     edge_sa_ratio:
         Initial ``nu_tilde/nu_e`` at the edge, at least zero. Dimensional
         ``nu_tilde`` is conserved along the edge streamline. Zero gives the
-        laminar limit. Validated in every regime and used only for ``TURBULENT``.
+        laminar limit in ``TURBULENT``. Must be positive for ``TRANSITIONAL``.
+        Validated in every regime and used for both SA regimes.
 
     wall_radius:
         Local distance from the symmetry axis in m. None keeps the planar
@@ -667,6 +676,14 @@ def marching_boundary_layer(
         (sharp tip); all later radii must be positive. Radii are copied and
         interpolated piecewise linearly in wall distance. Curved bodies need
         sufficiently dense geometry nodes; include shoulders explicitly.
+    transition_distance:
+        Prescribed transition position in m along the wall from the leading
+        edge. Required for ``TRANSITIONAL``; no default position is assumed.
+        Must be a finite scalar strictly between zero and ``edge.distance[-1]``.
+        Rejected in other regimes. Only SA production is suppressed at and
+        upstream of this position; diffusion, destruction and the edge value
+        remain active. The resulting transition length is a numerical SA-noft2
+        response, not a prediction of physical transition length.
 
     Returns
     -------
@@ -739,13 +756,29 @@ def marching_boundary_layer(
     if not sa_scalar or float(sa_array) < 0.0:
         raise ValueError("edge_sa_ratio must be a scalar at least zero")
     sa_ratio = float(sa_array)
+    if regime is BoundaryLayerRegime.TRANSITIONAL:
+        if transition_distance is None:
+            raise ValueError("transition_distance is required for TRANSITIONAL")
+        transition_distance = _positive_scalar(
+            transition_distance, name="transition_distance"
+        )
+        if transition_distance >= edge.distance[-1]:
+            raise ValueError("transition_distance must be less than edge.distance[-1]")
+        if sa_ratio == 0.0:
+            raise ValueError(
+                "TRANSITIONAL requires edge_sa_ratio > 0: SA production is "
+                "proportional to nu_tilde, so a zero field cannot develop turbulence"
+            )
+    elif transition_distance is not None:
+        raise ValueError("transition_distance is only valid for TRANSITIONAL")
     if (
         regime is not BoundaryLayerRegime.LAMINAR
         and regime is not BoundaryLayerRegime.TURBULENT
+        and regime is not BoundaryLayerRegime.TRANSITIONAL
     ):
         raise ModelRangeError(
-            "marching_boundary_layer implements BoundaryLayerRegime.LAMINAR "
-            "and TURBULENT"
+            "marching_boundary_layer implements BoundaryLayerRegime.LAMINAR, "
+            "TURBULENT, and TRANSITIONAL"
         )
     prandtl = _positive_scalar(prandtl_number, name="prandtl_number")
     wall = (
@@ -758,8 +791,9 @@ def marching_boundary_layer(
     interpolant = _EdgeInterpolant(
         edge,
         wall,
-        sa_ratio if regime is BoundaryLayerRegime.TURBULENT else None,
+        sa_ratio if regime is not BoundaryLayerRegime.LAMINAR else None,
         None if wall_radius is None else _radius_array(wall_radius, edge.distance.size),
+        transition_distance,
     )
     eta = eta_grid(
         _LAMINAR_ETA_FIRST,
@@ -780,15 +814,19 @@ def marching_boundary_layer(
             turbulent_prandtl,
             edge.viscosity_model,
         )
-        if regime is BoundaryLayerRegime.TURBULENT
+        if regime is not BoundaryLayerRegime.LAMINAR
         else Discretization(eta, prandtl, edge.viscosity_model)
     )
     try:
-        solution = march(
-            interpolant.state,
-            edge.distance[1:],
-            discretization,
-        )
+        if transition_distance is None:
+            solution = march(interpolant.state, edge.distance[1:], discretization)
+        else:
+            solution = march(
+                interpolant.state,
+                edge.distance[1:],
+                discretization,
+                internal_stations=(transition_distance,),
+            )
     except SeparationError as separation:
         upstream = _result(edge, interpolant, separation.solution, prandtl)
         raise BoundaryLayerSeparationError(
