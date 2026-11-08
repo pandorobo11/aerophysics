@@ -1,0 +1,45 @@
+{
+  "source": {
+    "citation": "Ehret, D. M., Rossow, V. J., and Stevens, V. I., An Analysis of the Applicability of the Hypersonic Similarity Law to the Study of Flow About Bodies of Revolution at Zero Angle of Attack, NACA TN 2250, December 1950.",
+    "url": "https://ntrs.nasa.gov/citations/19930082890",
+    "figure": "Figure 1 (page 13): Variation of pressure coefficient along cone cylinders for a given value of the similarity parameter; K = 1.",
+    "method_in_source": "Method of characteristics for irrotational inviscid flow, gamma = 1.4. Sauer's graphical method for most solutions; the bow shock was allowed to curve but the rotation term was dropped from the compatibility equations (source pages 5-6, footnote 4). Stated accuracy criterion: scatter of surface Mach angles within 3 percent of their total variation over the body (page 6).",
+    "quantity": "(p - p0) / p0, local static pressure relative to free-stream static pressure p0",
+    "abscissa": "longitudinal coordinate x from the vertex, percent of nose (cone) length l; the shoulder is at 100"
+  },
+  "digitization": {
+    "by": "visual reading of marker centres on a 300 dpi rendering, with the axes calibrated from the printed grid lines (0.05 per row, 10 percent per column)",
+    "date": "2026-11-08",
+    "reading_uncertainty": {"pressure_coefficient": 0.005, "percent_nose_length": 1.0},
+    "note": "Only the plotted computed points are listed, not the faired curve. These values carry both the digitization uncertainty and the graphical-method accuracy of the source; use them as a loose comparison only."
+  },
+  "cases": [
+    {
+      "free_stream_mach": 3.0,
+      "nose_fineness_ratio": 3.0,
+      "cone_half_angle_deg": 9.462322208025617,
+      "marker": "circle",
+      "points": [
+        [100.0, -0.273],
+        [119.7, -0.207],
+        [151.6, -0.130],
+        [199.0, -0.077],
+        [260.7, -0.040],
+        [339.0, -0.012]
+      ]
+    },
+    {
+      "free_stream_mach": 6.0,
+      "nose_fineness_ratio": 6.0,
+      "cone_half_angle_deg": 4.763641690726178,
+      "marker": "square",
+      "points": [
+        [100.0, -0.246],
+        [112.9, -0.199],
+        [136.1, -0.141],
+        [177.5, -0.088],
+        [236.4, -0.044]
+      ]
+    }
+  ]
+}

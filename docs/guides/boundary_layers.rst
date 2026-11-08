@@ -236,9 +236,10 @@ an uncalibrated indicator; near-tip stations commonly trigger it. Longitudinal
 curvature and normal pressure gradients are also neglected. Use SI units and
 wall arc length, local-edge Cf, and positive-into-wall heat flux.
 
-A cone-to-cylinder worked flow example is not supplied: downstream of its
-shoulder, edge conditions require external Euler/CFD or measured data that are
-not available here. ``flow_sequence`` cannot provide that distribution.
+For a sharp convex cone--cylinder with an attached supersonic flow, see
+`Cone--cylinder outer flow and boundary layer`_ below for an inviscid
+characteristic solution and one-way boundary-layer connection.
+``flow_sequence`` cannot provide the shoulder's edge distribution.
 The synthetic shoulder verification is only a numerical stress test.
 
 .. _rm3633-example:
@@ -363,3 +364,46 @@ An ``ApplicabilityWarning`` reports laminar viscous interaction when
 ``chi_bar = Mach**3 * sqrt(Cw / Re_x) > 1``. Leading-edge induced pressure
 then invalidates the zero-pressure-gradient assumption. The warning excludes
 ``compressible=False`` and turbulent points; it does not correct the edge state.
+
+Cone--cylinder outer flow and boundary layer
+--------------------------------------------
+
+Use :doc:`../models/axisymmetric_characteristics` for an attached, supersonic,
+zero-incidence outer flow on a sharp convex body. Both geometry arrays below
+are in metres. The returned distance follows the surface; the matching
+radius array preserves the exact shoulder in the boundary-layer geometry.
+The shoulder station carries the downstream expansion state. Conversion adds
+the upstream limit at ``s_c - w`` and a logarithmic-pressure midpoint, where
+``w = 0.001 * s_c`` by default and ``s_c`` is the corner surface distance.
+The returned wall radii match these extra edge stations exactly.
+This one-way coupling neglects displacement feedback and corner interaction.
+
+>>> from aerophysics import axisymmetric_body_flow, marching_boundary_layer
+>>> outer = axisymmetric_body_flow(
+...     [0.0, 0.3, 1.3], [0.0, 0.05, 0.05],
+...     mach=3.0, pressure=10000.0, temperature=220.0,
+... )
+>>> inputs = outer.boundary_layer_inputs()
+>>> layer = marching_boundary_layer(
+...     inputs.edge, regime=BoundaryLayerRegime.LAMINAR,
+...     wall_radius=inputs.wall_radius, wall_temperature=300.0,
+... )
+>>> bool(layer.distance[-1] == outer.surface_distance[-1])
+True
+
+``BoundaryLayerRegime.TURBULENT`` selects the SA-noft2 model. It does not
+predict transition, and its applicability warnings still need assessment.
+
+The narrow pressure ramp intentionally triggers the pressure-length applicability
+warning. Thin-layer results near the shoulder, including at least several tens
+of upstream boundary-layer thicknesses downstream, are not reliable local
+corner predictions and depend on ``w``. An explicit positive ``corner_length``
+sets this width in metres; it must fit strictly inside the preceding output
+interval. In this example the default width is 0.304 mm. Compared with 1 mm,
+laminar Cf and heat flux differ by +3.82 and +2.27 percent at 5 upstream
+delta99, and +0.88 and +0.55 percent at 20 delta99. At 5 delta99, the default
+versus 0.2 mm differences are -0.62 and -0.44 percent; SA Cf differences
+are +0.10 percent versus 1 mm and -0.016 percent versus 0.2 mm.
+See :doc:`../models/axisymmetric_characteristics` for further measurements.
+The midpoint makes the steep gradient visible to warnings;
+it does not restore the thin-layer approximation or resolve viscous interaction.

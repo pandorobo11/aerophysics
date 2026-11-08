@@ -44,7 +44,7 @@ relevant_path() {
     if [[ "$tier" == solver ]]; then
         case "$path" in
             src/aerophysics/gui/*) ;;
-            src/aerophysics/*|tests/test_marching_boundary_layer*.py|tests/test_turbulent_sa_reference.py|docs/scripts/*|tests/reference_data/*|pyproject.toml|uv.lock|scripts/check*.sh|scripts/needs-verification.sh|.github/workflows/*)
+            src/aerophysics/*|tests/test_marching_boundary_layer*.py|tests/test_turbulent_sa_reference.py|tests/test_characteristics.py|docs/scripts/*|tests/reference_data/*|pyproject.toml|uv.lock|scripts/check*.sh|scripts/needs-verification.sh|.github/workflows/*)
                 changed_path "$path" change ;;
         esac
     else
