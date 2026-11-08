@@ -52,7 +52,7 @@ jobs:
         if: matrix.coverage == false
         run: >-
           uv run pytest -m "not generated_assets and not package_artifact and not solver_verification"
-          --no-cov
+          --no-cov -n auto
 
   lint:
     name: Ruff lint
@@ -158,7 +158,6 @@ jobs:
 
   docs:
     name: Documentation build
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -179,7 +178,6 @@ jobs:
 
   package:
     name: Python package build and verification
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
