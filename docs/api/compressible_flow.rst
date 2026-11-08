@@ -38,3 +38,9 @@ Sequential transformations
 
 .. automodule:: aerophysics.flow_sequence
    :members:
+
+Axisymmetric external characteristics
+-------------------------------------
+
+.. automodule:: aerophysics.characteristics
+   :members: AxisymmetricBodyFlowResult, BoundaryLayerInputs, axisymmetric_body_flow

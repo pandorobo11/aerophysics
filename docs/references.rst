@@ -683,3 +683,51 @@ Boundary Layers at Supersonic Speeds from the Point of View of Reynolds
 Analogy*. NACA TN 3284, August 1954. Appendix C, equation (C13), printed page 24.
 
 https://ntrs.nasa.gov/citations/19930083971
+
+Rotational characteristics
+---------------------------
+
+.. _ref-zucrow-hoffman-1977:
+
+Zucrow, M. J., and Hoffman, J. D. *Gas Dynamics, Volume 2: Multidimensional
+Flow*. Wiley, 1977. ISBN 0-471-01806-6. Bibliographic title, volume and year
+were checked against the library records below on 2026-11-08. The complete
+original MOC chapter was not inspected; no equation or subsection numbers
+are asserted for this implementation.
+
+https://search.worldcat.org/title/Gas-dynamics.-Vol.-2-Multidimensional-flow/oclc/923378441
+
+https://library.kaist.ac.kr/search/ctlgSearch/posesn/view.do?bibctrlno=11136&se=b0&ty=B
+
+.. _ref-anderson-moc:
+
+Anderson, J. D. *Modern Compressible Flow: With Historical Perspective*,
+4th edition, McGraw Hill, copyright 2021. The publisher confirms the title,
+edition and Chapter 11, "Numerical Techniques for Steady Supersonic Flow".
+The axisymmetric/rotational chapter text and detailed section numbering were
+not independently inspected. Bibliographic verification: 2026-11-08.
+
+https://www.mheducation.com/highered/product/Modern-Compressible-Flow-With-Historical-Perspective-Anderson.html
+
+https://www.mheducation.ca/higher-education/engineering-computer-science/mechanical-engineering/compressible-flow-gas-dynamics
+
+.. _ref-ehret-rossow-stevens-1950:
+
+Ehret, D. M., Rossow, V. J., and Stevens, V. I. *An Analysis of the
+Applicability of the Hypersonic Similarity Law to the Study of Flow About
+Bodies of Revolution at Zero Angle of Attack*. NACA TN 2250, December 1950.
+Figure 1 (page 13), K = 1 cone--cylinders. The source uses irrotational
+inviscid characteristics with gamma = 1.4, predominantly Sauer's graphical
+method; the bow shock curves but the rotation term is omitted (pages 5--6,
+footnote 4). The stated accuracy criterion is surface Mach-angle scatter
+within 3 percent of its variation over the body, not a 3 percent pressure
+error bound.
+
+https://ntrs.nasa.gov/citations/19930082890
+
+Reviewer-supplied digitization and bibliographic metadata are preserved
+unchanged in ``tests/reference_data/inviscid/naca_tn2250_cone_cylinder.json``.
+Reading uncertainties are +/-0.005 in (p - p_inf)/p_inf and +/-1 percentage
+point of x/l expressed as a percent. The comparison bound is an absolute
+0.02 in that pressure ratio. These are computed literature points, not
+experimental measurements.

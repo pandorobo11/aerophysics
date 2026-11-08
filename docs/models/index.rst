@@ -23,6 +23,7 @@ model. The pages are grouped in the same order as the GUI sidebar.
    isentropic_flow
    shock_waves
    expansion_waves
+   axisymmetric_characteristics
 
 **Viscous flow and heating**
 

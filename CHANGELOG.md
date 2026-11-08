@@ -7,6 +7,15 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add `axisymmetric_body_flow` for the supersonic, zero-incidence flow around
+  sharp, convex, piecewise linear bodies of revolution, such as cone-cylinders.
+  It uses the rotational method of characteristics with a fitted leading shock.
+  `boundary_layer_inputs` returns the body-streamline edge and matching wall
+  radii for `marching_boundary_layer`; each convex corner becomes a short
+  pressure ramp of length `corner_length`. Boundary-layer results within a few
+  tens of `delta99` of a sharp corner depend on that length and are not reliable.
+  Accuracy against experiment is not established.
+
 - Add optional `wall_radius` to `marching_boundary_layer` for thin axisymmetric
   laminar and SA-noft2 flow from a sharp tip or leading edge. Radii use SI metres
   and linear interpolation in wall distance; Cf uses local edge dynamic pressure,

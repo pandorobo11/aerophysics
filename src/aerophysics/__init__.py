@@ -19,6 +19,11 @@ from aerophysics.boundary_layer_profile import (
     compressible_turbulent_boundary_layer_profile,
     transform_compressible_velocity_profile,
 )
+from aerophysics.characteristics import (
+    AxisymmetricBodyFlowResult,
+    BoundaryLayerInputs,
+    axisymmetric_body_flow,
+)
 from aerophysics.detached_shock import (
     BilligShockShapeResult,
     DetachedShockComparisonResult,
@@ -96,9 +101,11 @@ __all__ = [
     "AtmosphereState",
     "AttachmentLineHeatingModel",
     "AttachmentLineHeatingResult",
+    "AxisymmetricBodyFlowResult",
     "BeattieBridgemanGas",
     "BilligShockShapeResult",
     "BoundaryLayerEdge",
+    "BoundaryLayerInputs",
     "BoundaryLayerRegime",
     "CompressibleBoundaryLayerProfileResult",
     "CompressibleVelocityTransformation",
@@ -126,6 +133,7 @@ __all__ = [
     "TurbulentModel",
     "VibrationalMode",
     "__version__",
+    "axisymmetric_body_flow",
     "billig_shock_shape",
     "compare_standoff_distances",
     "compressible_turbulent_boundary_layer_profile",
