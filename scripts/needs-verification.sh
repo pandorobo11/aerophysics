@@ -31,6 +31,22 @@ changed_path() {
     answer yes "$tier-relevant $2: $display"
 }
 
+if [[ "$tier" == solver ]]; then
+    # The path list is shared with tests/test_verification_paths.py.
+    solver_patterns=()
+    paths_file=scripts/solver-verification-paths.txt
+    [[ -r "$paths_file" ]] || answer yes "cannot read $paths_file (fail safe)"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        case "$line" in
+            ''|'#'*) ;;
+            *) solver_patterns+=("$line") ;;
+        esac
+    done < "$paths_file"
+    [[ "${#solver_patterns[@]}" -gt 0 ]] ||
+        answer yes "no patterns in $paths_file (fail safe)"
+fi
+
 git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1 ||
     answer yes "base ref unavailable: $base (fail safe)"
 git merge-base "$base" HEAD >/dev/null 2>&1 ||
@@ -42,11 +58,14 @@ relevant_path() {
         answer yes "cannot inspect changes relative to $base (fail safe)"
     fi
     if [[ "$tier" == solver ]]; then
-        case "$path" in
-            src/aerophysics/gui/*) ;;
-            src/aerophysics/*|tests/test_marching_boundary_layer*.py|tests/test_turbulent_sa_reference.py|tests/test_characteristics.py|docs/scripts/*|tests/reference_data/*|pyproject.toml|uv.lock|scripts/check*.sh|scripts/needs-verification.sh|.github/workflows/*)
-                changed_path "$path" change ;;
-        esac
+        local pattern
+        for pattern in "${solver_patterns[@]}"; do
+            # Unquoted right-hand side: the list holds glob patterns.
+            # shellcheck disable=SC2053
+            if [[ "$path" == $pattern ]]; then
+                changed_path "$path" change
+            fi
+        done
     else
         case "$path" in
             pyproject.toml|uv.lock|hatch_build.py|src/aerophysics/__init__.py|src/aerophysics/gui/launcher.py|src/aerophysics/gui/documentation.py|tests/test_package.py|docs/conf.py|README*|LICENSE*|scripts/check*.sh|scripts/needs-verification.sh|.github/workflows/*)

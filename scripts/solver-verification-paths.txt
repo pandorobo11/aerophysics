@@ -1,0 +1,47 @@
+# Paths whose changes require the slow `solver_verification` test tier.
+#
+# Read by scripts/needs-verification.sh (bash `[[ path == pattern ]]` globs,
+# where `*` also matches `/`) and checked by tests/test_verification_paths.py,
+# which fails when a module imported (transitively) by a solver_verification
+# test, or a reference file it reads, is not covered here. Blank lines and
+# lines starting with `#` are ignored.
+
+# Package entry point: the tests import names through `aerophysics`.
+src/aerophysics/__init__.py
+
+# Transitive import closure of the solver_verification tests.
+src/aerophysics/_array.py
+src/aerophysics/_banded.py
+src/aerophysics/_boundary_layer_march.py
+src/aerophysics/_boundary_layer_sa.py
+src/aerophysics/_laminar_similarity.py
+src/aerophysics/_nasa_data.py
+src/aerophysics/_thermal_conical.py
+src/aerophysics/_thermal_expansion.py
+src/aerophysics/_thermal_shocks.py
+src/aerophysics/boundary_layer.py
+src/aerophysics/boundary_layer_profile.py
+src/aerophysics/characteristics.py
+src/aerophysics/exceptions.py
+src/aerophysics/expansion.py
+src/aerophysics/gas.py
+src/aerophysics/isentropic.py
+src/aerophysics/marching_boundary_layer.py
+src/aerophysics/real_gas.py
+src/aerophysics/shocks.py
+src/aerophysics/thermochemistry.py
+src/aerophysics/transport.py
+
+# Solver verification tests, their shared helpers, and reference data.
+tests/test_characteristics.py
+tests/test_marching_boundary_layer*.py
+tests/reference_data/inviscid/naca_tn2250_cone_cylinder.json
+tests/reference_data/viscous_flow/turbulent_sa_boundary_layer.csv
+
+# Dependencies, test configuration, and the gate itself.
+pyproject.toml
+uv.lock
+scripts/check*.sh
+scripts/needs-verification.sh
+scripts/solver-verification-paths.txt
+.github/workflows/*

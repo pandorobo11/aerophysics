@@ -37,8 +37,12 @@ not modify source files.
 
 The slow marching-solver tier runs automatically when solver-relevant files
 changed relative to `origin/main`, including staged, unstaged, and untracked
-files. `scripts/needs-verification.sh solver` owns the path rules and runs the
-tier if the base cannot be resolved. Use `scripts/check.sh --full` to force
+files. `scripts/needs-verification.sh solver` applies the path rules listed in
+`scripts/solver-verification-paths.txt` and runs the tier if the base cannot be
+resolved. The list holds the transitive `aerophysics` import closure of the
+`solver_verification` tests and the reference files they read;
+`tests/test_verification_paths.py` fails when it drifts, so update the list
+when a solver module gains an import or a solver test gains an input. Use `scripts/check.sh --full` to force
 both solver and package verification, and use `--full` before changes whose
 impact on the solver or distribution is unclear. The `--full` and
 `--check-only` options can be combined.
