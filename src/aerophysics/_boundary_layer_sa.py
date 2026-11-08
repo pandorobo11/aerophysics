@@ -83,6 +83,7 @@ class TurbulentDiscretization(Discretization):
     """One station of ``(f, u, g, n, Y)`` with a Picard fallback."""
 
     unknowns = 5
+    _analytic_jacobian_enabled = False
     newton_iterations = 50
     newton_tolerance = 1e-9
 

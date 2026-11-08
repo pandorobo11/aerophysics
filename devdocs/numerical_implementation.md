@@ -130,9 +130,23 @@ its `total_pressure_ratio`, which only need the static states.
 `marching_boundary_layer` is implemented in `_boundary_layer_march.py`.
 
 - Each station solves `(f, u, g)` on a fixed `eta` grid with a damped Newton
-  iteration. The Jacobian is block tridiagonal, assembled by three-color finite
-  differences, and solved with banded LAPACK. Convergence requires a maximum
+  iteration. The block-tridiagonal Jacobian uses exact discrete derivatives for
+  laminar flow with exact built-in `SutherlandModel` or `KeyesModel` types.
+  Other viscosity models (including subclasses) and SA retain three-color
+  finite differences. Both paths assemble directly into expanded `gbsv` bands
+  and use the same banded LAPACK solve. Convergence requires a maximum
   update below `1e-10` in `u` and in the relative `g`.
+- The analytic path uses the model's viscosity value and validation at current
+  temperatures, with a private derivative in Pa s/K. For Sutherland,
+  `mu_T/mu = 1.5/T - 1/(T+S)`; for Keyes, with
+  `a = A 10**(-B/T)`, `mu_T/mu = 1.5/T - (1+a ln(10) B/T**2)/(T+a)`.
+  Thus `C_g = (T_e mu_T/mu_e - C)/g`. This derivative enters both face
+  fluxes, dissipation, and the adiabatic half-cell balance. Convection and
+  streamwise BDF terms are differentiated with edge and lagged states fixed.
+  The residual, grids, step control, damping, and tolerances are unchanged.
+  This changes no physical applicability range or coordinate convention:
+  `g = T/T_e` and `eta` are dimensionless, temperatures are kelvin, positive
+  `beta` accelerates the edge, and reported heat flux is positive into the wall.
 - The adiabatic wall uses a half-cell energy balance, which keeps the Jacobian
   block tridiagonal: at the wall the convective terms vanish and only viscous
   dissipation remains.

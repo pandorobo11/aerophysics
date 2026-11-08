@@ -103,16 +103,26 @@ def low_mach_viscosity_edge(
     )
 
 
-def test_laminar_bounded_viscosity_matches_unrestricted_air() -> None:
+def test_laminar_bounded_viscosity_matches_unrestricted_air(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     edge = low_mach_viscosity_edge(300.001, BoundedAirViscosity())
     bounded = marching_boundary_layer(
         edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=300.001
     )
-    unrestricted = marching_boundary_layer(
+    analytic_unrestricted = marching_boundary_layer(
         replace(edge, viscosity_model=AIR_VISCOSITY),
         regime=BoundaryLayerRegime.LAMINAR,
         wall_temperature=300.001,
     )
+    # Keep the exact comparison on the same finite-difference linearization.
+    with monkeypatch.context() as patch:
+        patch.setattr(Discretization, "_analytic_jacobian_enabled", False)
+        unrestricted = marching_boundary_layer(
+            replace(edge, viscosity_model=AIR_VISCOSITY),
+            regime=BoundaryLayerRegime.LAMINAR,
+            wall_temperature=300.001,
+        )
     for name in (
         "local_skin_friction_coefficient",
         "wall_heat_flux",
@@ -120,6 +130,12 @@ def test_laminar_bounded_viscosity_matches_unrestricted_air() -> None:
     ):
         np.testing.assert_array_equal(
             getattr(bounded, name), getattr(unrestricted, name)
+        )
+        np.testing.assert_allclose(
+            getattr(bounded, name),
+            getattr(analytic_unrestricted, name),
+            rtol=1e-10,
+            atol=0,
         )
 
 
