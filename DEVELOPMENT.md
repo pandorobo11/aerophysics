@@ -150,6 +150,12 @@ independent gates to the two product layers:
 - the GUI package (modules under ``src/aerophysics/gui``) must remain at or
   above 90%.
 
+CI measures coverage on Ubuntu / Python 3.14 with coverage.py's `sysmon` core,
+which `scripts/check-coverage.sh` selects automatically on Python 3.14+ unless
+`COVERAGE_CORE` is explicitly set to override the choice. Other matrix entries
+and releases run the same suite; releases use coverage.py's default core on
+Python 3.12.
+
 Run those same tests and gates on their own with:
 
 ```console

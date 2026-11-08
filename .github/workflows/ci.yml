@@ -22,13 +22,13 @@ jobs:
         include:
           - os: ubuntu-latest
             python: "3.12"
-            coverage: true
+            coverage: false
           - os: ubuntu-latest
             python: "3.13"
             coverage: false
           - os: ubuntu-latest
             python: "3.14"
-            coverage: false
+            coverage: true
           - os: macos-latest
             python: "3.13"
             coverage: false
