@@ -22,12 +22,21 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     arguments = ["--check"] if args.check else []
-    failures = []
-    for generator in GENERATORS:
-        result = subprocess.run(
-            [sys.executable, str(DIRECTORY / generator), *arguments]
+    processes = [
+        subprocess.Popen(
+            [sys.executable, str(DIRECTORY / generator), *arguments],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
-        if result.returncode:
+        for generator in GENERATORS
+    ]
+    failures = []
+    for generator, process in zip(GENERATORS, processes, strict=True):
+        output, _ = process.communicate()
+        sys.stdout.write(output)
+        sys.stdout.flush()
+        if process.returncode:
             failures.append(generator)
     if failures:
         action = "check" if args.check else "generation"

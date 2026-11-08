@@ -87,7 +87,7 @@ if [[ "$package_decision" == yes ]]; then
     run_step "Build Python distributions" uv run python -m build
     run_step "Verify clean wheel and sdist installations" \
         env AEROPHYSICS_TEST_ARTIFACT_DIRECTORY=dist \
-        uv run pytest -m package_artifact --no-cov
+        uv run pytest -m package_artifact --no-cov -n 2
 else
     printf '\nSKIPPED: Build Python distributions (%s)\n' "$package_reason"
     printf 'SKIPPED: Verify clean wheel and sdist installations (%s)\n' "$package_reason"
