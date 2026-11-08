@@ -73,6 +73,10 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Changed
 
+- Use an analytic Jacobian for the SA-noft2 station solve with the built-in
+  Sutherland and Keyes viscosity models. SA marches run about 1.5 to 2.2 times
+  faster; regression marches agree with the previous finite-difference
+  linearization at `rtol=1e-8, atol=1e-10`.
 - Stop bundling documentation in editable installs; standard wheels still include it.
 - Solve the Spalding--Coles thickness closure of
   `TurbulentModel.SCHLICHTING_LOG_WAKE` and
