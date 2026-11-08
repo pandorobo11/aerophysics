@@ -108,9 +108,32 @@ The trip term ft2 is omitted. The wall has :math:`n=0`; the outer boundary has
 viscosity is conserved.
 The adiabatic wall uses a half-cell energy balance with zero wall flux.
 
-The five unknowns per node are ``(f, u, g, n, Y)``. A damped Newton iteration
-falls back to relaxed Picard with nonnegative ``n`` clipping. If both fail the
-streamwise step halves. The eta grid has first spacing 0.0007 and spacing
+The five unknowns per node are ``(f, u, g, n, Y)``. Projected active-set Newton
+solves the local interior SA conditions :math:`n \geq 0`, :math:`R \leq 0`,
+and :math:`nR=0`, where :math:`R` is the discrete SA residual. Positive
+interior values satisfy the SA equation; zero values admit a nonpositive
+residual. Newton falls back to relaxed Picard with nonnegative ``n`` clipping.
+At convergence, an active or projected-zero first interior SA node also
+requests Picard. Such wall-attached zero regions select the trivial partially
+laminar branch; the intended clipped set is the outer turbulent front.
+The explicitly zero edge-SA case retains legacy Newton for its intentional
+zero-SA limit.
+Picard projects the result of a coupled tridiagonal solve, satisfying
+:math:`\min(n,A(n)^{-1}R)=0` at its fixed point. This differs from Newton's
+local complementarity condition: clipping can leave residuals at positive
+neighbors of clipped nodes. In the measured M2--3 fixed-wall and adiabatic
+marches, the maximum difference in ``n`` was less than :math:`2.12\times10^{-6}`
+of maximum ``n``; other output fields differed by less than
+:math:`7.08\times10^{-8}` of their respective maxima. These are not general
+bounds: remeasured with the wall guard at :math:`Re=10^{10}`, M2, edge 220 K
+and wall 300 K, the largest ``n`` difference is 8.099
+(:math:`6.03\times10^{-5}` of the profile maximum), two nodes before clipping.
+The last positive node changes from ``n=1996.166`` to ``2002.957``.
+Velocity and temperature profile differences are below
+:math:`8.2\times10^{-8}` of their maxima. These comparisons do not establish grid
+convergence or physical validation of the outer SA front.
+If both solvers fail the streamwise step halves.
+The eta grid has first spacing 0.0007 and spacing
 ratio 1.04. Before marching, define ``Re_equivalent = max(R)^2/2`` over the
 output stations and ``scale = max(1, (Re_equivalent/1e8)^0.42)``. The extent is
 ``150 scale`` and the outer spacing cap is ``scale``. Up to Re_equivalent=1e8
@@ -350,8 +373,9 @@ delta99 were insensitive to that refinement in these cases: Cf changed by
 less than 0.01% and delta99 by less than 0.06%. These measurements are not
 general bounds.
 
-A strong expansion can take tens of seconds because of Picard fallbacks;
-M1.2 to 4 took about 25 s in a measurement on one machine.
+With the legacy positivity-damped Newton, M1.2 to 4 took about 25 s on one
+machine because of Picard fallbacks. Active-set Newton substantially reduced
+fallbacks in the measured verification tier; timings remain machine-dependent.
 
 .. list-table:: Reported conditions
    :header-rows: 1

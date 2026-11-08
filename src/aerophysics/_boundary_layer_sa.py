@@ -15,8 +15,21 @@ and ``Lambda = 2 xi d(ln nu_e)/d(xi)``. Here j=0 is planar and j=1 is thin-layer
 axisymmetric. The dimensional ``nu_tilde`` is conserved along
 the edge streamline, so ``n`` at the outer boundary varies as ``1/nu_e``.
 
-Newton stalls where the positivity limit binds near the outer turbulent front. A
-relaxed Picard iteration with the same discrete operators then takes over.
+Projected active-set Newton solves the local interior SA complementarity problem
+``n >= 0, R <= 0, n R = 0``, where ``R = residual[3]``. It uses
+``Phi = min(n, -R/abs(dR/dn))`` and requires negative SA diagonal derivatives.
+At convergence, an active or projected-zero first interior node requests Picard
+to avoid the trivial wall-attached branch; clipping is intended for the outer
+turbulent front. Explicitly zero edge SA seeds retain the legacy Newton path.
+The unchanged relaxed Picard fallback solves a different projected-solve problem:
+``min(n, A(n)^(-1) R) = 0``, with ``A`` its frozen tridiagonal SA matrix.
+Clipping after that coupled solve can leave nonzero residuals at positive
+neighbors of clipped nodes. On a captured outer-front station, the two methods
+differed by 1.26e-5 in n (3.32e-8 of the maximum n); they are not identical
+discrete fixed points. This is not a general bound: at Re=1e10, M=2, the largest
+n difference was 8.099 (6.03e-5 of the profile maximum), two nodes before
+clipping. The last positive node changed from n=1996.166 to 2002.957. Mean-flow
+profile differences were below 8.2e-8 of their maxima in that comparison.
 """
 
 from typing import cast
@@ -24,7 +37,7 @@ from typing import cast
 import numpy as np
 
 from aerophysics._array import FloatArray
-from aerophysics._banded import solve_tridiagonal
+from aerophysics._banded import solve_banded, solve_tridiagonal
 from aerophysics._boundary_layer_march import Discretization, Station, StationEdge
 from aerophysics.transport import DynamicViscosityModel
 
@@ -84,6 +97,7 @@ class TurbulentDiscretization(Discretization):
 
     unknowns = 5
     _analytic_jacobian_enabled = False
+    _bound_constrained_newton = True
     newton_iterations = 50
     newton_tolerance = 1e-9
 
@@ -227,6 +241,7 @@ class TurbulentDiscretization(Discretization):
         state[1:4, -1] = (1.0, 1.0, edge.sa_ratio)
 
     def damping(self, state: FloatArray, update: FloatArray) -> float:
+        """Retain the original SA positivity damping for the legacy Newton path."""
         damping = super().damping(state, update)
         decreasing = update[3, 1:-1] < 0.0
         if np.any(decreasing):
@@ -250,6 +265,90 @@ class TurbulentDiscretization(Discretization):
             float(np.max(np.abs(update[2]))) / max(1.0, float(np.max(state[2]))),
             float(np.max(np.abs(update[3]))) / max(1.0, float(np.max(state[3]))),
         )
+
+    def newton(
+        self,
+        guess: FloatArray,
+        edge: StationEdge,
+        coefficient: float,
+        lagged: FloatArray,
+    ) -> Station | None:
+        """Solve local SA complementarity, or use the unchanged legacy Newton.
+
+        Select the n branch when ``n <= -R/abs(J_ii)``; its Newton row is
+        ``delta n = -n``. Inactive rows retain the original linearization.
+        The inverse diagonal magnitude scales residuals to units of n. A
+        nonnegative or nonfinite diagonal requests the Picard fallback.
+
+        Only velocity and temperature limit the step. No SA positivity fraction
+        is needed: projection admits exact zeros and the next iteration can
+        activate them. Convergence requires a small actually applied update
+        and the same active set in two consecutive linearizations.
+        At convergence, an active or projected-zero first interior SA node
+        requests Picard (projection can reach zero on the residual branch):
+        wall-attached zero regions select the trivial partially laminar branch,
+        whereas the intended clipped set is the outer turbulent front. Checking
+        only at convergence lets transient active sets recover during Newton.
+        An explicitly zero edge SA seed uses legacy Newton directly: its zero-SA
+        solution is intentional, and retains the existing laminar-limit results.
+        """
+        if not self._bound_constrained_newton or edge.sa_ratio == 0.0:
+            return super().newton(guess, edge, coefficient, lagged)
+        state = guess.copy()
+        previous_active = None
+        try:
+            for _ in range(self.newton_iterations):
+                residual = self.residual(state, edge, coefficient, lagged)
+                bands = self.jacobian(state, residual, edge, coefficient, lagged)
+                diagonal = bands[
+                    2 * self.band, self.unknowns + 3 : -self.unknowns : self.unknowns
+                ]
+                if not np.all(np.isfinite(diagonal) & (diagonal < 0.0)):
+                    return None
+                active = state[3, 1:-1] <= -residual[3, 1:-1] / np.abs(diagonal)
+                rows = self.unknowns * (np.flatnonzero(active) + 1) + 3
+                for index in rows:
+                    row = int(index)
+                    columns = np.arange(
+                        max(0, row - self.band),
+                        min(bands.shape[1], row + self.band + 1),
+                    )
+                    # gbsv stores J[row, column] at 2*band + row - column.
+                    bands[2 * self.band + row - columns, columns] = 0.0
+                    bands[2 * self.band, row] = 1.0
+                residual[3, 1:-1][active] = state[3, 1:-1][active]
+                update = (
+                    solve_banded(
+                        self.band,
+                        self.band,
+                        bands,
+                        -residual.T.ravel(),
+                        overwrite_ab=True,
+                        overwrite_b=True,
+                    )
+                    .reshape(-1, self.unknowns)
+                    .T
+                )
+                if not np.all(np.isfinite(update)):
+                    return None
+                damping = super().damping(state, update)
+                updated = state + damping * update
+                updated[3] = np.maximum(updated[3], 0.0)
+                self.enforce_boundaries(updated, edge)
+                size = self.update_size(state, updated - state)
+                state = updated
+                if (
+                    size < self.newton_tolerance
+                    and previous_active is not None
+                    and np.array_equal(active, previous_active)
+                ):
+                    if active[0] or state[3, 1] == 0.0:
+                        return None
+                    return self.station(state, edge.xi)
+                previous_active = active
+        except (ValueError, FloatingPointError, np.linalg.LinAlgError):
+            return None
+        return None
 
     def solve(
         self,
@@ -296,7 +395,11 @@ class TurbulentDiscretization(Discretization):
         coefficient: float,
         lagged: FloatArray,
     ) -> Station | None:
-        """Run the relaxed Picard iteration; None requests a smaller step."""
+        """Solve the projected tridiagonal fixed point; None requests a smaller step.
+
+        This retains ``min(n, A(n)^(-1) R) = 0``, not Newton's local
+        complementarity condition at the outer turbulent front.
+        """
         try:
             return self._picard(guess, edge, coefficient, lagged)
         except (ValueError, FloatingPointError, np.linalg.LinAlgError):

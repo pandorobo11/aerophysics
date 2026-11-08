@@ -579,3 +579,23 @@ def test_rounded_internal_station_preserves_output_and_resolvable_intervals(
             print(f"PR88 tr={transition!r} {field}={100 * difference:.9g}%")
             # Largest measured near-output difference is below 7e-5% in heat flux.
             assert difference < 1e-6  # 0.0001%, not a physical accuracy bound.
+
+
+@pytest.mark.solver_verification
+def test_reference_transition_matches_legacy_newton(
+    rounded_transition_case: tuple[BoundaryLayerEdge, MarchingBoundaryLayerResult],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    edge, reference = rounded_transition_case
+    monkeypatch.setattr(
+        sa_module.TurbulentDiscretization, "_bound_constrained_newton", False
+    )
+    legacy = marching_boundary_layer(
+        edge, regime=TRANSITIONAL, transition_distance=0.1, wall_temperature=250.0
+    )
+    for field in ("local_skin_friction_coefficient", "wall_heat_flux"):
+        difference = relative_difference(
+            getattr(reference, field), getattr(legacy, field)
+        )
+        print(f"guarded transition vs legacy {field}: {difference:.12g}")
+        assert difference < 1e-6  # Same bound as the rounded-transition comparisons.
