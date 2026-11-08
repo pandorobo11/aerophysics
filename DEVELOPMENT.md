@@ -120,13 +120,16 @@ The test tiers are mutually exclusive:
 | --- | --- |
 | Normal tests and coverage | `scripts/check-coverage.sh` (excludes the other three markers) |
 | Generated assets | `scripts/check-generated.sh` |
-| Slow solver verification | `uv run pytest -m solver_verification --no-cov` |
+| Slow solver verification | `uv run pytest -m solver_verification --no-cov -n auto` |
 | Installed packages | `uv run pytest -m package_artifact --no-cov` (after building) |
 
 By explicit user decision on 2026-11-07, slow solver verification runs in one
 Ubuntu / Python 3.12 CI job for solver-relevant PR changes, and always on main
 and in releases. Representative fast marching tests remain in the full
 Python/OS matrix.
+
+The slow solver tier runs in parallel with pytest-xdist (`-n auto`) in CI,
+releases, and `scripts/check.sh`, using the default `load` scheduling across individual tests.
 
 The normal test suite collects branch coverage once and applies independent
 gates to the two product layers:

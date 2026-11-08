@@ -66,7 +66,7 @@ else
 fi
 if [[ "$solver_decision" == yes ]]; then
     printf '\nSolver verification: %s\n' "$solver_reason"
-    run_step "Solver verification" uv run pytest -m solver_verification --no-cov
+    run_step "Solver verification" uv run pytest -m solver_verification --no-cov -n auto
 else
     printf '\nSKIPPED: Solver verification (%s)\n' "$solver_reason"
 fi

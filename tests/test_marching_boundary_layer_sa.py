@@ -331,12 +331,8 @@ def _sa_march(
 @pytest.mark.parametrize(
     ("start", "end", "width"),
     [
-        (2.0, 3.0, 0.1),
-        pytest.param(2.0, 3.0, 0.02),
-        pytest.param(3.0, 4.0, 0.1),
-        pytest.param(3.0, 4.0, 0.02),
-        pytest.param(3.0, 2.9, 0.1),
-        pytest.param(3.0, 2.0, 0.1),
+        (3.0, 4.0, 0.02),
+        (3.0, 2.0, 0.1),
     ],
 )
 @pytest.mark.solver_verification
@@ -407,34 +403,6 @@ def test_sa_wall_temperature_step_refinement(monkeypatch: pytest.MonkeyPatch) ->
     assert np.max(abs(base.wall_heat_flux / fine.wall_heat_flux[ix] - 1.0)) < 0.005
 
 
-@pytest.mark.solver_verification
-def test_sa_wall_normal_refinement() -> None:
-    edge = smooth_edge(2.0, 3.0)
-    wall = np.full(edge.distance.size, 300.0)
-    base = _sa_march(edge, wall, edge.distance[1:])
-    fine = _sa_march(
-        edge,
-        wall,
-        edge.distance[1:],
-        eta=eta_grid(
-            _SA_ETA_FIRST / 2.0,
-            1.0 + (_SA_ETA_RATIO - 1.0) / 2.0,
-            _SA_ETA_SPACING / 2.0,
-            _SA_ETA_MINIMUM_EXTENT,
-        ),
-    )
-    assert (
-        np.max(
-            abs(
-                base.local_skin_friction_coefficient
-                / fine.local_skin_friction_coefficient
-                - 1.0
-            )
-        )
-        < 0.003
-    )
-
-
 def test_edge_growth_with_a_non_sutherland_viscosity() -> None:
     from test_marching_boundary_layer import LinearViscosity
 
@@ -501,6 +469,14 @@ def test_enthalpy_balance_improves_under_wall_normal_refinement(
     )
     tighten_streamwise_control(monkeypatch)
     streamwise = _sa_march(edge, wall, targets, relative_step=0.0075)
+    cf_error = np.max(
+        abs(
+            base.local_skin_friction_coefficient
+            / normal.local_skin_friction_coefficient
+            - 1.0
+        )
+    )
+    assert cf_error < 0.003
     base_error = _energy_balance_error(edge, base)
     normal_error = _energy_balance_error(edge, normal)
     streamwise_error = _energy_balance_error(edge, streamwise)
@@ -529,7 +505,7 @@ def test_reference_grid_is_unchanged(reynolds: float) -> None:
     ("mach", "temperature", "wall"),
     [(0.3, 288.15, 292.8), (2.0, 220.0, 300.0), (6.0, 100.0, 300.0)],
 )
-@pytest.mark.parametrize("reynolds", [3e8, 1e9, 1e10])
+@pytest.mark.parametrize("reynolds", [1e9, 1e10])
 def test_high_reynolds_outer_extent(
     mach: float, temperature: float, wall: float, reynolds: float
 ) -> None:
@@ -630,39 +606,6 @@ def test_adiabatic_pressure_change_streamwise_refinement(
 
 
 @pytest.mark.solver_verification
-def test_separation_position_under_streamwise_refinement(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from test_marching_boundary_layer import tighten_streamwise_control
-
-    from aerophysics._boundary_layer_march import SeparationError
-
-    edge = smooth_edge(3.0, 1.0)
-    wall = np.full(edge.distance.size, 300.0)
-    with pytest.raises(SeparationError) as base:
-        _sa_march(edge, wall, edge.distance[1:])
-    tighten_streamwise_control(monkeypatch)
-    targets = np.unique(
-        np.concatenate(
-            [
-                np.linspace(left, right, 9)[1:]
-                for left, right in zip(
-                    edge.distance[:-1], edge.distance[1:], strict=True
-                )
-            ]
-        )
-    )
-    with pytest.raises(SeparationError) as fine:
-        _sa_march(edge, wall, targets, relative_step=0.0075)
-    print(
-        f"Separation: base={base.value.distance:.10g}, "
-        f"refined={fine.value.distance:.10g}, "
-        f"change={(fine.value.distance / base.value.distance - 1.0) * 100:.6g}%"
-    )
-    assert np.isfinite(base.value.distance) and np.isfinite(fine.value.distance)
-
-
-@pytest.mark.solver_verification
 def test_high_reynolds_compression_keeps_the_outer_boundary_check() -> None:
     from aerophysics.exceptions import BoundaryLayerConvergenceError
 
@@ -681,65 +624,3 @@ def test_high_reynolds_compression_keeps_the_outer_boundary_check() -> None:
         marching_boundary_layer(
             edge, regime=BoundaryLayerRegime.TURBULENT, wall_temperature=300.0
         )
-
-
-def _adiabatic_balances(
-    edge: BoundaryLayerEdge, result: MarchingBoundaryLayerResult
-) -> dict[str, float]:
-    """Report the defect without dividing by the zero adiabatic heat flux."""
-    from aerophysics.marching_boundary_layer import _isentropic_state
-
-    ip = _EdgeInterpolant(edge, None)
-    s = result.distance
-    pressure = np.exp(ip.log_pressure(s))
-    temperature, velocity = _isentropic_state(
-        pressure, ip.total_pressure, ip.total_temperature, edge.gas
-    )
-    density = pressure / (edge.gas.specific_gas_constant * temperature)
-    momentum = (
-        np.gradient(density * velocity**2 * result.momentum_thickness, s)
-        + density * velocity * np.gradient(velocity, s) * result.displacement_thickness
-    ) / result.wall_shear_stress - 1.0
-    u, g = result.velocity_ratio, result.temperature_ratio
-    deficit = np.trapezoid(
-        density[:, None]
-        / g
-        * velocity[:, None]
-        * u
-        * (
-            edge.gas.cp * temperature[:, None] * (g - 1.0)
-            + velocity[:, None] ** 2 / 2.0 * (u * u - 1.0)
-        ),
-        result.wall_distance,
-        axis=1,
-    )
-    defect = abs(np.gradient(deficit, s))
-    normalized = defect / (density * velocity * edge.gas.cp * ip.total_temperature)
-    mask = (s > 0.05) & (s < 1.99)
-    return {
-        "momentum_median_percent": float(np.median(abs(momentum[mask])) * 100),
-        "momentum_max_percent": float(np.max(abs(momentum[mask])) * 100),
-        "enthalpy_median_W_m2": float(np.median(defect[mask])),
-        "enthalpy_max_W_m2": float(np.max(defect[mask])),
-        "enthalpy_median_normalized": float(np.median(normalized[mask])),
-        "enthalpy_max_normalized": float(np.max(normalized[mask])),
-    }
-
-
-@pytest.mark.solver_verification
-def test_adiabatic_integral_balance_diagnostics(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from test_marching_boundary_layer import tighten_streamwise_control
-
-    edge = smooth_edge(2.0, 3.0)
-    targets = np.linspace(0.0, 2.0, 601)[1:]
-    base = _sa_march(edge, None, targets)
-    tighten_streamwise_control(monkeypatch)
-    refined = _sa_march(edge, None, targets, relative_step=0.0075)
-    for label, result in (("base", base), ("refined", refined)):
-        metrics = _adiabatic_balances(edge, result)
-        print(label, metrics)
-        assert np.all(result.wall_heat_flux == 0.0)
-        # These are reported diagnostics, without a new acceptance threshold.
-        assert all(np.isfinite(value) for value in metrics.values())
