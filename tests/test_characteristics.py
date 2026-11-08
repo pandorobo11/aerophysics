@@ -1118,3 +1118,77 @@ def test_roundoff_cone_boundary_layer_completion(regime: BoundaryLayerRegime) ->
         "endpoint_m",
         result.distance[-1],
     )
+
+
+def test_coarse_fan_stops_unneeded_shock_extrapolation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_fit, original_state = moc._shock_point, moc._Flow.shock
+    truncated: list[tuple[moc._Point, moc._Point, float, moc._Flow]] = []
+
+    def fit(
+        a: moc._Point,
+        previous: moc._Point,
+        beta: float,
+        flow: moc._Flow,
+        *,
+        x_limit: float = np.inf,
+    ) -> tuple[moc._Point, float] | None:
+        result = original_fit(a, previous, beta, flow, x_limit=x_limit)
+        if result is None:
+            truncated.append((a, previous, beta, flow))
+        return result
+
+    def valid_shock(flow: moc._Flow, x: float, r: float, beta: float) -> moc._Point:
+        # Invalid numerical trial angles must never reach Rankine--Hugoniot.
+        assert np.arcsin(1 / flow.mach) < beta < np.pi / 2
+        return original_state(flow, x, r, beta)
+
+    monkeypatch.setattr(moc, "_shock_point", fit)
+    monkeypatch.setattr(moc._Flow, "shock", valid_shock)
+    solutions = [
+        axisymmetric_body_flow(
+            [0, 0.3, 1.3],
+            [0, 0.05, 0.05],
+            mach=3,
+            pressure=1e4,
+            temperature=220,
+            fan_angle_step=radians(step),
+        )
+        for step in (1, 3)
+    ]
+    assert len(truncated) == 1
+    positions = np.linspace(0.3, 1.3, 1001)
+    pressures = []
+    for result in solutions:
+        assert result.axial_distance[-1] == 1.3
+        assert np.all(result.mach > 1)
+        mask = result.axial_distance >= 0.3
+        pressures.append(
+            CubicSpline(result.axial_distance[mask], result.pressure[mask])(positions)
+        )
+    error = float(np.max(abs(pressures[1] / pressures[0] - 1)))
+    print("COARSE_FAN relative_pressure_difference", error)
+    # Measured 8.846e-5; 1.2e-4 allows 35% margin without relaxing any old bound.
+    assert error < 1.2e-4
+    assert solutions[1].shock_axial_distance[-1] < 1.3
+    # The identical numerical failure cannot be dropped when its continuation
+    # belongs to the requested domain. It remains a location-bearing diagnostic.
+    with pytest.raises(ModelRangeError, match=r"shock angle corrector.*x=.*r="):
+        original_fit(*truncated[0], x_limit=3.0)
+
+
+@pytest.mark.solver_verification
+@pytest.mark.parametrize(("mach", "angle"), [(3, 9.46), (6, 4.76)])
+def test_fan_step_and_characteristic_count_sweep(mach: float, angle: float) -> None:
+    start = time.perf_counter()
+    radius = tan(radians(angle))
+    end = 1 + 20 * radius
+    for count in (8, 24, 88):
+        for step in (0.5, 1, 2, 3, 4, 5):
+            result = solve(mach, angle, count, step)
+            assert result.axial_distance[-1] == end
+            assert np.all(np.isfinite(result.pressure))
+            assert np.all(result.pressure > 0)
+            assert np.all(result.mach > 1)
+    print("FAN_SWEEP", mach, "18 cases seconds", time.perf_counter() - start)

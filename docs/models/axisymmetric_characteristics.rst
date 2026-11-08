@@ -80,8 +80,16 @@ This does not model viscous interaction at a sharp corner.
 Shock stations may extend beyond the body's final axial coordinate because
 a corner's leading wave can first reach the shock farther downstream.
 Characteristics that do not reach the shock within the needed downstream
-region are truncated without imposing an outflow state. The characteristic
-net is not exposed as a public field solution.
+region are truncated without imposing an outflow state. Successful downstream
+shock extrapolations are retained. If an angle iteration leaves the admissible
+shock interval and the geometric continuation at the previous shock tangent
+is beyond the body endpoint, that extrapolation is abandoned. The trace then
+stops at the last fitted shock point, which can be before the body endpoint;
+no terminal shock state or complete outer flow field is promised. Do not
+extrapolate missing shock data to construct a terminal transverse profile.
+Subsonic states, crossed characteristics and failures inside the requested
+domain still raise location-bearing errors. The characteristic net is not
+exposed as a public field solution.
 
 For the M3/9.46-degree and M6/4.76-degree cone--cylinder verification cases,
 the cylinder length is ten diameters. The design record
