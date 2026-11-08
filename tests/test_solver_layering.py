@@ -42,7 +42,8 @@ def runtime_imports(path: Path) -> list[tuple[str, frozenset[str]]]:
     pending: list[ast.AST] = [ast.parse(path.read_text(encoding="utf-8"))]
     while pending:
         node = pending.pop()
-        if is_type_checking_block(node):
+        if isinstance(node, ast.If) and is_type_checking_block(node):
+            pending.extend(node.orelse)
             continue
         if isinstance(node, ast.ImportFrom) and node.module:
             names = frozenset(alias.name for alias in node.names)
@@ -105,3 +106,16 @@ def test_type_checking_imports_are_ignored(tmp_path: Path) -> None:
         ("_banded", frozenset()),
         ("gas", frozenset({"AIR"})),
     ]
+
+
+@pytest.mark.parametrize("condition", ["TYPE_CHECKING", "typing.TYPE_CHECKING"])
+def test_type_checking_else_imports_are_runtime(tmp_path: Path, condition: str) -> None:
+    source = tmp_path / "example.py"
+    source.write_text(
+        f"if {condition}:\n"
+        "    from aerophysics.shocks import oblique_shock\n"
+        "else:\n"
+        "    from aerophysics import _boundary_layer_sa\n",
+        encoding="utf-8",
+    )
+    assert runtime_imports(source) == [("_boundary_layer_sa", frozenset())]
