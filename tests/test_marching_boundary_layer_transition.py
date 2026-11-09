@@ -47,7 +47,7 @@ def relative_difference(a: FloatArray, b: FloatArray) -> float:
     return float(np.max(abs(a / b - 1.0)))
 
 
-@pytest.mark.parametrize("transition", [None, 0.0, 2.0, np.nan, [0.1]])
+@pytest.mark.parametrize("transition", [None, 0.0, 1.0, 2.0, np.nan, [0.1]])
 def test_transition_distance_is_required_and_bounded(transition: float | None) -> None:
     edge = constant_edge(2.0, 220.0, [1.0])
     with pytest.raises(ValueError, match="transition_distance"):
