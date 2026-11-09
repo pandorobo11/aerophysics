@@ -124,6 +124,7 @@ def test_legacy_display_unit_configuration_uses_new_defaults() -> None:
     assert preferences.area == "m²"
     assert preferences.force == "N"
     assert preferences.inverse_length == "1/m"
+    assert preferences.heat_flux == "W/m²"
 
 
 def test_detached_shock_shape_csv() -> None:

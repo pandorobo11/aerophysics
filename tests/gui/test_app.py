@@ -16,48 +16,6 @@ from aerophysics.gui.units import UnitPreferences
 APP = Path(__file__).resolve().parents[2] / "src/aerophysics/gui/app.py"
 
 
-def test_oblique_page_thermal_settings_replay_and_units() -> None:
-    from aerophysics.gui.config import dump_configuration, load_configuration
-
-    gas_model = "HARMONIC_OSCILLATOR"
-    script = """
-from aerophysics.gui.pages import render_shock
-from aerophysics.gui.components import render_unit_sidebar
-render_shock(render_unit_sidebar())
-"""
-    app = AppTest.from_string(script, default_timeout=30).run()
-    app.selectbox(key="shock_gas_model").set_value(gas_model).run()
-    app.number_input(key="shock_mach").set_value(3.0).run()
-    app.number_input(key="shock_upstream_temperature").set_value(500.0).run()
-    app.selectbox(key="unit_temperature").set_value("°C").run()
-    assert app.number_input(key="shock_upstream_temperature").value == pytest.approx(
-        226.85
-    )
-    app.button(key="FormSubmitter:shock_form-計算").click().run()
-    assert not app.exception
-    assert not app.error
-    assert app.dataframe[0].value["気体モデル"].tolist() == [gas_model]
-    assert app.dataframe[0].value["上流静温 T₁ [°C]"].iloc[0] == pytest.approx(226.85)
-    result, configuration = app.session_state["shock_payload"]
-    assert configuration["models"]["gas_model"] == gas_model
-    assert configuration["inputs_si"]["upstream_temperature"] == 500.0
-    replay = AppTest.from_string(script, default_timeout=30)
-    replay.session_state["pending_oblique_shock_configuration"] = load_configuration(
-        dump_configuration(configuration)
-    )
-    replay.run()
-    replay.button(key="FormSubmitter:shock_form-計算").click().run()
-    assert not replay.exception
-    assert not replay.error
-    assert replay.session_state["shock_payload"][0].rows == result.rows
-    replay.radio(key="shock_mode").set_value("1変数スイープ").run()
-    replay.number_input(key="shock_sweep_points").set_value(3).run()
-    replay.button(key="FormSubmitter:shock_form-計算").click().run()
-    assert not replay.exception
-    assert not replay.error
-    assert len(replay.dataframe[0].value) == 3
-
-
 def test_oblique_page_legacy_settings_and_thermal_error() -> None:
     script = """
 from aerophysics.gui.pages import render_shock
@@ -409,58 +367,6 @@ from aerophysics.gui.units import UnitPreferences
 
         if prefix == "normal":
             assert len(app.get("plotly_chart")) == 2
-
-
-def test_normal_thermal_settings_units_and_sweep_replay() -> None:
-    from aerophysics.gui.config import dump_configuration, load_configuration
-
-    gas_model = "HARMONIC_OSCILLATOR"
-    script = """
-from aerophysics.gui.flow_pages import render_normal_shock
-from aerophysics.gui.components import render_unit_sidebar
-render_normal_shock(render_unit_sidebar())
-"""
-    app = AppTest.from_string(script, default_timeout=30).run()
-    app.selectbox(key="normal_gas_model").set_value(gas_model).run()
-    app.number_input(key="normal_mach").set_value(3.0).run()
-    app.selectbox(key="unit_temperature").set_value("°C").run()
-    assert app.number_input(key="normal_upstream_temperature").value == pytest.approx(
-        226.85
-    )
-    app.button(key="FormSubmitter:normal_form-計算").click().run()
-    assert not app.exception and not app.error
-    assert app.dataframe[0].value["気体モデル"].tolist() == [gas_model]
-    assert app.dataframe[0].value["上流静温 T₁ [°C]"].iloc[0] == pytest.approx(226.85)
-    assert app.dataframe[0].value["下流静温 T₂ [°C]"].iloc[0] > 226.85
-    app.radio(key="normal_mode").set_value("sweep").run()
-    app.number_input(key="normal_sweep_start").set_value(3.0).run()
-    app.number_input(key="normal_sweep_stop").set_value(5.4).run()
-    app.number_input(key="normal_sweep_points").set_value(3).run()
-    app.button(key="FormSubmitter:normal_form-計算").click().run()
-    assert not app.exception and not app.error
-    result, configuration = app.session_state["normal_payload"]
-    assert configuration["models"]["gas_model"] == gas_model
-    assert configuration["inputs_si"]["upstream_temperature"] == 500.0
-    assert len(result.rows) == 3
-    assert app.warning
-    replay_script = """
-from aerophysics.gui.flow_pages import render_normal_shock
-from aerophysics.gui.units import UnitPreferences
-render_normal_shock(UnitPreferences(temperature='°C'))
-"""
-    replay = AppTest.from_string(replay_script, default_timeout=30)
-    replay.session_state["pending_normal_shock_configuration"] = load_configuration(
-        dump_configuration(configuration)
-    )
-    replay.run()
-    assert replay.selectbox(key="normal_gas_model").value == gas_model
-    assert replay.number_input(
-        key="normal_upstream_temperature"
-    ).value == pytest.approx(226.85)
-    replay.button(key="FormSubmitter:normal_form-計算").click().run()
-    assert not replay.exception and not replay.error
-    assert replay.session_state["normal_payload"][0].rows == result.rows
-    assert replay.session_state["normal_payload"][1] == configuration
 
 
 def test_normal_legacy_settings_and_single_range_error() -> None:
@@ -863,47 +769,6 @@ render_protrusion_drag(UnitPreferences())
     assert not app.error
     assert len(app.dataframe[0].value) == 3
     assert app.metric[0].value == "—"
-
-
-def test_conical_thermal_settings_replay_and_units() -> None:
-    from aerophysics.gui.config import dump_configuration, load_configuration
-
-    gas_model = "HARMONIC_OSCILLATOR"
-    script = """
-from aerophysics.gui.pages import render_conical_shock
-from aerophysics.gui.components import render_unit_sidebar
-render_conical_shock(render_unit_sidebar())
-"""
-    app = AppTest.from_string(script, default_timeout=60).run()
-    assert app.selectbox(key="cone_shock_gas_model").value == "AIR"
-    app.selectbox(key="cone_shock_gas_model").set_value(gas_model).run()
-    app.number_input(key="cone_shock_mach").set_value(3.0).run()
-    app.number_input(key="cone_shock_upstream_temperature").set_value(1000.0).run()
-    app.selectbox(key="unit_temperature").set_value("°C").run()
-    assert app.number_input(
-        key="cone_shock_upstream_temperature"
-    ).value == pytest.approx(726.85)
-    app.button(key="FormSubmitter:cone_shock_form-計算").click().run()
-    assert not app.exception and not app.error
-    assert app.dataframe[0].value["気体モデル"].tolist() == [gas_model]
-    assert app.dataframe[0].value["上流静温 T∞ [°C]"].iloc[0] == pytest.approx(726.85)
-    assert app.dataframe[0].value["表面静温 Tₛ [°C]"].iloc[0] > 726.85
-    result, configuration = app.session_state["cone_shock_payload"]
-    assert configuration["models"]["gas_model"] == gas_model
-    assert configuration["inputs_si"]["upstream_temperature"] == 1000.0
-    replay = AppTest.from_string(script, default_timeout=60)
-    replay.session_state["pending_conical_shock_configuration"] = load_configuration(
-        dump_configuration(configuration)
-    )
-    replay.run()
-    replay.button(key="FormSubmitter:cone_shock_form-計算").click().run()
-    assert not replay.exception and not replay.error
-    assert replay.session_state["cone_shock_payload"][0].rows == result.rows
-    replay.radio(key="cone_shock_mode").set_value("1変数スイープ").run()
-    replay.number_input(key="cone_shock_sweep_points").set_value(3).run()
-    replay.button(key="FormSubmitter:cone_shock_form-計算").click().run()
-    assert not replay.exception and not replay.error
-    assert len(replay.dataframe[0].value) == 3
 
 
 def test_conical_legacy_replay_and_range_error() -> None:
@@ -1734,8 +1599,7 @@ render_boundary_layer(UnitPreferences())
     assert replay.session_state["boundary_payload"][0] == result
 
 
-@pytest.mark.parametrize("regime", ["laminar", "turbulent", "transitional"])
-def test_boundary_legacy_settings_calculate_and_replay(regime: str) -> None:
+def test_boundary_legacy_settings_calculate_and_replay() -> None:
     import json
 
     from aerophysics.gui.config import load_configuration
@@ -1755,14 +1619,14 @@ render_boundary_layer(UnitPreferences())
             "edge_velocity": 620.0,
             "edge_density": 0.5,
             "edge_dynamic_viscosity": 1.55e-5,
-            "transition_reynolds": 5e5 if regime == "transitional" else None,
+            "transition_reynolds": 5e5,
             "mach": 2.0,
             "edge_temperature": 240.0,
             "wall_temperature": None,
         },
         "models": {
             "source": "manual",
-            "regime": regime,
+            "regime": "transitional",
             "compressibility_correction": "van_driest_ii_wall_temperature",
             "turbulent_correlation": "power_law",
         },

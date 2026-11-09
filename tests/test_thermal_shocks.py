@@ -20,6 +20,7 @@ from aerophysics.shocks import (
     theta_from_shock_angle,
 )
 from aerophysics.thermochemistry import (
+    UNIVERSAL_GAS_CONSTANT,
     IdealGasSpecies,
     NASA7Polynomial,
     ThermallyPerfectGas,
@@ -135,10 +136,19 @@ def test_pitot_stagnation_range_does_not_change_normal_shock_contract() -> None:
 
 
 @pytest.mark.parametrize("branch", list(ShockBranch))
-def test_constant_cp_recovers_closed_form(branch: ShockBranch) -> None:
-    gamma = 5.0 / 3.0
-    thermal = HarmonicOscillatorGas(287.0, gamma)
-    perfect = PerfectGas(heat_capacity_ratio=gamma, specific_gas_constant=287.0)
+@pytest.mark.parametrize(
+    ("thermal", "perfect"),
+    [
+        (HarmonicOscillatorGas(287.0, 5.0 / 3.0), PerfectGas(287.0, 5.0 / 3.0)),
+        (polynomial_gas(), PerfectGas(UNIVERSAL_GAS_CONSTANT / 0.028, 1.4)),
+    ],
+    ids=["harmonic", "nasa-polynomial"],
+)
+def test_constant_cp_recovers_closed_form(
+    branch: ShockBranch,
+    thermal: HarmonicOscillatorGas | ThermallyPerfectGas,
+    perfect: PerfectGas,
+) -> None:
     for mach in (1.2, 2.0, 5.0, 10.0):
         expected_normal = normal_shock(mach, perfect)
         actual_normal = normal_shock(mach, thermal, upstream_temperature=300.0)
@@ -160,18 +170,6 @@ def test_constant_cp_recovers_closed_form(branch: ShockBranch) -> None:
             assert getattr(actual, field.name) == pytest.approx(
                 getattr(expected, field.name), rel=2e-9, abs=1e-11
             )
-
-
-def test_constant_nasa_polynomial_recovers_closed_form() -> None:
-    thermal = polynomial_gas()
-    expected = oblique_shock(3.0, np.deg2rad(20.0))
-    actual = oblique_shock(
-        3.0, np.deg2rad(20.0), gas=thermal, upstream_temperature=300.0
-    )
-    for field in fields(expected):
-        assert getattr(actual, field.name) == pytest.approx(
-            getattr(expected, field.name), rel=1e-10
-        )
 
 
 @pytest.mark.parametrize("gas", [AIR_NASA9, AIR_HARMONIC_OSCILLATOR])

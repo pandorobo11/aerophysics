@@ -193,6 +193,9 @@ def test_upstream_temperature_validation(temperature: float | None) -> None:
         prandtl_meyer_expansion(
             2.0, 0.1, AIR_HARMONIC_OSCILLATOR, upstream_temperature=temperature
         )
+
+
+def test_upstream_temperature_must_broadcast() -> None:
     with pytest.raises(ValueError, match="broadcastable"):
         prandtl_meyer_expansion(
             [2.0, 3.0],

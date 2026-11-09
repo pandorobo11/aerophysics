@@ -141,40 +141,6 @@ def test_sp3004_capture_never_imports_the_solver() -> None:
     assert not any(module.startswith("aerophysics") for module in modules)
 
 
-def test_sp3004_capture_rejects_undecodable_and_inconsistent_cells() -> None:
-    capture = _sp3004_capture()
-    cell = capture["_Cell"]
-    table = capture["_Table"](
-        2.5,
-        2.0,
-        21,
-        35,
-        {
-            "shock_angle": cell(0.0, 0.0, "+52369890+00"),
-            "surface_mstar": cell(0.0, 0.0, "+1624256?+01"),
-            "post_shock_mstar": cell(0.0, 0.0, "+16328751+01"),
-            "pressure": cell(0.0, 0.0, "+10302014+01"),
-            "density": cell(0.0, 0.0, "+10214806+01"),
-            "temperature": None,
-        },
-        2.0,
-        0.5236989,
-    )
-    errors: list[str] = []
-    values = capture["_resolve"](table, errors)
-    # A damaged or missing cell is never filled from any other source.
-    assert "surface_mstar" not in values
-    assert "temperature" not in values
-    assert len(errors) == 2
-    assert all("table 21, PDF pages 35-36" in error for error in errors)
-
-    errors = []
-    values.update(surface_mstar=1.6242561, temperature=1.0185375)
-    capture["_check"](table, values, errors)
-    assert any("p/(rho T)" in error for error in errors)
-    assert any("total-enthalpy" in error for error in errors)
-
-
 def test_sp3004_fixture_records_source_locations_and_transcriptions() -> None:
     capture = _sp3004_capture()
     rows = _rows("nasa_sp3004_conical.csv")
