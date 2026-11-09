@@ -121,8 +121,8 @@ jobs:
     # Two shards halve the CI critical path; ci-gate sees one aggregated
     # result for this job id, which fails if either shard fails. The "other"
     # shard ignores the first shard's files, so new verification files run
-    # there automatically. Balanced by measured CPU time (2026-11-09: 172 s
-    # versus 194 s of 366 s).
+    # there automatically. Balanced by measured CPU time (2026-11-09, after
+    # trimming redundant tests: 128 s versus 129 s of 257 s).
     strategy:
       fail-fast: false
       matrix:

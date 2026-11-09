@@ -88,7 +88,7 @@ def test_private_solver_modules_stay_behind_the_public_module() -> None:
     )
 
 
-def test_type_checking_imports_are_ignored(tmp_path: Path) -> None:
+def test_type_checking_and_runtime_imports(tmp_path: Path) -> None:
     source = tmp_path / "example.py"
     source.write_text(
         "from typing import TYPE_CHECKING\n"
@@ -96,26 +96,19 @@ def test_type_checking_imports_are_ignored(tmp_path: Path) -> None:
         "from aerophysics.gas import AIR\n"
         "if TYPE_CHECKING:\n"
         "    from aerophysics.shocks import oblique_shock\n"
+        "else:\n"
+        "    from aerophysics import _boundary_layer_sa\n"
         "if typing.TYPE_CHECKING:\n"
         "    from aerophysics.heating import x\n"
+        "else:\n"
+        "    from aerophysics import _boundary_layer_march\n"
         "def lazy():\n"
         "    from aerophysics import _banded\n",
         encoding="utf-8",
     )
     assert sorted(runtime_imports(source)) == [
         ("_banded", frozenset()),
+        ("_boundary_layer_march", frozenset()),
+        ("_boundary_layer_sa", frozenset()),
         ("gas", frozenset({"AIR"})),
     ]
-
-
-@pytest.mark.parametrize("condition", ["TYPE_CHECKING", "typing.TYPE_CHECKING"])
-def test_type_checking_else_imports_are_runtime(tmp_path: Path, condition: str) -> None:
-    source = tmp_path / "example.py"
-    source.write_text(
-        f"if {condition}:\n"
-        "    from aerophysics.shocks import oblique_shock\n"
-        "else:\n"
-        "    from aerophysics import _boundary_layer_sa\n",
-        encoding="utf-8",
-    )
-    assert runtime_imports(source) == [("_boundary_layer_sa", frozenset())]

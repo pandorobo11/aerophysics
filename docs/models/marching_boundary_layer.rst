@@ -319,8 +319,9 @@ The :ref:`R&M 3633 worked example <rm3633-example>` reaches delta99/r_w=0.4774
 and differs from measured Cf by up to 0.0004443 (measurement accuracy
 +/-0.0002). This comparison does not establish a physical validity range.
 
-The synthetic cone-to-cylinder shoulder stress test uses a tanh pressure drop;
-it is **not a physical shoulder edge condition**. With input nodes locally spaced
+The recorded synthetic cone-to-cylinder shoulder stress measurement (development
+memo, section 12) used a tanh pressure drop; it is **not a physical shoulder edge
+condition**. With input nodes locally spaced
 at most width/5, the pressure-length warning fires for SA at width 0.001 m
 (maximum delta99 times abs(d ln p/ds) 1.24051--1.26509), and for both regimes
 at width 0.0002 m (1.33059--6.29451). Widths 0.02 and 0.005 m do not trigger

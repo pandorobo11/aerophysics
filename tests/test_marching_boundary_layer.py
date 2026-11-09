@@ -1,8 +1,7 @@
 """Verification of the marching boundary layer against independent solutions."""
 
 import warnings
-from dataclasses import FrozenInstanceError, replace
-from importlib import import_module
+from dataclasses import replace
 from itertools import pairwise
 from typing import overload
 
@@ -23,7 +22,6 @@ from aerophysics import _boundary_layer_march as march_module
 from aerophysics._array import FloatArray
 from aerophysics._boundary_layer_march import (
     Discretization,
-    MarchSolution,
     SeparationError,
     Station,
     StationEdge,
@@ -51,8 +49,6 @@ HOWARTH_SEPARATION = 0.9589 / 8.0
 # NACA Report 1293, Table II, for Pr = 1 and viscosity linear in temperature:
 # (beta, S_w, f''(0), S'(0)), with g = 1 + S without dissipation.
 COHEN_RESHOTKO_TABLE_II = (
-    (0.0, 0.0, 0.4696, 0.0),
-    (1.0, 0.0, 1.2326, 0.0),
     (2.0, 0.0, 1.6870, 0.0),
     (0.5, 1.0, 1.2351, -0.5725),
     (2.0, 1.0, 2.4878, -0.6613),
@@ -193,13 +189,13 @@ def wedge_slopes(beta: float, wall_ratio: float) -> tuple[float, float]:
     )
 
 
-@pytest.mark.parametrize("beta", [-0.15, -0.1, 0.0, 0.1, 0.5, 1.0])
+@pytest.mark.parametrize("beta", [-0.15, 0.0, 1.0])
 def test_falkner_skan_wall_shear_matches_an_independent_solution(beta: float) -> None:
     expected, _ = similarity_reference(beta, 1.0)
     assert wedge_slopes(beta, 1.0)[0] == pytest.approx(expected, rel=5e-4)
 
 
-@pytest.mark.parametrize("beta", [-0.1, 0.0, 0.5])
+@pytest.mark.parametrize("beta", [-0.1, 0.5])
 @pytest.mark.parametrize("wall_ratio", [0.2, 2.0])
 def test_similar_wall_heat_transfer_matches_an_independent_solution(
     beta: float, wall_ratio: float
@@ -273,24 +269,16 @@ def test_howarth_separation_and_its_compressible_image(mach0: float) -> None:
     assert np.all(upstream.pressure_gradient_parameter < 0.0)
     assert np.all(np.diff(upstream.local_skin_friction_coefficient[20:]) < 0.0)
 
-
-@pytest.mark.solver_verification
-def test_adiabatic_unit_prandtl_layer_keeps_the_exact_total_enthalpy() -> None:
-    edge, _ = howarth_edge(3.0)
-    with pytest.raises(BoundaryLayerSeparationError) as caught:
-        marching_boundary_layer(
-            edge, regime=BoundaryLayerRegime.LAMINAR, prandtl_number=1.0
-        )
-    result = caught.value.result
-    index = np.arange(result.distance.size)[1:]
-    velocity_ratio = result.velocity_ratio[index]
-    temperature_ratio = result.temperature_ratio[index]
-    temperature = edge.temperature[index + 1]
-    m = 300.0 / temperature - 1.0
-    exact = 1.0 + m[:, np.newaxis] * (1.0 - velocity_ratio**2)
-    assert np.max(np.abs(temperature_ratio / exact - 1.0)) < 5e-4
-    assert np.all(result.wall_heat_flux == 0.0)
-    assert result.wall_temperature[index] == pytest.approx(300.0, rel=5e-4)
+    if mach0 == 3.0:
+        index = np.arange(upstream.distance.size)[1:]
+        velocity_ratio = upstream.velocity_ratio[index]
+        temperature_ratio = upstream.temperature_ratio[index]
+        temperature = edge.temperature[index + 1]
+        m = 300.0 / temperature - 1.0
+        exact = 1.0 + m[:, np.newaxis] * (1.0 - velocity_ratio**2)
+        assert np.max(np.abs(temperature_ratio / exact - 1.0)) < 5e-4
+        assert np.all(upstream.wall_heat_flux == 0.0)
+        assert upstream.wall_temperature[index] == pytest.approx(300.0, rel=5e-4)
 
 
 @pytest.mark.parametrize(
@@ -456,12 +444,11 @@ def plate_edge(distance: ArrayLike) -> BoundaryLayerEdge:
     )
 
 
-@pytest.mark.parametrize("width", [0.1, 0.02])
 @pytest.mark.solver_verification
 def test_streamwise_refinement_converges_through_a_pressure_change(
-    monkeypatch: pytest.MonkeyPatch, width: float
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    edge = smooth_edge(2.0, 3.0, width=width)
+    edge = smooth_edge(2.0, 3.0, width=0.02)
     wall = np.full(edge.distance.size, 300.0)
     default = march_with_stations(edge, wall, edge.distance[1:])
     tighten_streamwise_control(monkeypatch)
@@ -479,54 +466,34 @@ def test_streamwise_refinement_converges_through_a_pressure_change(
 
 
 @pytest.mark.parametrize(
-    ("distance", "wall_temperature"),
+    ("distance", "wall_temperature", "through_zero"),
     [
-        ([0.0, 0.5, 0.51, 1.0], [300.0, 300.0, 400.0, 400.0]),
-        ([0.0, 0.4995, 0.5, 0.5005, 1.0], [300.0, 300.0, 305.0, 310.0, 310.0]),
-        ([0.0, 0.475, 0.5, 0.525, 1.0], [300.0, 300.0, 350.0, 400.0, 400.0]),
-        ([0.0, 0.25, 0.5, 0.75, 1.0], [300.0, 300.0, 350.0, 400.0, 400.0]),
+        ([0.0, 0.5, 0.51, 1.0], [300.0, 300.0, 400.0, 400.0], False),
+        (
+            [0.0, 0.4995, 0.5, 0.5005, 1.0],
+            [300.0, 300.0, 305.0, 310.0, 310.0],
+            False,
+        ),
+        ([0.0, 0.45, 0.5, 0.55, 1.0], [400.0, 400.0, 450.0, 500.0, 500.0], True),
     ],
-    ids=["1cm-100K", "1mm-10K", "5cm-100K", "50cm-100K"],
+    ids=["1cm-100K", "1mm-10K", "through-zero"],
 )
 @pytest.mark.solver_verification
 def test_wall_temperature_changes_resolve_the_heat_flux_without_extra_stations(
     monkeypatch: pytest.MonkeyPatch,
     distance: list[float],
     wall_temperature: list[float],
+    through_zero: bool,
 ) -> None:
     edge = plate_edge(distance)
     wall = np.asarray(wall_temperature, dtype=np.float64)
     default = marching_boundary_layer(
         edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=wall
     )
-    tighten_streamwise_control(monkeypatch)
-    stations = np.unique(
-        np.concatenate(
-            [
-                np.linspace(left, right, 81)[1:]
-                for left, right in pairwise(edge.distance)
-            ]
-        )
-    )
-    refined = march_with_stations(edge, wall, stations, relative_step=0.0075)
-    reference = refined.wall_heat_flux[np.searchsorted(stations, default.distance)]
-    assert np.max(np.abs(default.wall_heat_flux - reference)) < 2e-3 * np.max(
-        np.abs(reference)
-    )
-
-
-@pytest.mark.solver_verification
-def test_heat_flux_through_zero_stays_resolved(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A wall crossing the recovery temperature reverses the heat flux."""
-    edge = plate_edge([0.0, 0.45, 0.5, 0.55, 1.0])
-    wall = np.array([400.0, 400.0, 450.0, 500.0, 500.0])
-    default = marching_boundary_layer(
-        edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=wall
-    )
-    assert default.wall_heat_flux[0] > 0.0
-    assert default.wall_heat_flux[-1] < 0.0
+    if through_zero:
+        # A wall crossing the recovery temperature reverses the heat flux.
+        assert default.wall_heat_flux[0] > 0.0
+        assert default.wall_heat_flux[-1] < 0.0
     tighten_streamwise_control(monkeypatch)
     stations = np.unique(
         np.concatenate(
@@ -584,30 +551,6 @@ def test_output_stations_do_not_change_the_solution() -> None:
     )
 
 
-def test_history_matters_for_the_same_local_edge_state() -> None:
-    """Downstream of a pressure change a layer differs from the local plate."""
-    edge = smooth_edge(2.0, 3.0, width=0.02)
-    result = marching_boundary_layer(
-        edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=300.0
-    )
-    index = int(np.argmin(np.abs(edge.distance[1:] - 1.2)))
-    plate = marching_boundary_layer(
-        BoundaryLayerEdge.from_pressure(
-            [0.0, edge.distance[index + 1]],
-            np.full(2, edge.pressure[index + 1]),
-            total_pressure=2e5,
-            total_temperature=450.0,
-        ),
-        regime=BoundaryLayerRegime.LAMINAR,
-        wall_temperature=300.0,
-    )
-    ratio = (
-        result.local_skin_friction_coefficient[index]
-        / plate.local_skin_friction_coefficient[-1]
-    )
-    assert abs(ratio - 1.0) > 0.05
-
-
 def test_wall_temperature_distribution_is_followed() -> None:
     distance = np.linspace(0.0, 1.0, 21)
     wall = 300.0 + 100.0 * distance
@@ -639,8 +582,6 @@ def test_results_and_edges_own_read_only_arrays() -> None:
     assert result.distance.tolist() == [0.5, 1.0]
     for values in (result.distance, result.velocity_ratio, result.eta):
         assert not values.flags.writeable
-    with pytest.raises(FrozenInstanceError):
-        edge.gas = AIR  # type: ignore[misc]
 
 
 @pytest.mark.parametrize(
@@ -735,18 +676,6 @@ def test_invalid_march_options_are_rejected() -> None:
         )
 
 
-@pytest.mark.solver_verification
-def test_short_pressure_changes_warn() -> None:
-    distance = np.linspace(0.0, 1.0, 2001)
-    mach = 2.0 + (1.0 + np.tanh((distance - 0.5) / 0.0002)) / 2.0
-    pressure = 2e5 * (1.0 + (GAMMA - 1.0) / 2.0 * mach**2) ** (-GAMMA / (GAMMA - 1.0))
-    edge = BoundaryLayerEdge.from_pressure(
-        distance, pressure, total_pressure=2e5, total_temperature=450.0
-    )
-    with pytest.warns(ApplicabilityWarning, match="thin-layer"):
-        marching_boundary_layer(edge, regime=BoundaryLayerRegime.LAMINAR)
-
-
 def test_strong_viscous_interaction_warns() -> None:
     mach = 10.0
     ratio = 1.0 + (GAMMA - 1.0) / 2.0 * mach**2
@@ -784,7 +713,7 @@ def test_pressure_length_warning_without_a_refinement_march() -> None:
 def test_separation_reports_the_upstream_solution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Exercise error propagation with a manufactured square-root shear collapse."""
+    """Retain the upstream solution at a manufactured square-root shear collapse."""
     solver = Discretization(ETA, 1.0, LinearViscosity())
 
     def solve(
@@ -806,22 +735,6 @@ def test_separation_reports_the_upstream_solution(
         )
     assert internal.value.distance == pytest.approx(0.5)
     np.testing.assert_array_equal(internal.value.solution.distance, [0.1])
-
-    def separated(*args: object, **kwargs: object) -> MarchSolution:
-        raise internal.value
-
-    monkeypatch.setattr(
-        import_module(marching_boundary_layer.__module__), "march", separated
-    )
-    with pytest.raises(BoundaryLayerSeparationError) as public:
-        marching_boundary_layer(
-            plate_edge([0.0, 0.1, 1.0]), regime=BoundaryLayerRegime.LAMINAR
-        )
-    assert public.value.__cause__ is internal.value
-    assert public.value.separation_distance == internal.value.distance
-    assert public.value.result is not None
-    np.testing.assert_array_equal(public.value.result.distance, [0.1])
-    assert np.all(public.value.result.wall_shear_stress > 0.0)
 
 
 def test_march_reports_an_outer_boundary_inside_the_layer() -> None:

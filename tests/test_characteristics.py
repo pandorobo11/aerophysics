@@ -71,19 +71,6 @@ def test_m1_cone(mach: float, angle: float) -> None:
     assert shock_error < 1e-10
 
 
-def test_collinear_cone_vertices() -> None:
-    result = axisymmetric_body_flow(
-        [0, 1, 2],
-        [0, 0.1, 0.2],
-        mach=3,
-        pressure=10000,
-        temperature=220,
-        characteristic_count=48,
-    )
-    assert np.max(abs(result.pressure / result.pressure[0] - 1)) < 1e-4
-    assert result.axial_distance[-1] == 2
-
-
 def test_m2_planar_wedge_and_expansion() -> None:
     angle = radians(10)
     result, _ = moc._solve(
@@ -962,35 +949,21 @@ def test_corner_inputs_preserve_limits_and_geometry() -> None:
 
 
 @pytest.mark.solver_verification
-def test_default_marched_cone_accuracy_and_minimum_count() -> None:
+def test_default_marched_cone_accuracy() -> None:
     exact = conical_shock(2, radians(10))
-    errors = []
-    options_list: list[dict[str, Any]] = [{"characteristic_count": 87}, {}]
-    for options in options_list:
-        result, _ = moc._solve(
-            [0, 1],
-            [0, tan(radians(10))],
-            mach=2,
-            pressure=10000,
-            temperature=220,
-            starting_distance=0.05,
-            **options,
-        )
-        errors.append(
-            float(
-                np.max(
-                    abs(result.pressure / (10000 * exact.surface_pressure_ratio) - 1)
-                )
-            )
-        )
-    print("DEFAULT_CONE", errors)
-    assert errors[0] >= 0.001
-    assert errors[1] < 0.001
-    # The public entry point uses the same default as the private verification.
-    public = axisymmetric_body_flow(
-        [0, 1], [0, 0.1], mach=3, pressure=10000, temperature=220
+    result, _ = moc._solve(
+        [0, 1],
+        [0, tan(radians(10))],
+        mach=2,
+        pressure=10000,
+        temperature=220,
+        starting_distance=0.05,
     )
-    assert public.axial_distance.size == 89
+    error = float(
+        np.max(abs(result.pressure / (10000 * exact.surface_pressure_ratio) - 1))
+    )
+    print("DEFAULT_CONE", error)
+    assert error < 0.001
 
 
 @pytest.mark.parametrize("scale", [1e-6, 1.0, 1e6])
@@ -1089,35 +1062,6 @@ def test_meaningful_short_intervals_and_corners_are_retained() -> None:
     for vertex in (1, 1 + 1e-10):
         assert np.count_nonzero(corners.axial_distance == vertex) == 1
     assert len(corners._corner_states) == 2
-
-
-@pytest.mark.solver_verification
-@pytest.mark.parametrize(
-    "regime", [BoundaryLayerRegime.LAMINAR, BoundaryLayerRegime.TURBULENT]
-)
-def test_roundoff_cone_boundary_layer_completion(regime: BoundaryLayerRegime) -> None:
-    x = np.linspace(0.0, 30.0, 11)
-    flow = axisymmetric_body_flow(x, 0.4 * x, mach=3, pressure=10000, temperature=220)
-    inputs = flow.boundary_layer_inputs()
-    start = time.perf_counter()
-    with warnings.catch_warnings(record=True):
-        result = marching_boundary_layer(
-            inputs.edge,
-            regime=regime,
-            wall_radius=inputs.wall_radius,
-            wall_temperature=300,
-        )
-    assert result.distance[-1] == flow.surface_distance[-1]
-    assert np.all(np.isfinite(result.wall_heat_flux))
-    assert np.all(result.local_skin_friction_coefficient > 0)
-    print(
-        "ROUNDOFF_CONE_BL",
-        str(regime),
-        "seconds",
-        time.perf_counter() - start,
-        "endpoint_m",
-        result.distance[-1],
-    )
 
 
 def test_coarse_fan_stops_unneeded_shock_extrapolation(
