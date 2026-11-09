@@ -131,7 +131,11 @@ def test_shock_output_states_conserve_energy_entropy_and_mass(
 
 @pytest.mark.parametrize("kind", ["normal", "oblique", "cone"])
 def test_pressure_scales_only_absolute_density_pressure_and_reynolds(kind: str) -> None:
-    options: dict[str, Any] = dict(gas_model="NASA9", upstream_temperature=500.0)
+    # Pressure scaling is gas-independent; avoid slow NASA9 cone solves.
+    options: dict[str, Any] = dict(
+        gas_model="HARMONIC_OSCILLATOR" if kind == "cone" else "NASA9",
+        upstream_temperature=500.0,
+    )
     a = shock_case(kind, upstream_pressure=25_000.0, **options).rows[0]
     b = shock_case(kind, upstream_pressure=50_000.0, **options).rows[0]
     no_pressure = shock_case(kind, **options).rows[0]

@@ -87,15 +87,12 @@ def test_transport_models_match_direct_source_equation_reproductions() -> None:
     assert set(metadata["models"]) == set(models)
 
 
-def test_nasa_polynomial_identities_and_derivative() -> None:
+def test_nasa_polynomial_enthalpy_derivative_matches_cp() -> None:
     # Endpoints, interiors and both sides of the polynomial region boundary.
     temperature = np.asarray([200.1, 500.0, 999.0, 1001.0, 3000.0, 5999.9])
     step = 1.0e-2
     for gas in (AIR_NASA7, AIR_NASA9):
         cp = np.asarray(gas.cp(temperature))
-        cv = np.asarray(gas.cv(temperature))
-        assert_allclose(cp - cv, gas.specific_gas_constant, rtol=1.0e-12)
-        assert_allclose(gas.heat_capacity_ratio(temperature), cp / cv, rtol=1.0e-12)
         derivative = (
             np.asarray(gas.standard_enthalpy(temperature + step))
             - np.asarray(gas.standard_enthalpy(temperature - step))

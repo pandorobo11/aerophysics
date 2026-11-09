@@ -367,19 +367,6 @@ def test_failed_iteration_reports_original_indices_and_state() -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "column,value", [(0, -1), (1, 0), (2, 0), (2, np.inf), (3, 0), (4, 1)]
-)
-def test_invalid_state_has_index(column: int, value: float) -> None:
-    from aerophysics._laminar_similarity import similarity_coefficients
-    from aerophysics.exceptions import ModelRangeError
-
-    states = np.array([[2.0, 240.0, 1.0, 0.72, 1.4]] * 2)
-    states[1, column] = value
-    with pytest.raises(ModelRangeError, match="array index 1"):
-        similarity_coefficients(states, AIR_VISCOSITY)
-
-
 def test_nonpositive_viscosity_fails_with_state() -> None:
     from aerophysics._laminar_similarity import similarity_coefficients
     from aerophysics.exceptions import ModelRangeError

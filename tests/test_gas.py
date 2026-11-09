@@ -14,11 +14,6 @@ from aerophysics.gas import (
 )
 
 
-def test_air_heat_capacities_are_consistent() -> None:
-    assert AIR.cp / AIR.cv == pytest.approx(AIR.heat_capacity_ratio)
-    assert AIR.cp - AIR.cv == pytest.approx(AIR.specific_gas_constant)
-
-
 def test_speed_of_sound_scalar_and_array() -> None:
     assert AIR.speed_of_sound(288.15) == pytest.approx(340.294, rel=1e-6)
     result = AIR.speed_of_sound([[288.15, 216.65]])

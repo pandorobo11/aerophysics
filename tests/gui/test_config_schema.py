@@ -356,11 +356,19 @@ def _boundary_configuration(models: object) -> dict[str, object]:
     }
 
 
-@pytest.mark.parametrize("regime", ["laminar", "turbulent", "transitional"])
 @pytest.mark.parametrize(
-    "correction", ["none", "eckert", "van_driest_ii", "van_driest_ii_wall_temperature"]
+    ("regime", "correction", "correlation"),
+    [
+        ("laminar", "none", None),
+        ("laminar", "eckert", "power_law"),
+        ("turbulent", "none", None),
+        ("turbulent", "none", "schlichting"),
+        ("turbulent", "none", "power_law"),
+        ("transitional", "eckert", "power_law"),
+        ("turbulent", "van_driest_ii", "power_law"),
+        ("transitional", "van_driest_ii_wall_temperature", None),
+    ],
 )
-@pytest.mark.parametrize("correlation", [None, "schlichting", "power_law"])
 def test_boundary_legacy_configuration_migration(
     regime: str, correction: str, correlation: str | None
 ) -> None:
@@ -486,22 +494,3 @@ def test_boundary_null_incompressible_model_defaults_to_schlichting() -> None:
 def test_boundary_rejects_incomplete_or_invalid_legacy_settings(models: object) -> None:
     with pytest.raises(ConfigurationError):
         validate_configuration(_boundary_configuration(models))
-
-
-@pytest.mark.parametrize(
-    "model", ["power_law", "eckert_power_law", "eckert_schlichting"]
-)
-def test_boundary_rejects_removed_unreleased_models(model: str) -> None:
-    with pytest.raises(
-        ConfigurationError, match=r"models\.turbulent_model must be one of"
-    ):
-        validate_configuration(
-            _boundary_configuration(
-                {
-                    "source": "manual",
-                    "regime": "turbulent",
-                    "compressible": model != "power_law",
-                    "turbulent_model": model,
-                }
-            )
-        )

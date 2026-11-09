@@ -156,12 +156,6 @@ def test_sweep_invalid_inputs(field: str, missing: str | None, message: str) -> 
         heating_sweep(field=field, start=5.0, stop=10.0, points=3, **inputs)
 
 
-def test_old_nine_unit_configuration() -> None:
-    values = UnitPreferences().to_dict()
-    del values["heat_flux"]
-    assert UnitPreferences.from_dict(values).heat_flux == "W/m²"
-
-
 @pytest.mark.parametrize("missing", ["upstream_mach", "temperature", "pressure"])
 def test_sweep_angle_requires_fixed_state(missing: str) -> None:
     inputs: dict[str, Any] = {

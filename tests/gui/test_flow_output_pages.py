@@ -35,6 +35,10 @@ from aerophysics.gui.components import render_unit_sidebar
     app = AppTest.from_string(script, default_timeout=30).run()
     app.selectbox(key=f"{prefix}_gas_model").set_value(gas_model).run()
     app.checkbox(key=f"{prefix}_with_heat_capacities").check().run()
+    temperature_field = (
+        "total_temperature" if prefix == "isentropic" else "upstream_temperature"
+    )
+    expected_temperature = 1000.0 if prefix == "isentropic" else 500.0
     if prefix == "isentropic":
         app.checkbox(key="isentropic_with_flux").check().run()
         app.number_input(key="isentropic_total_temperature").set_value(1000.0).run()
@@ -55,6 +59,9 @@ from aerophysics.gui.components import render_unit_sidebar
         key=f"{prefix}_characteristic_length"
     ).value == pytest.approx(200)
     assert app.number_input(key=pressure_key).value == pytest.approx(30)
+    assert app.number_input(key=f"{prefix}_{temperature_field}").value == pytest.approx(
+        expected_temperature - 273.15
+    )
     assert not app.exception
     assert f"{prefix}_payload" not in app.session_state
     app.button(key=f"FormSubmitter:{prefix}_form-計算").click().run(
@@ -62,6 +69,7 @@ from aerophysics.gui.components import render_unit_sidebar
     )
     assert not app.exception and not app.error
     table = app.dataframe[0].value
+    assert table["気体モデル"].tolist() == [gas_model]
     assert any("単位Re" in heading and "1/mm" in heading for heading in table.columns)
     assert any("定圧比熱" in heading for heading in table.columns)
     assert table["粘性モデル"].tolist() == ["Keyes"]
@@ -79,6 +87,10 @@ from aerophysics.gui.components import render_unit_sidebar
     assert not app.exception and not app.error
     result, configuration = app.session_state[f"{prefix}_payload"]
     assert len(result.rows) == 2
+    assert configuration["inputs_si"][temperature_field] == pytest.approx(
+        expected_temperature
+    )
+    assert configuration["models"]["gas_model"] == gas_model
     assert configuration["inputs_si"]["characteristic_length"] == pytest.approx(0.2)
     assert configuration["inputs_si"][
         "total_pressure" if prefix == "isentropic" else "upstream_pressure"
@@ -94,6 +106,10 @@ from aerophysics.gui.components import render_unit_sidebar
         replay.session_state[f"unit_{name}"] = unit
     replay.session_state["_gui_display_units"] = configuration["display_units"]
     replay.run()
+    assert replay.selectbox(key=f"{prefix}_gas_model").value == gas_model
+    assert replay.number_input(
+        key=f"{prefix}_{temperature_field}"
+    ).value == pytest.approx(expected_temperature - 273.15)
     assert replay.checkbox(key=f"{prefix}_with_heat_capacities").value
     assert replay.checkbox(key=f"{prefix}_with_length").value
     assert replay.selectbox(key=f"{prefix}_viscosity_model").value == "Keyes"

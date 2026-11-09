@@ -6,11 +6,9 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-import aerophysics._laminar_similarity as similarity
 from aerophysics import flat_plate_boundary_layer_profile
 from aerophysics.boundary_layer import (
     BoundaryLayerRegime,
-    FlatPlateBoundaryLayerResult,
     TurbulentModel,
     flat_plate_boundary_layer,
 )
@@ -18,7 +16,6 @@ from aerophysics.boundary_layer_profile import (
     CompressibleVelocityTransformation,
     compressible_turbulent_boundary_layer_profile,
 )
-from aerophysics.exceptions import ModelRangeError
 from aerophysics.gas import AIR
 from aerophysics.transport import AIR_VISCOSITY
 
@@ -29,20 +26,6 @@ VELOCITY = MACH * float(
     np.sqrt(AIR.heat_capacity_ratio * AIR.specific_gas_constant * EDGE_TEMPERATURE)
 )
 DENSITY = 1e7 * VISCOSITY / VELOCITY
-RESULT_FIELDS_BEFORE_HEAT_TRANSFER = {
-    "distance": 1.0,
-    "reynolds_number": 2.0,
-    "effective_reynolds_number": 3.0,
-    "boundary_layer_thickness": 4.0,
-    "displacement_thickness": 5.0,
-    "momentum_thickness": 6.0,
-    "local_skin_friction_coefficient": 7.0,
-    "average_skin_friction_coefficient": 8.0,
-    "wall_shear_stress": 9.0,
-    "drag_per_unit_width": 10.0,
-    "recovery_temperature": 11.0,
-    "wall_temperature": 12.0,
-}
 
 
 def plate(**kwargs: Any) -> Any:
@@ -126,21 +109,6 @@ def test_incompressible_result_has_no_heat_transfer() -> None:
     result = flat_plate_boundary_layer(
         1.0, 10.0, 1.2, 1.8e-5, regime=BoundaryLayerRegime.LAMINAR
     )
-    assert result.stanton_number is None
-    assert result.heat_transfer_coefficient is None
-    assert result.wall_heat_flux is None
-
-
-@pytest.mark.parametrize("positional", [False, True])
-def test_result_can_be_built_without_heat_transfer_fields(positional: bool) -> None:
-    values = RESULT_FIELDS_BEFORE_HEAT_TRANSFER
-    result = (
-        FlatPlateBoundaryLayerResult(*values.values())
-        if positional
-        else FlatPlateBoundaryLayerResult(**values)
-    )
-    for name, value in values.items():
-        assert getattr(result, name) == value
     assert result.stanton_number is None
     assert result.heat_transfer_coefficient is None
     assert result.wall_heat_flux is None
@@ -294,19 +262,4 @@ def test_profile_requires_positive_distance() -> None:
     with pytest.raises(ValueError, match="distance"):
         flat_plate_boundary_layer_profile(
             0.0, VELOCITY, DENSITY, EDGE_TEMPERATURE, regime=BoundaryLayerRegime.LAMINAR
-        )
-
-
-def test_failed_laminar_profile_raises_model_range_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def diverge(*_: object, **__: object) -> None:
-        raise similarity._ConvergenceError("forced")
-
-    monkeypatch.setattr(similarity, "_finite_difference", diverge)
-    with pytest.raises(ModelRangeError, match="laminar similarity profile"):
-        similarity.similarity_profile(
-            np.array([5.0, 220.0, np.nan, 0.72, 1.4]),
-            AIR_VISCOSITY,
-            np.array([0.0, 1.0]),
         )

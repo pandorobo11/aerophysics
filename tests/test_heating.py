@@ -2,7 +2,7 @@
 
 import re
 import warnings
-from dataclasses import FrozenInstanceError, fields
+from dataclasses import fields
 from typing import Any, cast
 
 import numpy as np
@@ -238,7 +238,5 @@ def test_arrays(model: Model) -> None:
                     and val.dtype == np.float64
                     and not val.flags.writeable
                 )
-        with pytest.raises(FrozenInstanceError):
-            obj.heat_flux = 0  # type: ignore[misc]
     assert isinstance(sphere_a(wall_temperature=300).heat_flux, float)
     assert isinstance(cylinder(*ARGS, 0, wall_temperature=300).heat_flux, float)

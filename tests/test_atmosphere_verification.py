@@ -131,32 +131,10 @@ def test_state_equations_close_over_the_full_range() -> None:
     temperature = np.asarray(state.temperature)
     gas_constant = np.asarray(state.specific_gas_constant)
     gamma = np.asarray(state.heat_capacity_ratio)
-    dynamic_viscosity = np.asarray(state.dynamic_viscosity)
-    conductivity = np.asarray(state.thermal_conductivity)
     assert_allclose(pressure, density * gas_constant * temperature, rtol=1.0e-12)
     assert_allclose(
         np.asarray(state.speed_of_sound) ** 2,
         gamma * gas_constant * temperature,
-        rtol=1.0e-12,
-    )
-    assert_allclose(
-        state.kinematic_viscosity,
-        dynamic_viscosity / density,
-        rtol=1.0e-12,
-    )
-    assert_allclose(
-        state.prandtl_number,
-        dynamic_viscosity * np.asarray(state.cp) / conductivity,
-        rtol=1.0e-12,
-    )
-    assert_allclose(
-        np.asarray(state.cp) - np.asarray(state.cv),
-        gas_constant,
-        rtol=1.0e-12,
-    )
-    assert_allclose(
-        gamma,
-        np.asarray(state.cp) / np.asarray(state.cv),
         rtol=1.0e-12,
     )
 

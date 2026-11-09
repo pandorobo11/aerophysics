@@ -32,17 +32,21 @@ def test_legacy_gas_transport_exports_are_identity_aliases() -> None:
     assert LegacyUSSAConductivityModel is USSAConductivityModel
 
 
-def test_keyes_array_shape() -> None:
-    result = AIR_KEYES_VISCOSITY.dynamic_viscosity([[100.0, 300.0], [500.0, 1000.0]])
-    assert isinstance(result, np.ndarray)
-    assert result.shape == (2, 2)
-    assert result.dtype == np.float64
-
-
-def test_blottner_array_shape() -> None:
-    # Values are covered by the Blottner/Wilke source-equation verification.
-    model = BlottnerModel(0.0268142, 0.3177838, -11.3155513)
-    result = model.dynamic_viscosity([[1000.0, 2000.0], [5000.0, 30_000.0]])
+@pytest.mark.parametrize(
+    ("model", "temperatures"),
+    [
+        (AIR_KEYES_VISCOSITY, [[100.0, 300.0], [500.0, 1000.0]]),
+        (
+            BlottnerModel(0.0268142, 0.3177838, -11.3155513),
+            [[1000.0, 2000.0], [5000.0, 30_000.0]],
+        ),
+    ],
+)
+def test_viscosity_array_shape_and_dtype(
+    model: KeyesModel | BlottnerModel, temperatures: list[list[float]]
+) -> None:
+    # Values are covered by the source-equation verification.
+    result = model.dynamic_viscosity(temperatures)
     assert isinstance(result, np.ndarray)
     assert result.shape == (2, 2)
     assert result.dtype == np.float64

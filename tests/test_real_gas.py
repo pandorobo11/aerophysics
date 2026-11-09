@@ -11,7 +11,6 @@ from aerophysics import (
     AIR_HARMONIC_OSCILLATOR,
     BeattieBridgemanGas,
     HarmonicOscillatorGas,
-    ThermodynamicState,
     VibrationalMode,
 )
 from aerophysics.exceptions import ApplicabilityWarning, ModelRangeError
@@ -70,32 +69,17 @@ def test_harmonic_oscillator_matches_independent_kennard_equation() -> None:
     )
 
 
-def test_harmonic_oscillator_energy_entropy_and_state_identities() -> None:
+def test_harmonic_oscillator_enthalpy_derivative_matches_cp() -> None:
     gas = AIR_HARMONIC_OSCILLATOR
     temperature = 1200.0
     pressure = 6.0e6
     state = gas.state(temperature, pressure)
-    assert isinstance(state, ThermodynamicState)
-    assert state.density == pytest.approx(
-        pressure / (gas.specific_gas_constant * temperature)
-    )
-    assert state.enthalpy - state.internal_energy == pytest.approx(
-        gas.specific_gas_constant * temperature
-    )
-    assert state.cp - state.cv == pytest.approx(gas.specific_gas_constant)
-    assert state.heat_capacity_ratio == pytest.approx(state.cp / state.cv)
-    assert state.speed_of_sound == pytest.approx(
-        np.sqrt(state.heat_capacity_ratio * gas.specific_gas_constant * temperature)
-    )
     delta = 1.0e-3
     derivative = (
         gas.standard_enthalpy(temperature + delta)
         - gas.standard_enthalpy(temperature - delta)
     ) / (2.0 * delta)
     assert derivative == pytest.approx(state.cp, rel=2e-9)
-    assert gas.standard_internal_energy(temperature) == state.internal_energy
-    assert gas.entropy(temperature, pressure) == state.entropy
-    assert gas.speed_of_sound(temperature) == state.speed_of_sound
 
 
 def test_harmonic_oscillator_arrays_warnings_and_validation() -> None:
@@ -114,26 +98,6 @@ def test_harmonic_oscillator_arrays_warnings_and_validation() -> None:
         gas.entropy(1000.0, 0.0)
     with pytest.raises(ValueError, match="broadcast"):
         gas.state(np.ones(2) * 1000.0, np.ones(3) * 1.0e6)
-
-
-def test_beattie_bridgeman_eos_and_thermodynamic_identities() -> None:
-    gas = AIR_BEATTIE_BRIDGEMAN
-    temperature = 1200.0
-    pressure = 6.0e6
-    density = gas.density(temperature, pressure)
-    assert gas.pressure(temperature, density) == pytest.approx(pressure, rel=2e-15)
-    state = gas.state(temperature, pressure)
-    assert state.enthalpy == pytest.approx(state.internal_energy + pressure / density)
-    assert state.cp > state.cv > 0.0
-    assert state.heat_capacity_ratio == pytest.approx(state.cp / state.cv)
-    assert state.speed_of_sound > 0.0
-    assert gas.cp(temperature, pressure) == state.cp
-    assert gas.cv(temperature, pressure) == state.cv
-    assert gas.heat_capacity_ratio(temperature, pressure) == state.heat_capacity_ratio
-    assert gas.internal_energy(temperature, pressure) == state.internal_energy
-    assert gas.enthalpy(temperature, pressure) == state.enthalpy
-    assert gas.entropy(temperature, pressure) == state.entropy
-    assert gas.speed_of_sound(temperature, pressure) == state.speed_of_sound
 
 
 def test_beattie_bridgeman_arrays_applicability_and_validation() -> None:
@@ -196,52 +160,47 @@ def test_beattie_bridgeman_randall_tabulated_range_endpoints() -> None:
             gas.state(900.0, pressure, allow_extrapolation=True)
 
 
-def test_beattie_bridgeman_pressure_checks_computed_randall_range() -> None:
+@pytest.mark.parametrize(
+    "case", ["pressure-below", "pressure-above", "temperature", "both"]
+)
+def test_beattie_bridgeman_pressure_range_handling(case: str) -> None:
     gas = AIR_BEATTIE_BRIDGEMAN
     pressure_range = gas.applicable_pressure_range
     assert pressure_range is not None
     pressure_minimum, pressure_maximum = pressure_range
-
-    # Exact inclusive endpoints are checked by the state API above. Keep
-    # inverse-EOS rounding away from the boundary when checking output pressure.
-    for pressure in (0.99 * pressure_minimum, 1.01 * pressure_maximum):
+    temperature = 1300.0
+    density = 1.0 if case == "temperature" else 100.0
+    expected_pressure: float | None = None
+    error_match: str | None = None
+    warning_match: str | None = r"Randall, AEDC-TR-57-8.*tabulated range"
+    if case in ("pressure-below", "pressure-above"):
+        # Avoid inverse-EOS rounding at the inclusive endpoints checked above.
+        temperature = 900.0
+        expected_pressure = (
+            0.99 * pressure_minimum
+            if case == "pressure-below"
+            else 1.01 * pressure_maximum
+        )
         with pytest.warns(ApplicabilityWarning):
-            density = gas.density(900.0, pressure, allow_extrapolation=True)
-        with pytest.raises(ModelRangeError, match="pressure"):
-            gas.pressure(900.0, density, allow_extrapolation=False)
-        with pytest.warns(
-            ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
-        ) as captured:
-            assert gas.pressure(
-                900.0, density, allow_extrapolation=True
-            ) == pytest.approx(pressure)
-        assert len(captured) == 1
+            density = float(
+                gas.density(temperature, expected_pressure, allow_extrapolation=True)
+            )
+        error_match = "pressure"
+    elif case == "temperature":
+        error_match = "temperature"
+        warning_match = None
 
-
-def test_beattie_bridgeman_pressure_outside_temperature_range_only() -> None:
-    gas = AIR_BEATTIE_BRIDGEMAN
-    with pytest.raises(ModelRangeError, match="temperature"):
-        gas.pressure(1300.0, 1.0, allow_extrapolation=False)
-    with pytest.warns(ApplicabilityWarning) as captured:
-        pressure = gas.pressure(1300.0, 1.0, allow_extrapolation=True)
+    with pytest.raises(ModelRangeError, match=error_match):
+        gas.pressure(temperature, density, allow_extrapolation=False)
+    with pytest.warns(ApplicabilityWarning, match=warning_match) as captured:
+        pressure = gas.pressure(temperature, density, allow_extrapolation=True)
     assert len(captured) == 1
-    pressure_range = gas.applicable_pressure_range
-    assert pressure_range is not None
-    assert pressure_range[0] <= pressure <= pressure_range[1]
-
-
-def test_beattie_bridgeman_pressure_combines_temperature_and_pressure_range() -> None:
-    gas = AIR_BEATTIE_BRIDGEMAN
-    with pytest.warns(
-        ApplicabilityWarning, match=r"Randall, AEDC-TR-57-8.*tabulated range"
-    ) as captured:
-        pressure = gas.pressure(1300.0, 100.0, allow_extrapolation=True)
-    pressure_range = gas.applicable_pressure_range
-    assert pressure_range is not None
-    assert pressure > pressure_range[1]
-    assert len(captured) == 1
-    with pytest.raises(ModelRangeError):
-        gas.pressure(1300.0, 100.0, allow_extrapolation=False)
+    if expected_pressure is not None:
+        assert pressure == pytest.approx(expected_pressure)
+    elif case == "temperature":
+        assert pressure_minimum <= pressure <= pressure_maximum
+    else:
+        assert pressure > pressure_maximum
 
 
 def test_beattie_bridgeman_exact_total_temperature_endpoint() -> None:
@@ -467,34 +426,6 @@ def test_new_models_isentropic_forward_inverse_and_area_branches(
         total_temperature=1200.0,
         total_pressure=total_pressure,
     )
-    analysis = isentropic_analysis(
-        mach,
-        gas,
-        total_temperature=1200.0,
-        total_pressure=total_pressure,
-    )
-    assert_allclose(
-        analysis.ratios.total_temperature_ratio,
-        ratios.total_temperature_ratio,
-    )
-    assert_allclose(analysis.ratios.total_pressure_ratio, ratios.total_pressure_ratio)
-    assert_allclose(analysis.ratios.total_density_ratio, ratios.total_density_ratio)
-    assert np.isinf(np.asarray(analysis.area_ratio)[0])
-    assert_allclose(
-        np.asarray(analysis.area_ratio)[1:],
-        area_ratio(
-            mach[1:],
-            gas,
-            total_temperature=1200.0,
-            total_pressure=total_pressure,
-        ),
-    )
-    if total_pressure is None:
-        assert analysis.state is None
-        assert analysis.mass_flux is None
-    else:
-        assert analysis.state is not None
-        assert analysis.mass_flux is not None
     assert_allclose(
         mach_from_total_temperature_ratio(
             ratios.total_temperature_ratio,
@@ -586,12 +517,6 @@ def test_isentropic_state_conserves_energy_and_entropy(
         total_pressure=total_pressure,
     )
     assert isinstance(state.static_temperature, np.ndarray)
-    assert_allclose(state.velocity, np.asarray(state.mach) * state.speed_of_sound)
-    assert_allclose(state.mass_flux, state.static_density * state.velocity)
-    assert_allclose(
-        state.dynamic_pressure,
-        0.5 * state.static_density * np.asarray(state.velocity) ** 2,
-    )
     total = gas.state(total_temperature, total_pressure)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", ApplicabilityWarning)

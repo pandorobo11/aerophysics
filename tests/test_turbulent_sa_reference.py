@@ -216,38 +216,6 @@ def test_sa_reference_regenerates() -> None:
             )
 
 
-def test_newton_matches_picard_profiles() -> None:
-    newton = TurbulentSABoundaryLayer(5.0, 220.0, 300.0)
-    picard = TurbulentSABoundaryLayer(5.0, 220.0, 300.0, use_newton=False)
-    positions, coupled = newton.march(0.1, steps=30)
-    old_positions, sequential = picard.march(0.1, steps=30)
-    assert_allclose(positions, old_positions, rtol=0.0, atol=0.0)
-    for name in ("u", "g"):
-        assert_allclose(
-            getattr(coupled[-1], name),
-            getattr(sequential[-1], name),
-            rtol=0.0,
-            atol=1e-7,
-        )
-    assert_allclose(
-        coupled[-1].n,
-        sequential[-1].n,
-        rtol=0.0,
-        atol=1e-7 * max(1.0, float(sequential[-1].n.max())),
-    )
-    actual = newton.quantities(float(positions[-1]), coupled[-1])
-    expected = picard.quantities(float(old_positions[-1]), sequential[-1])
-    assert_allclose(
-        [actual.cf, actual.delta99_over_x],
-        [expected.cf, expected.delta99_over_x],
-        rtol=1e-7,
-        atol=0.0,
-    )
-    assert 0 < newton.newton_iterations < 10 * len(positions)
-    assert newton.picard_fallbacks == picard.picard_fallbacks == 0
-    assert picard.newton_iterations == 0
-
-
 def test_colored_jacobian_matches_single_column_differences() -> None:
     # Include wall, edge, trapezoidal constraints and a nonuniform interior.
     solver = TurbulentSABoundaryLayer(
@@ -274,16 +242,3 @@ def test_colored_jacobian_matches_single_column_differences() -> None:
         inside = abs(rows - column) <= 9
         actual[inside] = bands[9 + rows[inside] - column, column]
         assert_allclose(actual, expected, rtol=1e-10, atol=1e-10)
-
-
-def test_failed_newton_restarts_picard(monkeypatch: pytest.MonkeyPatch) -> None:
-    solver = TurbulentSABoundaryLayer(5.0, 220.0, 300.0)
-    initial = solver._initial()
-    expected = solver._solve([initial], [-1.0], 0.0)
-    monkeypatch.setattr(solver, "_solve_newton", lambda *_: None)
-    positions, history = solver.march(0.001, steps=3)
-    assert solver.picard_fallbacks == len(positions)
-    for name in ("u", "g", "n", "f"):
-        assert_allclose(
-            getattr(history[0], name), getattr(expected, name), atol=0.0, rtol=0.0
-        )

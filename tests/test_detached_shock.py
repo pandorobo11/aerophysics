@@ -98,6 +98,12 @@ def test_standoff_vectorization_and_broadcasting() -> None:
     )
     assert isinstance(scalar.standoff_distance, float)
 
+    seiff = seiff_standoff_distance([[2.0], [4.0]], [1.0, 2.0])
+    assert isinstance(seiff.density_ratio, np.ndarray)
+    assert seiff.density_ratio.shape == (2, 2)
+    assert isinstance(seiff.standoff_distance, np.ndarray)
+    assert seiff.standoff_distance.shape == (2, 2)
+
 
 def test_seiff_low_level_and_normal_shock_api_agree() -> None:
     ratio = normal_shock(4.0).static_density_ratio
@@ -110,14 +116,6 @@ def test_seiff_low_level_and_normal_shock_api_agree() -> None:
     assert direct.standoff_distance == pytest.approx(from_mach.standoff_distance)
     assert direct.geometry is DetachedShockGeometry.AXISYMMETRIC_SPHERE
     assert direct.model is DetachedShockModel.SEIFF
-
-
-def test_seiff_vectorizes_and_broadcasts() -> None:
-    result = seiff_standoff_distance([[2.0], [4.0]], [1.0, 2.0])
-    assert isinstance(result.density_ratio, np.ndarray)
-    assert result.density_ratio.shape == (2, 2)
-    assert isinstance(result.standoff_distance, np.ndarray)
-    assert result.standoff_distance.shape == (2, 2)
 
 
 def test_billig_shape_metadata_vertex_curvature_and_symmetry() -> None:
