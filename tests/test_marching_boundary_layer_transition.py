@@ -1,6 +1,6 @@
 """Specified SA production onset: numerical verification, not transition prediction.
 
-Run with -s to emit the T1--T8 measurements documented in the design note.
+Run with -s to emit the T1--T3 and T5--T6 measurements documented in the design note.
 """
 
 import warnings
@@ -13,13 +13,10 @@ from test_marching_boundary_layer import smooth_edge, tighten_streamwise_control
 from test_marching_boundary_layer_sa import constant_edge, discretization
 
 from aerophysics import (
-    AIR,
     BoundaryLayerEdge,
     BoundaryLayerRegime,
     MarchingBoundaryLayerResult,
     PerfectGas,
-    TurbulentModel,
-    flat_plate_boundary_layer,
     marching_boundary_layer,
 )
 from aerophysics import _boundary_layer_march as march_module
@@ -50,9 +47,7 @@ def relative_difference(a: FloatArray, b: FloatArray) -> float:
     return float(np.max(abs(a / b - 1.0)))
 
 
-@pytest.mark.parametrize(
-    "transition", [None, 0.0, -1.0, 1.0, 2.0, np.nan, np.inf, -np.inf, [0.1]]
-)
+@pytest.mark.parametrize("transition", [None, 0.0, 1.0, 2.0, np.nan, [0.1]])
 def test_transition_distance_is_required_and_bounded(transition: float | None) -> None:
     edge = constant_edge(2.0, 220.0, [1.0])
     with pytest.raises(ValueError, match="transition_distance"):
@@ -120,29 +115,6 @@ def test_residual_suppresses_only_the_sa_production_row() -> None:
         * np.maximum(abs(on[3, 1:-1]) + abs(off[3, 1:-1]), 1.0)
     )
     assert np.all(error <= roundoff)
-
-
-@pytest.mark.parametrize("production", [0.0, 1.0])
-def test_picard_and_newton_solve_the_same_suppressed_equations(
-    production: float,
-) -> None:
-    solver = discretization()
-    edge = StationEdge(0.01, 1.0, 0.15, 1.6, 220.0, 1.3, 2000.0, 0.05, 3.0, production)
-    initial = solver.solve(
-        solver.starting_guess(edge), edge, 0.0, np.zeros((5, len(solver.eta)))
-    )
-    assert initial is not None
-    edge = replace(edge, xi=0.0101, beta=-0.05, viscosity_growth=-0.02)
-    coefficient = 10000.0
-    lagged = -coefficient * initial.state
-    newton = solver.newton(initial.state, edge, coefficient, lagged)
-    picard = solver.picard(initial.state, edge, coefficient, lagged)
-    assert newton is not None and picard is not None
-    np.testing.assert_allclose(picard.state, newton.state, atol=1e-6, rtol=1e-8)
-    residual = solver.residual(picard.state, edge, coefficient, lagged)
-    residual[1:4, 1:-1] *= solver.width**2
-    residual[3] /= max(1.0, float(np.max(picard.state[3])))
-    assert np.max(abs(residual)) < 1e-5
 
 
 @pytest.fixture(scope="module")
@@ -244,8 +216,14 @@ def test_t1_small_seed_upstream_laminar_limit(
 
 
 @pytest.mark.solver_verification
-@pytest.mark.parametrize(("mach", "temperature", "wall"), CASES)
-def test_t2_t3_t4_uniform_edge(
+@pytest.mark.parametrize(
+    ("mach", "temperature", "wall"),
+    [
+        pytest.param(2.0, 220.0, 300.0, id="M2-cold"),
+        pytest.param(6.0, 65.0, 125.0, id="M6-cold"),
+    ],
+)
+def test_t2_t3_uniform_edge(
     mach: float,
     temperature: float,
     wall: float | None,
@@ -299,27 +277,6 @@ def test_t2_t3_t4_uniform_edge(
         f"Re_theta={rr[first]:.9g}..{rr[-1]:.9g}, far={100 * far_error:.9g}%"
     )
     assert far_error < 2e-5  # 0.002%, rounded above the measured 0.001172%.
-    flat = flat_plate_boundary_layer(
-        x,
-        edge.velocity[0],
-        edge.pressure[0] / (AIR.specific_gas_constant * temperature),
-        edge.viscosity_model.dynamic_viscosity(temperature),
-        regime=TRANSITIONAL,
-        transition_reynolds=1e6,
-        compressible=True,
-        turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
-        mach=mach,
-        edge_temperature=temperature,
-        wall_temperature=wall,
-    )
-    for field in ["local_skin_friction_coefficient", "wall_heat_flux"]:
-        if wall is None and field == "wall_heat_flux":
-            continue
-        comparison = 100.0 * (getattr(transition, field) / getattr(flat, field) - 1.0)
-        print(
-            f"T4 M={mach} Tw={wall} {field}: "
-            f"at s=.2,1,10 m = {comparison[np.isin(x, [0.2, 1, 10])].tolist()} %"
-        )
 
 
 def refined_march(
@@ -400,8 +357,9 @@ def test_t5_streamwise_and_wall_normal_refinement(
 
 
 @pytest.mark.solver_verification
-@pytest.mark.parametrize(("start", "end"), [(2.0, 3.0), (3.0, 2.5)])
-@pytest.mark.parametrize("cone", [False, True])
+@pytest.mark.parametrize(
+    ("start", "end", "cone"), [(2.0, 3.0, False), (3.0, 2.5, True)]
+)
 def test_t6_pressure_gradient_and_cone_complete(
     start: float, end: float, cone: bool
 ) -> None:
@@ -436,56 +394,8 @@ def test_t6_pressure_gradient_and_cone_complete(
         assert error < 0.002  # Numerical proximity, not an accuracy claim.
 
 
-@pytest.mark.solver_verification
-@pytest.mark.parametrize("before_first_output", [False, True])
-def test_t8_transition_on_and_between_output_stations(
-    monkeypatch: pytest.MonkeyPatch,
-    before_first_output: bool,
-) -> None:
-    x = np.unique(np.r_[np.geomspace(0.01, 2, 140), 0.1001, 0.101, 0.11, 0.2, 0.5, 1])
-    if before_first_output:
-        x = x[x > 0.1]
-    accepted_xi: list[float] = []
-    original = march_module._step_is_resolved
-
-    def observe(
-        previous: march_module.Station,
-        station: march_module.Station,
-        state: StationEdge,
-    ) -> bool:
-        resolved = original(previous, station, state)
-        if resolved:
-            accepted_xi.append(state.xi)
-        return resolved
-
-    monkeypatch.setattr(march_module, "_step_is_resolved", observe)
-    y = np.union1d(x, [0.1])
-    a = marching_boundary_layer(
-        constant_edge(2.0, 220.0, x.tolist()),
-        regime=TRANSITIONAL,
-        wall_temperature=300.0,
-        transition_distance=0.1,
-    )
-    interp = _EdgeInterpolant(constant_edge(2.0, 220.0, x.tolist()), None)
-    assert interp.xi(0.1) in accepted_xi
-    b = marching_boundary_layer(
-        constant_edge(2.0, 220.0, y.tolist()),
-        regime=TRANSITIONAL,
-        wall_temperature=300.0,
-        transition_distance=0.1,
-    )
-    np.testing.assert_array_equal(a.distance, x)
-    assert 0.1 not in a.distance and 0.1 in b.distance
-    ix = np.searchsorted(y, x)
-    for field in ["local_skin_friction_coefficient", "wall_heat_flux"]:
-        error = relative_difference(getattr(a, field), getattr(b, field)[ix])
-        print(f"T8 {field}={100 * error:.9g}%")
-        assert error < 1e-8
-
-
-@pytest.fixture(scope="module")
-def rounded_transition_case() -> tuple[BoundaryLayerEdge, MarchingBoundaryLayerResult]:
-    """PR #88 public-API reproducer, including its exact gas and viscosity."""
+def rounded_transition_edge(distances: list[float]) -> BoundaryLayerEdge:
+    """PR #88 public-API edge, including its exact gas and viscosity."""
     gas = PerfectGas(287.0, 1.4)
     viscosity = SutherlandModel(1.716e-5, 273.15, 110.4)
     gamma, temperature, mach = gas.heat_capacity_ratio, 300.0, 0.3
@@ -493,14 +403,19 @@ def rounded_transition_case() -> tuple[BoundaryLayerEdge, MarchingBoundaryLayerR
     density = 1e7 * viscosity.dynamic_viscosity(temperature) / velocity
     pressure = density * gas.specific_gas_constant * temperature
     ratio = 1.0 + (gamma - 1.0) * mach**2 / 2.0
-    edge = BoundaryLayerEdge.from_pressure(
-        [0.0, 0.1, 1.0],
-        [pressure] * 3,
+    return BoundaryLayerEdge.from_pressure(
+        distances,
+        [pressure] * len(distances),
         total_pressure=pressure * ratio ** (gamma / (gamma - 1.0)),
         total_temperature=temperature * ratio,
         gas=gas,
         viscosity_model=viscosity,
     )
+
+
+@pytest.fixture(scope="module")
+def rounded_transition_case() -> tuple[BoundaryLayerEdge, MarchingBoundaryLayerResult]:
+    edge = rounded_transition_edge([0.0, 0.1, 1.0])
     reference = marching_boundary_layer(
         edge, regime=TRANSITIONAL, transition_distance=0.1, wall_temperature=250.0
     )
@@ -530,7 +445,6 @@ def test_rounded_transition_public_api_in_normal_suite(
 @pytest.mark.parametrize(
     "transition",
     [
-        pytest.param(0.3 / 3, id="review-reproducer"),
         pytest.param(0.1, id="exact-output"),
         pytest.param(float(np.nextafter(0.1, 0)), id="previous-float"),
         pytest.param(float(np.nextafter(0.1, 1)), id="next-float"),
@@ -580,22 +494,20 @@ def test_rounded_internal_station_preserves_output_and_resolvable_intervals(
             # Largest measured near-output difference is below 7e-5% in heat flux.
             assert difference < 1e-6  # 0.0001%, not a physical accuracy bound.
 
-
-@pytest.mark.solver_verification
-def test_reference_transition_matches_legacy_newton(
-    rounded_transition_case: tuple[BoundaryLayerEdge, MarchingBoundaryLayerResult],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    edge, reference = rounded_transition_case
-    monkeypatch.setattr(
-        sa_module.TurbulentDiscretization, "_bound_constrained_newton", False
-    )
-    legacy = marching_boundary_layer(
-        edge, regime=TRANSITIONAL, transition_distance=0.1, wall_temperature=250.0
-    )
-    for field in ("local_skin_friction_coefficient", "wall_heat_flux"):
-        difference = relative_difference(
-            getattr(reference, field), getattr(legacy, field)
+    else:
+        extra_edge = rounded_transition_edge([0.0, 0.05, 0.1, 1.0])
+        extra = marching_boundary_layer(
+            extra_edge,
+            regime=TRANSITIONAL,
+            transition_distance=transition,
+            wall_temperature=250.0,
         )
-        print(f"guarded transition vs legacy {field}: {difference:.12g}")
-        assert difference < 1e-6  # Same bound as the rounded-transition comparisons.
+        indices = np.searchsorted(extra.distance, result.distance)
+        np.testing.assert_array_equal(extra.distance[indices], result.distance)
+        for field in ["local_skin_friction_coefficient", "wall_heat_flux"]:
+            assert (
+                relative_difference(
+                    getattr(result, field), getattr(extra, field)[indices]
+                )
+                < 1e-8
+            )

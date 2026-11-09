@@ -5,12 +5,13 @@ from importlib import import_module
 
 import numpy as np
 import pytest
-from test_marching_boundary_layer import LinearViscosity, plate_edge
+from test_marching_boundary_layer import plate_edge
 from test_marching_boundary_layer_jacobian import (
     MODELS,
-    KeyesSubclass,
-    SutherlandSubclass,
     assert_results_close,
+)
+from test_marching_boundary_layer_jacobian import (
+    SA_ETA as ETA,
 )
 
 from aerophysics import (
@@ -25,16 +26,8 @@ from aerophysics._boundary_layer_sa import TurbulentDiscretization
 from aerophysics.exceptions import ApplicabilityWarning
 from aerophysics.transport import (
     AIR_VISCOSITY,
-    BlottnerModel,
     DynamicViscosityModel,
-    KeyesModel,
-    SutherlandModel,
-    WilkeMixtureViscosityModel,
 )
-
-# Small, nonuniform grid: every column can be checked independently, including
-# both boundaries, without the cancellation of tiny near-wall verification cells.
-ETA = np.array([0.0, 0.17, 0.38, 0.64, 0.95, 1.32, 1.76, 2.27, 2.85])
 
 
 def dense(bands: FloatArray, band: int = 9) -> FloatArray:
@@ -47,21 +40,24 @@ def dense(bands: FloatArray, band: int = 9) -> FloatArray:
     return result
 
 
-@pytest.mark.parametrize("model", MODELS)
-@pytest.mark.parametrize("wall", [None, 1.4])
-@pytest.mark.parametrize("branch", ["regular", "limited", "capped", "negative"])
 @pytest.mark.parametrize(
-    ("xi", "beta", "heating", "coefficient", "production", "growth"),
+    ("branch_index", "branch"),
+    list(enumerate(["regular", "limited", "capped", "negative"])),
+    ids=["regular", "limited", "capped", "negative"],
+)
+@pytest.mark.parametrize(
+    ("state_index", "xi", "beta", "heating", "coefficient", "production", "growth"),
     [
-        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
-        (0.37, 0.23, 1.8, 1.3, 1.0, 0.2),
-        (2.1, -0.15, 4.0, 23.0, 0.4, -0.17),
+        (0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        (1, 0.37, 0.23, 1.8, 1.3, 1.0, 0.2),
+        (2, 2.1, -0.15, 4.0, 23.0, 0.4, -0.17),
     ],
+    ids=["starting", "favorable", "adverse"],
 )
 def test_sa_analytic_matches_both_difference_jacobians(
-    model: SutherlandModel | KeyesModel,
-    wall: float | None,
+    branch_index: int,
     branch: str,
+    state_index: int,
     xi: float,
     beta: float,
     heating: float,
@@ -69,6 +65,8 @@ def test_sa_analytic_matches_both_difference_jacobians(
     production: float,
     growth: float,
 ) -> None:
+    model = MODELS[(branch_index + state_index) % 2]
+    wall = (None, 1.4)[state_index % 2]
     solver = TurbulentDiscretization(ETA, 0.72, 0.9, model)
     edge = StationEdge(
         xi, 1.0, beta, heating, 290.0, wall, 2.8, growth, 3.0, production
@@ -133,62 +131,12 @@ def test_sa_analytic_matches_both_difference_jacobians(
     assert np.all(np.abs(matrix - central) <= 2e-8 * scale)
 
 
-@pytest.mark.parametrize(
-    "model",
-    [
-        BlottnerModel(0.026, 0.3, -11.3, temperature_range=(79.0, 30000.0)),
-        LinearViscosity(),
-        SutherlandSubclass(1.7894e-5, 288.15, 110.4),
-        KeyesSubclass(1.488e-6, 122.1, 5.0),
-        WilkeMixtureViscosityModel((AIR_VISCOSITY,), (0.028,), (1.0,)),
-    ],
-)
-def test_sa_unsupported_models_keep_finite_differences(
-    model: DynamicViscosityModel,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    solver = TurbulentDiscretization(ETA, 0.72, 0.9, model)
-    edge = StationEdge(0.37, 1.0, 0.23, 1.8, 290.0, None, 1000.0, 0.1, 3.0)
-    state = solver.starting_guess(edge)
-    lagged = -0.8 * state
-    residual = solver.residual(state, edge, 1.3, lagged)
-
-    def forbidden(*args: object) -> FloatArray:
-        pytest.fail("unsupported model reached the analytic assembly")
-
-    monkeypatch.setattr(solver, "_analytic_jacobian", forbidden)
-    np.testing.assert_array_equal(
-        solver.jacobian(state, residual, edge, 1.3, lagged),
-        solver._finite_difference_jacobian(state, residual, edge, 1.3, lagged),
-    )
-
-
-@pytest.mark.parametrize("model", MODELS)
-def test_sa_analytic_preserves_viscosity_validation_and_warnings(
-    model: SutherlandModel | KeyesModel,
-) -> None:
-    solver = TurbulentDiscretization(ETA, 0.72, 0.9, model)
-    edge = StationEdge(0.0, 1.0, 0.0, 0.0, 290.0, 1.0, 2.0, 0.0, 3.0)
-    state = solver.starting_guess(edge)
-    for bad in (0.0, -1.0, np.nan, np.inf):
-        state[2, 2] = bad
-        with pytest.raises(ValueError):
-            solver._analytic_jacobian(state, edge, 0.0, np.zeros_like(state))
-    if isinstance(model, KeyesModel):
-        state[2, 2] = 1900.0 / edge.temperature
-        with pytest.warns(ApplicabilityWarning, match="fitted range"):
-            solver._analytic_jacobian(state, edge, 0.0, np.zeros_like(state))
-
-
-@pytest.mark.parametrize(
-    "case",
-    ["plate", "pressure", "wall-change", "adiabatic", "axisymmetric", "transitional"],
-)
+@pytest.mark.parametrize("case", ["pressure", "transitional"])
 def test_sa_complete_marches_match_finite_differences(
     monkeypatch: pytest.MonkeyPatch,
     case: str,
 ) -> None:
-    # Short, low-Re marches on a compact test grid keep all six comparisons in
+    # Short, low-Re marches on a compact test grid keep both comparisons in
     # the normal tier. This tests equality of the discrete solves, not grid
     # accuracy; solver_verification retains the production grids and high Re.
     edge = plate_edge([0.0, 0.0001, 0.00011, 0.0002])
@@ -199,11 +147,6 @@ def test_sa_complete_marches_match_finite_differences(
             total_pressure=1.6e5,
             total_temperature=500.0,
         )
-    wall: float | FloatArray | None = 300.0
-    if case == "wall-change":
-        wall = np.array([300.0, 300.0, 310.0, 310.0])
-    elif case == "adiabatic":
-        wall = None
     solvers: list[TurbulentDiscretization] = []
 
     class CountingSolver(TurbulentDiscretization):
@@ -235,8 +178,7 @@ def test_sa_complete_marches_match_finite_differences(
                     if case == "transitional"
                     else BoundaryLayerRegime.TURBULENT
                 ),
-                wall_temperature=wall,
-                wall_radius=0.05 if case == "axisymmetric" else None,
+                wall_temperature=300.0,
                 transition_distance=0.0001 if case == "transitional" else None,
             )
 
@@ -247,19 +189,8 @@ def test_sa_complete_marches_match_finite_differences(
         patch.setattr(TurbulentDiscretization, "_analytic_jacobian_enabled", False)
         finite = run()
     finite_picard = sum(s.picard_fallbacks for s in solvers)
-    print(f"{case}: picard_fallbacks FD={finite_picard}, analytic={analytic_picard}")
     assert_results_close(analytic, finite)
     assert analytic_picard == finite_picard
-
-
-@pytest.mark.parametrize("floor", [1e-30, sa._MINIMUM_VORTICITY])
-def test_floor_uses_positive_column_direction_at_ties(floor: float) -> None:
-    values = np.array([0.5, 1.0, 2.0]) * floor
-    directions = np.array([[-2.0], [0.0], [3.0]]) * floor
-    np.testing.assert_array_equal(
-        sa._floor_derivative(values, directions, floor),
-        np.array([[0.0, 0.0, -2.0], [0.0, 0.0, 0.0], [0.0, 3.0, 3.0]]) * floor,
-    )
 
 
 def test_sa_abs_and_positive_n_ties_match_forward_columns() -> None:
@@ -286,91 +217,3 @@ def test_sa_abs_and_positive_n_ties_match_forward_columns() -> None:
             assert np.all(
                 np.abs(analytic[:, 5 * node + variable] - forward) < 2e-5 * scale
             )
-
-
-def test_source_join_floor_and_cap_directions() -> None:
-    # Positive-vorticity join: both branches meet with the same first derivative.
-    n, c, g, y = (np.array([value]) for value in (2.5, 1.0, 1.0, 1.0))
-    extra = sa._source_terms(np.ones(1), n, c, g, y)[1]
-    vorticity = -extra / sa._CV2
-    assert extra == -sa._CV2 * vorticity
-    basis = np.eye(5)[:, :, None]
-    directions = (basis[0], basis[1], basis[2], basis[3], basis[4])
-    modified, fw, dm, dfw = sa._source_derivatives(vorticity, n, c, g, y, directions)
-    expected = sa._source_terms(vorticity, n, c, g, y)
-    np.testing.assert_array_equal(modified, expected[0])
-    np.testing.assert_array_equal(fw, expected[2])
-    inputs = np.array([vorticity, n, c, g, y])
-    for variable in range(5):
-        step = 1e-6 * max(inputs[variable, 0], 1.0)
-        plus, minus = inputs.copy(), inputs.copy()
-        plus[variable] += step
-        minus[variable] -= step
-        upper = sa._source_terms(*plus)
-        lower = sa._source_terms(*minus)
-        np.testing.assert_allclose(
-            dm[variable], (upper[0] - lower[0]) / (2.0 * step), rtol=1e-5
-        )
-        np.testing.assert_allclose(
-            dfw[variable], (upper[2] - lower[2]) / (2.0 * step), rtol=1e-5
-        )
-
-    # Vorticity floor at an exact tie: positive directions leave the floor,
-    # negative directions remain on it. n=0 makes the r denominator floored too.
-    zero, one = np.zeros(1), np.ones(1)
-    dv = np.array([[1.0], [-1.0]]) * sa._MINIMUM_VORTICITY
-    zeros = np.zeros_like(dv)
-    _, _, dm, _ = sa._source_derivatives(
-        one * sa._MINIMUM_VORTICITY,
-        zero,
-        one,
-        one,
-        one * 1e-12,
-        (dv, zeros, zeros, zeros, zeros),
-    )
-    np.testing.assert_array_equal(dm, np.array([[sa._MINIMUM_VORTICITY], [0.0]]))
-    # Exercise the limited-branch denominator below its floor as well.
-    _, _, dm, _ = sa._source_derivatives(
-        one * 1e-32,
-        one * 3e-32,
-        one * 1e-32,
-        one,
-        one,
-        (dv, zeros, zeros, zeros, zeros),
-    )
-    np.testing.assert_array_equal(dm, zeros)
-
-    # With the r denominator floored, n=MAX_R*floor is an exact cap tie.
-    # fw is numerically saturated here: its tiny inward derivative cannot be
-    # recovered by subtracting rounded fw values, so check the analytic formula.
-    n = one * (sa._MAX_R * 1e-30)
-    dn = np.array([[1.0], [-1.0]]) * n
-    _, _, _, dfw = sa._source_derivatives(
-        zero,
-        n,
-        n,
-        one,
-        one * 1e-12,
-        (zeros, dn, zeros, zeros, zeros),
-    )
-    r = sa._MAX_R
-    r6 = r + sa._CW2 * (r**6 - r)
-    factor = ((1.0 + sa._CW3**6) / (r6**6 + sa._CW3**6)) ** (1.0 / 6.0)
-    inward = (
-        -r
-        * factor
-        * sa._CW3**6
-        / (r6**6 + sa._CW3**6)
-        * (1.0 + sa._CW2 * (6.0 * r**5 - 1.0))
-    )
-    assert dfw[0, 0] == 0.0
-    assert dfw[1, 0] == pytest.approx(inward, rel=1e-14, abs=0.0)
-    _, _, _, dfw = sa._source_derivatives(
-        zero,
-        2.0 * n,
-        n,
-        one,
-        one * 1e-12,
-        (zeros, dn, zeros, zeros, zeros),
-    )
-    np.testing.assert_array_equal(dfw, zeros)

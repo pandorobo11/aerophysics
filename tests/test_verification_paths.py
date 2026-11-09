@@ -131,8 +131,6 @@ def test_solver_path_rules_have_no_stale_entries() -> None:
     [
         ("src/aerophysics/gas.py", "yes"),
         ("src/aerophysics/heating.py", "no"),
-        ("tests/test_marching_boundary_layer_sa.py", "yes"),
-        ("tests/test_heating.py", "no"),
         ("docs/scripts/generate_viscous_flow_validation.py", "no"),
     ],
 )

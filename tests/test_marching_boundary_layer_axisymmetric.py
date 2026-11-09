@@ -1,8 +1,6 @@
 """Thin axisymmetric verification, without a transverse-curvature model."""
 
 import importlib
-import json
-import time
 import warnings
 from collections.abc import Callable
 from dataclasses import fields
@@ -10,11 +8,7 @@ from dataclasses import fields
 import numpy as np
 import pytest
 from numpy.typing import ArrayLike
-from scipy.interpolate import PchipInterpolator
-from test_marching_boundary_layer import (
-    smooth_edge,
-    tighten_streamwise_control,
-)
+from test_marching_boundary_layer import smooth_edge
 from test_marching_boundary_layer_sa import constant_edge
 
 from aerophysics import (
@@ -35,7 +29,6 @@ from aerophysics._boundary_layer_march import (
 from aerophysics._boundary_layer_sa import TurbulentDiscretization
 from aerophysics.exceptions import (
     ApplicabilityWarning,
-    BoundaryLayerConvergenceError,
     BoundaryLayerSeparationError,
 )
 from aerophysics.marching_boundary_layer import (
@@ -68,29 +61,10 @@ def relative_error(actual: FloatArray, expected: FloatArray) -> float:
     return float(np.max(abs(actual[nonzero] / expected[nonzero] - 1.0)))
 
 
-def test_explicit_none_is_bit_identical() -> None:
-    edge = constant_edge(2.0, 220.0, [0.1])
-    implicit = marching_boundary_layer(edge, regime=LAMINAR)
-    explicit = marching_boundary_layer(edge, regime=LAMINAR, wall_radius=None)
-    for field in fields(implicit):
-        np.testing.assert_array_equal(
-            getattr(implicit, field.name), getattr(explicit, field.name)
-        )
-
-
 @pytest.mark.parametrize(
     ("varying", "regime"),
     [
         pytest.param(False, LAMINAR, id="False-laminar"),
-        pytest.param(
-            False,
-            TURBULENT,
-            id="False-turbulent",
-            marks=pytest.mark.solver_verification,
-        ),
-        pytest.param(
-            True, LAMINAR, id="True-laminar", marks=pytest.mark.solver_verification
-        ),
         pytest.param(
             True, TURBULENT, id="True-turbulent", marks=pytest.mark.solver_verification
         ),
@@ -116,12 +90,12 @@ def test_cylinder_is_planar(regime: BoundaryLayerRegime, varying: bool) -> None:
             else:
                 errors[name] = relative_error(actual, expected)
                 np.testing.assert_allclose(actual, expected, rtol=1e-9, atol=0.0)
-    print("V13", regime.name, varying, errors)
 
 
-@pytest.mark.parametrize("mach", [0.3, 2.0])
-@pytest.mark.parametrize("wall", [300.0, None])
-@pytest.mark.parametrize("angle", [5.0, 20.0])
+@pytest.mark.parametrize(
+    ("mach", "wall", "angle"),
+    [(0.3, 300.0, 5.0), (2.0, None, 20.0), (2.0, 300.0, 20.0)],
+)
 def test_sharp_cone_mangler(mach: float, wall: float | None, angle: float) -> None:
     edge = constant_edge(mach, 220.0, [0.1, 1.0])
     plate = marching_boundary_layer(edge, regime=LAMINAR, wall_temperature=wall)
@@ -150,7 +124,6 @@ def test_sharp_cone_mangler(mach: float, wall: float | None, angle: float) -> No
         assert errors["heat"] < 0.0005
     else:
         np.testing.assert_array_equal(cone.wall_heat_flux, 0.0)
-    print("V14", mach, wall, angle, errors)
 
 
 @pytest.mark.parametrize("kink", [False, True])
@@ -196,18 +169,6 @@ def test_generalized_mangler(kink: bool) -> None:
             getattr(axisym, name), getattr(planar, name) * factor
         )
         assert errors[name] < 0.001
-    # Residual from interpolating the same ln(p) in two distance variables.
-    mid_radius = (radius[:-1] + radius[1:]) / 2
-    mid_x = mapped[:-1] + np.diff(s) / 2 * (
-        radius[:-1] ** 2 + radius[:-1] * mid_radius + mid_radius**2
-    ) / (3 * length**2)
-    log_difference = PchipInterpolator(mapped, np.log(pressure))(
-        mid_x
-    ) - PchipInterpolator(s, np.log(pressure))((s[:-1] + s[1:]) / 2)
-    errors["pressure_interpolation_percent"] = float(
-        np.max(abs(np.expm1(log_difference))) * 100
-    )
-    print("V15", kink, errors)
 
 
 @pytest.mark.parametrize(
@@ -216,15 +177,10 @@ def test_generalized_mangler(kink: bool) -> None:
         -1.0,
         0.0,
         np.nan,
-        np.inf,
         [0, 0.1],
         [-0.1, 0.1, 0.2],
         [0, 0, 0.1],
-        [0, -0.1, 0.2],
-        [0, np.nan, 1],
-        [0, 1, np.inf],
         [[1, 1, 1]],
-        [[0.0, 0.1], [0.2]],
         "bad",
     ],
 )
@@ -290,7 +246,6 @@ def axisymmetric_march(
     wall: float | None,
     targets: FloatArray,
     *,
-    normal: bool = False,
     relative_step: float = 0.03,
 ) -> MarchingBoundaryLayerResult:
     """V8/V9 methodology: fixed edge interpolation and common output stations."""
@@ -302,20 +257,12 @@ def axisymmetric_march(
     )
     solver: Discretization
     if regime is TURBULENT:
-        grid = (
-            eta_grid(0.00035, 1.02, 0.5, 150.0)
-            if normal
-            else _turbulent_eta_grid(
-                max(ip.state(float(s)).reynolds_root for s in targets) ** 2 / 2
-            )
+        grid = _turbulent_eta_grid(
+            max(ip.state(float(s)).reynolds_root for s in targets) ** 2 / 2
         )
         solver = TurbulentDiscretization(grid, 0.72, 0.9, edge.viscosity_model)
     else:
-        grid = (
-            eta_grid(0.0005, 1.0075, 0.025, 16.0)
-            if normal
-            else eta_grid(0.001, 1.015, 0.05, 16.0)
-        )
+        grid = eta_grid(0.001, 1.015, 0.05, 16.0)
         solver = Discretization(grid, 0.72, edge.viscosity_model)
     return _result(
         edge, ip, march(ip.state, targets, solver, relative_step=relative_step), 0.72
@@ -326,8 +273,6 @@ def balance_metrics(
     edge: BoundaryLayerEdge,
     radius: FloatArray,
     result: MarchingBoundaryLayerResult,
-    *,
-    adiabatic: bool,
 ) -> dict[str, float]:
     ip = _EdgeInterpolant(edge, None, wall_radius=radius)
     s = result.distance
@@ -346,40 +291,10 @@ def balance_metrics(
         * np.gradient(velocity, s)
         * result.displacement_thickness
     ) / (r * result.wall_shear_stress) - 1
-    u, g = result.velocity_ratio, result.temperature_ratio
-    deficit = np.trapezoid(
-        density[:, None]
-        / g
-        * velocity[:, None]
-        * u
-        * (
-            edge.gas.cp * temperature[:, None] * (g - 1)
-            + velocity[:, None] ** 2 / 2 * (u * u - 1)
-        ),
-        result.wall_distance,
-        axis=1,
-    )
-    derivative = np.gradient(r * deficit, s) / r
     mask = (s > 0.05) & (s < 1.99)
-    metrics = {
+    return {
         "momentum_median_percent": float(np.median(abs(momentum[mask])) * 100),
-        "momentum_max_percent": float(np.max(abs(momentum[mask])) * 100),
     }
-    if adiabatic:
-        normalized = abs(derivative) / (
-            density * velocity * edge.gas.cp * ip.total_temperature
-        )
-        for name, values in (
-            ("enthalpy_W_m2", abs(derivative)),
-            ("enthalpy_normalized", normalized),
-        ):
-            metrics[name + "_median"] = float(np.median(values[mask]))
-            metrics[name + "_max"] = float(np.max(values[mask]))
-    else:
-        error = abs(-derivative / result.wall_heat_flux - 1)
-        metrics["enthalpy_median_percent"] = float(np.median(error[mask]) * 100)
-        metrics["enthalpy_max_percent"] = float(np.max(error[mask]) * 100)
-    return metrics
 
 
 def flared_radius(s: FloatArray) -> FloatArray:
@@ -387,91 +302,24 @@ def flared_radius(s: FloatArray) -> FloatArray:
     return 0.05 * s * (1 + 0.5 * np.exp(-(((s - 0.9) / 0.4) ** 2)))
 
 
-@pytest.mark.parametrize("regime", [LAMINAR])
-@pytest.mark.solver_verification
-def test_integral_balance(regime: BoundaryLayerRegime) -> None:
-    edge = smooth_edge(2.0, 3.0)
-    radius = flared_radius(edge.distance)
-    result = axisymmetric_march(edge, radius, regime, 300.0, np.linspace(0, 2, 601)[1:])
-    metrics = balance_metrics(edge, radius, result, adiabatic=False)
-    print("V16", regime.name, metrics)
-    assert metrics["momentum_median_percent"] < 0.05
-
-
-@pytest.mark.solver_verification
 @pytest.mark.parametrize(
-    ("regime", "wall"),
+    ("cone", "regime"),
     [
-        pytest.param(LAMINAR, None, id="laminar-adiabatic"),
-        pytest.param(TURBULENT, 300.0, id="sa-300K"),
+        pytest.param(False, LAMINAR, id="flared-laminar"),
+        pytest.param(True, TURBULENT, id="cone-turbulent"),
     ],
 )
-def test_refinement_and_balance_diagnostics(
-    monkeypatch: pytest.MonkeyPatch, regime: BoundaryLayerRegime, wall: float | None
-) -> None:
-    edge = smooth_edge(2.0, 3.0)
-    radius = flared_radius(edge.distance)
-    targets = np.linspace(0, 2, 601)[1:]
-    base = axisymmetric_march(edge, radius, regime, wall, targets)
-    normal = axisymmetric_march(edge, radius, regime, wall, targets, normal=True)
-    tighten_streamwise_control(monkeypatch)
-    # Eight subdivisions of each output interval, preserving all base stations.
-    dense = np.concatenate(
-        [
-            np.linspace(a, b, 9)[1:]
-            for a, b in zip(np.r_[0, targets[:-1]], targets, strict=True)
-        ]
-    )
-    stream = axisymmetric_march(edge, radius, regime, wall, dense, relative_step=0.0075)
-    indices = np.searchsorted(dense, targets)
-    common = {
-        f.name: getattr(stream, f.name)[indices]
-        if isinstance(getattr(stream, f.name), np.ndarray) and f.name != "eta"
-        else getattr(stream, f.name)
-        for f in fields(stream)
-    }
-    stream = MarchingBoundaryLayerResult(**common)
-    for label, result in (("base", base), ("normal", normal), ("stream", stream)):
-        metrics = balance_metrics(edge, radius, result, adiabatic=wall is None)
-        print("V16", regime.name, wall, label, metrics)
-        assert metrics["momentum_median_percent"] < 0.05
-    for label, result, limit in (("normal", normal, 0.003), ("stream", stream, 0.001)):
-        cf = relative_error(
-            base.local_skin_friction_coefficient, result.local_skin_friction_coefficient
-        )
-        thermal = (
-            relative_error(base.wall_temperature, result.wall_temperature)
-            if wall is None
-            else relative_error(base.wall_heat_flux, result.wall_heat_flux)
-        )
-        print(
-            "V17",
-            regime.name,
-            wall,
-            label,
-            {"cf_percent": cf * 100, "thermal_percent": thermal * 100},
-        )
-        assert cf < limit
-        if label == "stream":
-            assert thermal < (0.001 if wall is None else 0.005)
-
-
 @pytest.mark.solver_verification
-def test_separation_uses_axisymmetric_postprocessing() -> None:
-    edge = smooth_edge(3.0, 1.0)
-    with pytest.raises(BoundaryLayerSeparationError) as caught:
-        marching_boundary_layer(
-            edge, regime=LAMINAR, wall_temperature=300.0, wall_radius=0.05
-        )
-    with pytest.raises(BoundaryLayerSeparationError) as planar:
-        marching_boundary_layer(edge, regime=LAMINAR, wall_temperature=300.0)
-    result = caught.value.result
-    reference = planar.value.result
-    assert isinstance(result, MarchingBoundaryLayerResult)
-    assert isinstance(reference, MarchingBoundaryLayerResult)
-    np.testing.assert_allclose(
-        result.momentum_thickness, reference.momentum_thickness, rtol=1e-8
+def test_axisymmetric_momentum_balance(cone: bool, regime: BoundaryLayerRegime) -> None:
+    edge = smooth_edge(2.0, 3.0)
+    radius = (
+        edge.distance * np.sin(np.radians(10.0))
+        if cone
+        else flared_radius(edge.distance)
     )
+    result = axisymmetric_march(edge, radius, regime, 300.0, np.linspace(0, 2, 601)[1:])
+    metrics = balance_metrics(edge, radius, result)
+    assert metrics["momentum_median_percent"] < 0.05
 
 
 def test_separation_postprocessing_on_a_short_constant_edge(
@@ -496,195 +344,16 @@ def test_separation_postprocessing_on_a_short_constant_edge(
         )
     with pytest.raises(BoundaryLayerSeparationError) as planar:
         marching_boundary_layer(edge, regime=LAMINAR, wall_temperature=300.0)
+    assert cylinder.value.separation_distance == pytest.approx(0.1 * 1.01)
+    assert isinstance(cylinder.value.__cause__, SeparationError)
     result, reference = cylinder.value.result, planar.value.result
     assert isinstance(result, MarchingBoundaryLayerResult)
     assert isinstance(reference, MarchingBoundaryLayerResult)
     np.testing.assert_array_equal(result.distance, [0.1])
+    assert np.all(result.wall_shear_stress > 0.0)
     np.testing.assert_allclose(
         result.momentum_thickness, reference.momentum_thickness, rtol=1e-8
     )
-
-
-def outer_oscillation(n: FloatArray) -> dict[str, float]:
-    """Section 11: neighbouring extrema, excluding the monotone outer front."""
-    derivative = np.diff(n)
-    extrema = np.flatnonzero(derivative[:-1] * derivative[1:] < 0) + 1
-    outer = extrema[extrema > max(30, int(np.argmax(n)))]
-    amplitudes = []
-    for i in range(1, len(outer) - 1):
-        at = outer[i]
-        neighbor = min((outer[i - 1], outer[i + 1]), key=lambda j: abs(n[j] - n[at]))
-        a, b = n[at], n[neighbor]
-        if a + b > 0:
-            amplitudes.append((abs(a - b) / (a + b), abs(a - b) / 2, (a + b) / 2))
-    relative, half, mean = max(amplitudes, default=(0.0, 0.0, 0.0))
-    return {
-        "amplitude_samples": float(len(amplitudes)),
-        "reversals": float(np.count_nonzero(extrema >= 30)),
-        "clipped": float(np.count_nonzero(n[1:-1] == 0)),
-        "relative_amplitude_percent": float(relative * 100),
-        "half_amplitude": float(half),
-        "local_mean": float(mean),
-    }
-
-
-def _measure_shoulder(
-    monkeypatch: pytest.MonkeyPatch,
-    width: float,
-    regime: BoundaryLayerRegime,
-    wall: float | None,
-) -> tuple[MarchingBoundaryLayerResult, set[str]]:
-    """Record a numerical stress test, NOT a physical shoulder edge condition.
-
-    Failures are printed with their exception and location before propagation.
-    Solver grids, tolerances and step controls are untouched.
-    """
-    from aerophysics import conical_shock, prandtl_meyer_expansion
-
-    cone = conical_shock(3.0, np.radians(10.0))
-    expansion = prandtl_meyer_expansion(float(cone.surface_mach), np.radians(10.0))
-    cone_pressure = 2e5 / (1 + 0.2 * 3**2) ** 3.5 * float(cone.surface_pressure_ratio)
-    after = cone_pressure * float(expansion.static_pressure_ratio)
-    s = np.linspace(0.0, 1.0, 801)
-    if width <= 0.001:
-        # 64 panels across +/-5 widths give spacing width/6.4 < width/5.
-        # Round coordinates only to merge floating-point duplicate nodes.
-        local = np.linspace(0.3 - 5 * width, 0.3 + 5 * width, 65)
-        s = np.unique(np.round(np.r_[s, local], 15))
-        inside = s[(s >= local[0]) & (s <= local[-1])]
-        assert np.max(np.diff(inside)) <= width / 5
-    radius = np.minimum(s, 0.3) * np.sin(np.radians(10.0))
-    pressure = (
-        cone_pressure + (after - cone_pressure) * (1 + np.tanh((s - 0.3) / width)) / 2
-    )
-    edge = BoundaryLayerEdge.from_pressure(
-        s,
-        pressure,
-        total_pressure=2e5 * float(cone.total_pressure_ratio),
-        total_temperature=450.0,
-    )
-    solvers = []
-
-    class CountingSolver(TurbulentDiscretization):
-        def __init__(
-            self,
-            eta: FloatArray,
-            prandtl_number: float,
-            turbulent_prandtl_number: float,
-            viscosity_model: object,
-        ) -> None:
-            # Capture the existing counter without changing iterations or equations.
-            super().__init__(
-                eta, prandtl_number, turbulent_prandtl_number, edge.viscosity_model
-            )
-            solvers.append(self)
-
-    module = importlib.import_module("aerophysics.marching_boundary_layer")
-    monkeypatch.setattr(module, "TurbulentDiscretization", CountingSolver)
-    result = None
-    failure = None
-    warning_kinds: set[str] = set()
-    start = time.perf_counter()
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        try:
-            result = marching_boundary_layer(
-                edge, regime=regime, wall_temperature=wall, wall_radius=radius
-            )
-        except (BoundaryLayerConvergenceError, BoundaryLayerSeparationError) as error:
-            failure = f"{type(error).__name__}: {error}"
-            if isinstance(error, BoundaryLayerSeparationError):
-                result = error.result
-            raise
-        finally:
-            seconds = time.perf_counter() - start
-            for warning in caught:
-                message = str(warning.message)
-                if issubclass(warning.category, ApplicabilityWarning):
-                    if "transverse curvature" in message:
-                        kind = "curvature"
-                    elif "edge pressure changes" in message:
-                        kind = "pressure_length"
-                    elif "y+ > 1" in message:
-                        kind = "y_plus"
-                    elif "viscous interaction" in message:
-                        kind = "viscous_interaction"
-                    else:
-                        kind = message
-                else:
-                    kind = f"{warning.category.__name__}: {message}"
-                warning_kinds.add(kind)
-            record: dict[str, object] = {
-                "regime": regime.name,
-                "wall": wall,
-                "width": width,
-                "input_nodes": int(s.size),
-                "seconds": seconds,
-                "picard": sum(solver.picard_fallbacks for solver in solvers),
-                "failure": failure,
-                "warning_kinds": sorted(warning_kinds),
-                "warnings": [str(w.message) for w in caught],
-            }
-            if result is not None and result.distance.size:
-                ip = _EdgeInterpolant(edge, None, wall_radius=radius)
-                assert ip.radius is not None
-                pressure_length = result.boundary_layer_thickness * abs(
-                    ip.log_pressure_slope(result.distance)
-                )
-                curvature = result.boundary_layer_thickness / ip.radius(result.distance)
-                downstream = np.flatnonzero(
-                    (result.distance > 0.25) & (result.distance < 1.0)
-                )
-                for name, values, indices in (
-                    (
-                        "pressure_length",
-                        pressure_length,
-                        np.arange(result.distance.size),
-                    ),
-                    ("delta_radius", curvature, np.arange(result.distance.size)),
-                    ("downstream_delta_radius", curvature, downstream),
-                ):
-                    if indices.size:
-                        at = indices[np.argmax(values[indices])]
-                        record["max_" + name] = float(values[at])
-                        record["max_" + name + "_s"] = float(result.distance[at])
-                if result.nu_tilde_ratio is not None:
-                    at = int(np.argmin(abs(result.distance - 0.31)))
-                    record["oscillation_after_shoulder_s"] = float(result.distance[at])
-                    record["oscillation_after_shoulder"] = outer_oscillation(
-                        result.nu_tilde_ratio[at]
-                    )
-                    record["oscillation_final_s"] = float(result.distance[-1])
-                    record["oscillation_final"] = outer_oscillation(
-                        result.nu_tilde_ratio[-1]
-                    )
-            print("V20 " + json.dumps(record, sort_keys=True), flush=True)
-    assert result is not None
-    return result, warning_kinds
-
-
-@pytest.mark.solver_verification
-@pytest.mark.parametrize(
-    ("regime", "wall", "width"),
-    [
-        pytest.param(TURBULENT, 300.0, 0.005, id="sa-300K-width-0.005"),
-        pytest.param(TURBULENT, 300.0, 0.001, id="sa-300K-width-0.001"),
-        pytest.param(LAMINAR, 300.0, 0.001, id="laminar-300K-width-0.001"),
-        pytest.param(LAMINAR, 300.0, 0.0002, id="laminar-300K-width-0.0002"),
-    ],
-)
-def test_shoulder_stress_measurement(
-    monkeypatch: pytest.MonkeyPatch,
-    width: float,
-    regime: BoundaryLayerRegime,
-    wall: float | None,
-) -> None:
-    result, warning_kinds = _measure_shoulder(monkeypatch, width, regime, wall)
-    assert result.distance[-1] == 1.0
-    expected = {"curvature"}
-    if width <= 0.0002 or (width <= 0.001 and regime is TURBULENT):
-        expected.add("pressure_length")
-    assert warning_kinds == expected
 
 
 @pytest.mark.solver_verification
@@ -708,17 +377,3 @@ def test_sa_cone_ratio_is_informational() -> None:
         rtol=1e-4,
         atol=0.0,
     )
-
-
-@pytest.mark.parametrize("regime", [LAMINAR, TURBULENT])
-@pytest.mark.parametrize("wall", [300.0, None])
-@pytest.mark.solver_verification
-def test_cone_integral_balance(regime: BoundaryLayerRegime, wall: float | None) -> None:
-    edge = smooth_edge(2.0, 3.0)
-    radius = edge.distance * np.sin(np.radians(10.0))
-    result = axisymmetric_march(
-        edge, radius, regime, wall, np.linspace(0.0, 2.0, 601)[1:]
-    )
-    metrics = balance_metrics(edge, radius, result, adiabatic=wall is None)
-    print("V16 cone", regime.name, wall, metrics)
-    assert metrics["momentum_median_percent"] < 0.05

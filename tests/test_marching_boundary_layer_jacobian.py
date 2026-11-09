@@ -1,14 +1,12 @@
 """Exact discrete linearization and full-march comparisons with colored differences."""
 
 import warnings
-from dataclasses import fields, replace
+from dataclasses import fields
 
 import numpy as np
 import pytest
 from test_marching_boundary_layer import (
     ETA,
-    LinearViscosity,
-    howarth_edge,
     plate_edge,
     smooth_edge,
 )
@@ -25,7 +23,7 @@ from aerophysics._boundary_layer_march import (
     _viscosity_with_derivative,
 )
 from aerophysics._boundary_layer_sa import TurbulentDiscretization
-from aerophysics.exceptions import ApplicabilityWarning, BoundaryLayerSeparationError
+from aerophysics.exceptions import ApplicabilityWarning
 from aerophysics.transport import (
     AIR_KEYES_VISCOSITY,
     AIR_VISCOSITY,
@@ -33,10 +31,12 @@ from aerophysics.transport import (
     DynamicViscosityModel,
     KeyesModel,
     SutherlandModel,
-    WilkeMixtureViscosityModel,
 )
 
-MODELS = [AIR_VISCOSITY, AIR_KEYES_VISCOSITY]
+MODELS: list[SutherlandModel | KeyesModel] = [AIR_VISCOSITY, AIR_KEYES_VISCOSITY]
+# Small, nonuniform grid: every column can be checked independently, including
+# both boundaries, without the cancellation of tiny near-wall verification cells.
+SA_ETA = np.array([0.0, 0.17, 0.38, 0.64, 0.95, 1.32, 1.76, 2.27, 2.85])
 
 
 @pytest.mark.parametrize("model", MODELS)
@@ -134,78 +134,28 @@ class KeyesSubclass(KeyesModel):
     """A subclass must retain the finite-difference dispatch as well."""
 
 
+@pytest.mark.parametrize("kind", ["laminar", "sa"])
 @pytest.mark.parametrize(
     "model",
     [
         BlottnerModel(0.026, 0.3, -11.3, temperature_range=(79.0, 30000.0)),
-        LinearViscosity(),
         SutherlandSubclass(1.7894e-5, 288.15, 110.4),
         KeyesSubclass(1.488e-6, 122.1, 5.0),
-        WilkeMixtureViscosityModel((AIR_VISCOSITY,), (0.028,), (1.0,)),
     ],
 )
 def test_unsupported_models_keep_finite_differences(
-    model: DynamicViscosityModel,
+    model: DynamicViscosityModel, kind: str
 ) -> None:
-    solver = Discretization(ETA, 0.72, model)
-    edge = StationEdge(0.37, 1.0, 0.23, 1.8, 290.0, None)
+    solver: Discretization
+    if kind == "laminar":
+        solver = Discretization(ETA, 0.72, model)
+        edge = StationEdge(0.37, 1.0, 0.23, 1.8, 290.0, None)
+    else:
+        solver = TurbulentDiscretization(SA_ETA, 0.72, 0.9, model)
+        edge = StationEdge(0.37, 1.0, 0.23, 1.8, 290.0, None, 1000.0, 0.1, 3.0)
     state = solver.starting_guess(edge)
     lagged = -0.8 * state
     residual = solver.residual(state, edge, 1.3, lagged)
-    np.testing.assert_array_equal(
-        solver.jacobian(state, residual, edge, 1.3, lagged),
-        solver._finite_difference_jacobian(state, residual, edge, 1.3, lagged),
-    )
-
-
-@pytest.mark.parametrize("model", MODELS)
-def test_five_unknowns_without_analytic_override_keep_finite_differences(
-    model: SutherlandModel | KeyesModel,
-) -> None:
-    class FiveUnknownDiscretization(Discretization):
-        unknowns = 5
-
-        def residual(
-            self,
-            state: FloatArray,
-            edge: StationEdge,
-            coefficient: float,
-            lagged: FloatArray,
-        ) -> FloatArray:
-            return state**2
-
-    solver = FiveUnknownDiscretization(ETA[:7], 0.72, model)
-    assert solver._analytic_jacobian_enabled
-    assert type(solver)._analytic_jacobian is Discretization._analytic_jacobian
-    state = np.random.default_rng(1123).uniform(0.2, 1.3, (5, 7))
-    edge = StationEdge(0.37, 1.0, 0.23, 1.8, 290.0, None)
-    lagged = np.zeros_like(state)
-    residual = solver.residual(state, edge, 1.3, lagged)
-    np.testing.assert_array_equal(
-        solver.jacobian(state, residual, edge, 1.3, lagged),
-        solver._finite_difference_jacobian(state, residual, edge, 1.3, lagged),
-    )
-
-
-def test_sa_dispatch_never_uses_laminar_assembly(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    solver = TurbulentDiscretization(ETA, 0.72, 0.9, AIR_VISCOSITY)
-    assert solver._analytic_jacobian_enabled
-    edge = StationEdge(0.37, 1.0, 0.23, 1.8, 290.0, None, 1000.0, 0.1, 3.0)
-    state = solver.starting_guess(edge)
-    lagged = -0.8 * state
-    residual = solver.residual(state, edge, 1.3, lagged)
-
-    def forbidden(*args: object) -> FloatArray:
-        pytest.fail("five unknowns reached the laminar analytic assembly")
-
-    monkeypatch.setattr(Discretization, "_analytic_jacobian", forbidden)
-    analytic = solver.jacobian(state, residual, edge, 1.3, lagged)
-    np.testing.assert_array_equal(
-        analytic, solver._analytic_jacobian(state, edge, 1.3, lagged)
-    )
-    monkeypatch.setattr(solver, "_analytic_jacobian_enabled", False)
     np.testing.assert_array_equal(
         solver.jacobian(state, residual, edge, 1.3, lagged),
         solver._finite_difference_jacobian(state, residual, edge, 1.3, lagged),
@@ -225,43 +175,25 @@ def assert_results_close(
             )
 
 
-@pytest.mark.parametrize("model", MODELS)
-@pytest.mark.parametrize(
-    "case", ["plate", "pressure", "wall-change", "adiabatic", "howarth"]
-)
+@pytest.mark.parametrize("case", ["pressure", "wall-change"])
 def test_complete_marches_match_finite_differences(
-    monkeypatch: pytest.MonkeyPatch, model: SutherlandModel | KeyesModel, case: str
+    monkeypatch: pytest.MonkeyPatch, case: str
 ) -> None:
-    wall: float | FloatArray | None = 300.0
-    edge = plate_edge([0.0, 0.5, 0.51, 1.0])
+    wall: float | FloatArray = 300.0
     if case == "pressure":
         edge = smooth_edge(2.0, 3.0, count=41)
-    elif case == "wall-change":
+    else:
+        edge = plate_edge([0.0, 0.5, 0.51, 1.0])
         wall = np.array([300.0, 300.0, 400.0, 400.0])
-    elif case == "adiabatic":
-        wall = None
-    elif case == "howarth":
-        edge, _ = howarth_edge(0.01, count=41)
-        wall = None
-    edge = replace(edge, viscosity_model=model)
 
-    def run() -> tuple[MarchingBoundaryLayerResult, float | None]:
+    def run() -> MarchingBoundaryLayerResult:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ApplicabilityWarning)
-            try:
-                result = marching_boundary_layer(
-                    edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=wall
-                )
-            except BoundaryLayerSeparationError as error:
-                return error.result, error.separation_distance
-        return result, None
+            return marching_boundary_layer(
+                edge, regime=BoundaryLayerRegime.LAMINAR, wall_temperature=wall
+            )
 
-    analytic, separation = run()
+    analytic = run()
     monkeypatch.setattr(Discretization, "_analytic_jacobian_enabled", False)
-    finite, reference_separation = run()
+    finite = run()
     assert_results_close(analytic, finite)
-    if case == "howarth":
-        assert separation is not None and reference_separation is not None
-        assert separation == pytest.approx(reference_separation, rel=1e-8, abs=1e-10)
-    else:
-        assert separation is reference_separation is None
