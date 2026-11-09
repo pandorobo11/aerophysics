@@ -1720,3 +1720,58 @@ def heating_trends(
     figure.update_xaxes(title_text=title)
     figure.update_yaxes(title_text=f"熱流束 [{preferences.heat_flux}]")
     return {"熱流束": _style(figure, "空力加熱")}
+
+
+def body_flow_figures(
+    rows: tuple[Row, ...],
+    shock_rows: tuple[Row, ...],
+    preferences: UnitPreferences,
+    *,
+    pressure_quantity: str = "cp",
+) -> dict[str, go.Figure]:
+    """Plot the meridian, fitted shock and surface quantities in display units."""
+    x = _converted(rows, "axial_distance", "length", preferences)
+    x_title = f"軸方向距離 x [{preferences.length}]"
+    shape = go.Figure()
+    shape.add_trace(
+        go.Scatter(
+            x=x, y=_converted(rows, "radius", "length", preferences), name="物体母線"
+        )
+    )
+    shape.add_trace(
+        go.Scatter(
+            x=_converted(shock_rows, "shock_axial_distance", "length", preferences),
+            y=_converted(shock_rows, "shock_radius", "length", preferences),
+            name="衝撃波",
+        )
+    )
+    shape.update_xaxes(title_text=x_title)
+    shape.update_yaxes(
+        title_text=f"半径 r [{preferences.length}]", scaleanchor="x", scaleratio=1
+    )
+    label = "Cp" if pressure_quantity == "cp" else "(p−p∞)/p∞"
+    pressure = go.Figure(
+        go.Scatter(x=x, y=_numeric(rows, pressure_quantity), name=label)
+    )
+    pressure.update_xaxes(title_text=x_title)
+    pressure.update_yaxes(title_text=label)
+    flow = make_subplots(
+        rows=1, cols=3, subplot_titles=("Mach M", "静温 T", "流れ角 θ")
+    )
+    for column, values, title in (
+        (1, _numeric(rows, "mach"), "Mach M"),
+        (
+            2,
+            _converted(rows, "temperature", "temperature", preferences),
+            preferences.temperature,
+        ),
+        (3, _converted(rows, "flow_angle", "angle", preferences), preferences.angle),
+    ):
+        flow.add_trace(go.Scatter(x=x, y=values, name=title), row=1, col=column)
+        flow.update_yaxes(title_text=title, row=1, col=column)
+    flow.update_xaxes(title_text=x_title)
+    return {
+        "形状と衝撃波": _style(shape, "形状と衝撃波"),
+        "表面圧": _style(pressure, "表面圧"),
+        "Mach・温度・流れ角": _style(flow, "Mach・温度・流れ角"),
+    }

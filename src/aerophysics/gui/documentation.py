@@ -22,6 +22,7 @@ DOCUMENTATION_TOPICS = {
     "等エントロピー流れ": "models/isentropic_flow.html",
     "衝撃波の基礎": "models/shock_waves.html",
     "垂直・斜め衝撃波": "models/normal_oblique_shocks.html",
+    "軸対称特性曲線法": "models/axisymmetric_characteristics.html",
     "円錐衝撃波": "models/conical_shocks.html",
     "離脱衝撃波": "models/detached_shocks.html",
     "膨張波": "models/expansion_waves.html",
