@@ -77,6 +77,17 @@ uses Semantic Versioning, including during the pre-1.0 period.
   Sutherland and Keyes viscosity models. SA marches run about 1.5 to 2.2 times
   faster; regression marches agree with the previous finite-difference
   linearization at `rtol=1e-8, atol=1e-10`.
+- Use projected active-set Newton for the SA station's `nu_tilde >= 0` bound,
+  returning wall-attached zero regions to Picard and preserving legacy Newton
+  for explicitly zero SA seeds. Require the scaled local complementarity
+  residual at convergence and set undamped active rows exactly to zero,
+  preventing projection stagnation and BLAS-dependent cancellation remnants.
+  Remeasured with the analytic Jacobian on the current 90-test
+  solver-verification tier, including legacy comparison calls, Picard
+  fallbacks decrease 5,586 -> 634.
+  Remeasured outer-front `nu_tilde_ratio` differences reach 6.03e-5 of the
+  profile maximum; velocity/temperature differences stay below 8.2e-8 in the
+  compared marches. Generated verification records are unchanged.
 - Stop bundling documentation in editable installs; standard wheels still include it.
 - Solve the Spalding--Coles thickness closure of
   `TurbulentModel.SCHLICHTING_LOG_WAKE` and

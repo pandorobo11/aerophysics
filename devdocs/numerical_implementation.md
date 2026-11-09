@@ -205,17 +205,130 @@ its `total_pressure_ratio`, which only need the static states.
 - The shared streamwise limits above are unchanged. In the M2 ZPG study there
   were 625 converged trial checks and zero shear-limit rejections. Typical V9
   cases took 3--10 s, with 0--234 Picard fallbacks; refined cases took 15--40 s.
-  Strong expansions exceed that cost, as measured below.
-- Newton uses 50 iterations and a `1e-9` update tolerance. SA positivity limits
-  the update; damping below `1e-4` requests Picard. Exact Dirichlet values are
-  restored after each SA Newton update. Picard retains the frozen reference's
+  These are legacy positivity-damped Newton measurements. Strong expansions
+  exceeded that cost, as recorded below.
+- Newton uses 50 iterations and a `1e-9` applied-update tolerance. Interior SA
+  rows solve `n >= 0`, `R <= 0`, `n R = 0`, with `R = residual[3]`.
+  For negative finite `J_ii`, use `s_i = 1/abs(J_ii)` and select the active
+  branch of `min(n_i, -s_i R_i)` when `n_i <= -s_i R_i`. Active rows become
+  `delta n_i = -n_i` directly in the existing gbsv bands; inactive rows keep
+  the finite-difference Newton equations. A nonnegative or nonfinite SA
+  diagonal conservatively requests Picard. Velocity and temperature retain
+  the base damping limits; SA is projected onto `n >= 0` after the update,
+  with no SA positivity fraction. For an undamped step, active n values are
+  assigned exactly zero rather than relying on LU cancellation; damped active
+  rows retain the partial step toward zero. Exact boundary values are restored.
+  Convergence also requires an unchanged active set in the last two
+  linearizations and `max(abs(Phi))/max(1, max(n)) < 1e-9`. Phi and its scale
+  use the already computed pre-update linearization, before active-row
+  replacement. This is the same n scaling and tolerance as `update_size`,
+  requiring no additional residual/Jacobian evaluation. If the applied update
+  is small and the active set is stable but Phi fails this bound, Newton
+  continues if the applied update is nonzero; a zero update requests Picard.
+  The iteration limit still applies. Projection/damping stagnation is not
+  convergence. At convergence, an active **or projected-zero** first interior
+  SA node requests Picard: wall-attached zero regions select the trivial
+  partially laminar branch, not the intended outer-front clipping. The actual
+  projected n must also be checked because a residual-branch update can be
+  projected to zero without selecting the n branch. Intermediate active sets
+  may recover, so this guard is applied only at convergence. An explicitly
+  zero `edge_sa_ratio` uses legacy Newton directly to preserve the intentional
+  zero-SA/laminar limit; it does not enter active-set iteration.
+  The private `_bound_constrained_newton = False` switch
+  retains the old Newton, including its `1e-4` positivity-damping cutoff.
+  Picard retains the frozen reference's
   constants, smooth S-tilde limiter, nonnegative clipping, 0.5 relaxation,
   4000-iteration cap, and `1e-9` tolerance. Beta and Lambda sinks are implicit
   only when they strengthen the diagonal. Failure of both methods halves the step.
+- Picard solves a different discrete problem at clipped outer-front nodes.
+  Its frozen tridiagonal solve is `A(n) z = b(n)`, with `R = A(n)n - b(n)`
+  at a fixed point of the other fields. Projection gives
+  `n = max(z, 0)`, equivalently `min(n, A(n)^(-1) R) = 0`.
+  The clipping correction propagates through the off-diagonal entries of A,
+  leaving nonzero R at positive neighbors of clipped nodes. Newton instead
+  enforces zero R at every positive interior n and nonpositive R at zero n.
+  Both use nondimensional `n = nu_tilde/nu_e`; the inverse Jacobian diagonal
+  scales R to n units. No residual, physical model, coordinate convention, or
+  applicability range has changed. Remeasured with the analytic Jacobian,
+  the difference on one captured station was `1.26e-5` in n (`3.32e-8` of its
+  maximum), but this is not a general bound. Remeasured with the wall guard at `Re=1e10`, M2, edge 220 K
+  and wall 300 K, the largest n difference is `8.098729`, or `6.03083e-5` of
+  maximum n, at node 301 (zero-based), eta `632.73694`, s=100 m. The next,
+  last positive node before clipping (302, eta `639.65525`) changed from
+  `1996.165999` to `2002.957444`, a difference of `6.791445`; node 303 is
+  effectively zero in both solutions. Velocity and temperature profile
+  differences are `6.03350e-8` and `8.18300e-8` of their maxima; the wall
+  velocity slope changes by `1.53488e-7` relative, and delta99 by `7.22122e-7`.
+  Complete M2--3 fixed-wall and adiabatic marches differed by at most
+  `2.111e-6` of maximum n; other fields differed by at most `7.072e-8` of
+  their respective maxima. The tested ZPG and variable-radius M2 cases were
+  bit-identical. These comparisons do not establish physical validation or
+  grid convergence of the outer SA front.
+- Regression comparisons scale absolute errors by each legacy field maximum,
+  including near-zero entries. The M2--3 bounds are `4e-6` for n and `2e-7`
+  for other fields. The measured high-Re case uses `1e-4` for n, `2e-7` for
+  velocity/temperature, `2e-6` for other fields, and `4e-7` relative for wall
+  velocity slope. Complete marches and the captured-station comparison run
+  in `solver_verification`. Six-node and synthetic station tests keep the
+  Newton branches covered in the normal tier, including legacy dispatch,
+  diagonal rejection, banded failures, exhaustion, projection and active-set
+  convergence. The legacy-switch and laminar complete-march comparisons check
+  bitwise equivalence.
+- In the earlier finite-difference-Jacobian rounded-transition reproducer
+  (transition at 0.1 m, wall 250 K), the unguarded Newton selected a zero region
+  at nodes 1--82 on the 472nd SA station attempt, xi `3.4502924398659043e-4`. Its wall velocity slope
+  was `0.469137`, versus Picard's `0.556645`. The guard rejects this state.
+  The guarded reference march's Cf and heat flux match the legacy march
+  exactly in the measured comparison, within the existing `1e-6` bound.
+- After integrating PR #94, the **90-test `solver_verification` tier** was
+  remeasured with the **analytic Jacobian**, using four workers on macOS arm64,
+  Python 3.13.5, NumPy 2.5.1 / Accelerate and SciPy 1.18.0. Temporary in-memory
+  counters changed no numerical decisions. Two runs set the class default to
+  legacy or guarded active-set Newton; explicit test overrides were retained.
+  Thus both totals include legacy comparison calls, and the legacy-default
+  run includes explicitly requested active-set solves. Each run passed all
+  90 tests. Counts include repeated worker-local fixtures and direct solver
+  calls, so they are observations for this tier, not per-march guarantees.
+
+  | Measurement | Previous finite-difference Jacobian | Merged analytic Jacobian |
+  | --- | --- | --- |
+  | Picard fallbacks, legacy -> guarded default | 5,586 -> 637 | 5,586 -> 634 |
+  | Picard calls, legacy -> guarded default | 5,587 -> 638 | 5,587 -> 635 |
+  | Picard sweeps, legacy -> guarded default | 806,235 -> 107,160 | 806,234 -> 105,432 |
+  | Guarded-default active-set wall rejections | 32 | 30 |
+  | Guarded-default active-set iteration exhaustion | 7 | 6 |
+  | Guarded-default Phi-withheld iterations | 66 | 67 |
+
+  Every Picard call converged. In the guarded-default run, invalid-diagonal,
+  nonfinite-update, caught-exception and Phi-stagnation failures were all zero;
+  legacy zero-damping failures remained 600. The Phi bound withheld convergence
+  on 67 iterations; small nonzero updates still allow further Newton iterations.
+  The high-Re n, u and g differences above are unchanged at their quoted precision; the
+  relative wall velocity slope difference changed from `1.53615e-7` to
+  `1.53488e-7`. The captured-station difference is `1.25960e-5` in n, or
+  `3.32343e-8` of its maximum. Generated verification records and reference
+  data were not modified; all 14 generated-asset checks passed.
+- Both Jacobian paths passed verification: the default analytic path passed
+  all 90 solver-tier tests, and forcing the private SA analytic switch off
+  passed all 29 active-set and transition solver-tier tests. The normal SA
+  and active-set tests passed 65 cases with 100% line and branch coverage of
+  the SA module. A real six-node station compares the SA diagonals in gbsv
+  storage at `rtol=2e-6` (forward-difference truncation/cancellation), and its
+  converged active-set states at `rtol=atol=1e-12` (roundoff allowance below
+  the `1e-9` stopping threshold); the maximum absolute state difference was
+  `8.88e-16`. Synthetic-residual tests explicitly disable the analytic
+  Jacobian so that derivatives match their substituted equations. The
+  stagnation regression retains the real finite-difference assembly and
+  banded solve for the indefinite middle block `[-1, 2; 2, -1]`: its negative
+  step projects to zero but leaves positive R, so it must request Picard.
+  Separate tests cover scaled Phi acceptance, continued damped progress,
+  exact active zeros despite simulated one-ULP LU roundoff, and the captured
+  station's branch criterion `n <= -R/abs(J_ii)`, including damped active rows.
 - Edge dimensional `nu_tilde` is conserved. The viscosity exponent is a central
   difference in log temperature with half-width `1e-5`, valid for any viscosity
   protocol implementation. Isentropic density and temperature derivatives give
-  `Lambda`. Fixed and adiabatic Picard rows solve the same residual as Newton.
+  `Lambda`. Fixed and adiabatic energy rows use the same residual in both
+  solvers; the distinction above concerns the interior SA clipping.
 - All 18 frozen ZPG rows satisfy 0.3%: maximum Cf 0.0553%, delta99 0.0645%,
   theta 0.0185%, and cold-wall heat coefficient 0.0283%. Recovery-temperature
   rows use an absolute heat difference scaled by Cf. Zero SA agrees with
