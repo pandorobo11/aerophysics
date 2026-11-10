@@ -1242,3 +1242,58 @@ differences are +0.105 and +0.043 percent. Small width differences do not
 establish physical validity; some SA differences are comparable to the
 measured streamwise discretization uncertainty. The design memo gives all
 three quantities at 5/20/100 thicknesses and the step-refinement check.
+
+## Opt-in characteristic-net output
+
+`include_characteristic_net=False` preserves the default numerical path: no
+row snapshots or net arrays are collected and no additional Mach evaluations
+are performed. When enabled,
+`CharacteristicNet.rows` snapshots the exact initial line and every `_row`
+result, including fans, inverse-wall steps and truncated rows. Owned read-only
+SI/radian arrays carry static and streamline-dependent total pressure as well
+as Mach. The optional result field follows `_corner_states` so positional
+construction stays compatible; `last_complete` remains unchanged.
+
+Each row is C+ from the wall outward. C- connectivity maps node k to previous
+node k - 1 + s, with s=2 for regular/end wall steps and s=1 for fans and
+inverse-wall steps. Shock nodes start new paths; coincident fan wall nodes
+add no length. The inverse-wall foot is interpolated, not a stored node, so
+its incoming segment is deliberately absent. The exact Taylor--Maccoll initial
+C+ bounds an upstream similarity region, not a marched conical net.
+
+Fast regression tests compare all existing arrays/scalars bit-for-bit and
+`last_complete`, inspect every recorded `_row` state, check wall/shock
+locations in order, and verify interior C+/C- trapezoidal chord slopes at
+1e-8 relative tolerance. Cone-cylinder and second-corner/boattail tests also
+compare every reconstructed C- edge, excluding the inverse-wall foot, and
+check monotonicity, ownership, read-only flags, bool validation and public
+exports. These tests verify output fidelity and connectivity, not convergence
+or physical accuracy. The GUI opts in, displays bounded subsets and exports
+the complete net, retaining existing applicability limits.
+
+Runtime check (2026-11-10, macOS arm64, Python 3.13.5, existing locked
+environment): solver-only `perf_counter` wall times, one warm-up per option
+followed by seven measured calls each, alternating option order. No other
+validation commands ran during these measurements. Both cases use M=3,
+p=101325 Pa, T=288.15 K, 88 starting intervals, 1-degree fan increments,
+L_n=0.3 m, R=0.05 m and L_cyl=1 m. The ogive has 32 equal-arc-angle chords.
+These are local timings, not a portable performance guarantee; plotting and
+CSV preparation are excluded.
+
+| Geometry | Net off median | Net on median | Overhead | Rows / nodes |
+| --- | ---: | ---: | ---: | ---: |
+| Cone-cylinder | 0.084140 s | 0.087244 s | +3.69% | 86 / 4535 |
+| N=32 tangent ogive-cylinder | 0.593883 s | 0.613761 s | +3.35% | 414 / 37535 |
+
+
+Sandbox validation used `UV_CACHE_DIR=/tmp/aerophysics-uv-cache UV_NO_SYNC=1`
+with `uv run --offline` because the default uv cache was inaccessible. Ruff
+format/lint and mypy passed; solver plus verification-path tests passed
+(116 tests), and the separate characteristic `solver_verification` tier
+passed (13 tests). GUI tests passed 442 tests; the sole failure was the
+unchanged `test_local_documentation_server`, whose loopback socket bind was
+denied by the sandbox. The new body-flow tests all passed. Sphinx HTML built
+with `-E -a -W --keep-going` successfully. `git diff --check` passed. No
+permissions were elevated. The full `scripts/check.sh --full` gate remains
+for the caller's outside-sandbox run, as requested; package and generated-asset
+verification have not been claimed here.

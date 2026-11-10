@@ -75,6 +75,34 @@ _NULLABLE_POSITIVE = _number(nullable=True, minimum=0.0, exclusive_minimum=True)
 _BOOL = _FieldRule("bool")
 _SUPERSONIC = _number(minimum=1.0, exclusive_minimum=True)
 _SCHEMAS: dict[str, _CalculatorSchema] = {
+    "axisymmetric_body": _CalculatorSchema(
+        inputs={
+            "mach": _SUPERSONIC,
+            "pressure": _POSITIVE,
+            "temperature": _POSITIVE,
+            "altitude": _number(nullable=True),
+            "nose_length": _POSITIVE,
+            "base_radius": _POSITIVE,
+            "ogive_segments": _FieldRule("int", minimum=2, maximum=200),
+            "cylinder_length": _NON_NEGATIVE,
+            "boattail_length": _NULLABLE_POSITIVE,
+            "boattail_radius": _NULLABLE_POSITIVE,
+            "meridian_x": _nullable_number_list(),
+            "meridian_r": _nullable_number_list(),
+            "characteristic_count": _FieldRule("int", minimum=4, maximum=1000),
+            "fan_angle_step": _number(minimum=math.pi / 3600, maximum=math.pi / 36),
+        },
+        models={
+            "geometry_source": _choice("parametric", "csv"),
+            "nose": _choice("cone", "tangent_ogive"),
+            "boattail": _BOOL,
+            "freestream_basis": _choice("static", "atmosphere"),
+            "altitude_basis": _choice("geometric", "geopotential"),
+            "pressure_quantity": _choice("cp", "pressure_rise"),
+            "net_coloring": _choice("none", "mach", "cp", required=False),
+        },
+        sweep_variables=None,
+    ),
     "flight": _CalculatorSchema(
         inputs={
             "geometric_altitude": _number(minimum=-5000.0, maximum=86000.0),
@@ -577,6 +605,8 @@ def validate_calculator_payload(
     if calculator == "boundary_layer":
         models = _migrate_boundary_models(models)
     normalized_models = _validate_object(models, schema.models, "models")
+    if calculator == "axisymmetric_body":
+        normalized_models.setdefault("net_coloring", "none")
     if calculator == "boundary_layer":
         model = normalized_models["turbulent_model"]
         try:

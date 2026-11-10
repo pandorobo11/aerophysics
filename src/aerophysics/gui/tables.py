@@ -455,10 +455,47 @@ HEATING_COLUMNS = (
 )
 
 
+BODY_FLOW_COLUMNS = (
+    Column("axial_distance", "軸方向距離 x", "length"),
+    Column("radius", "半径 r", "length"),
+    Column("surface_distance", "表面距離 s", "length"),
+    Column("pressure", "静圧 p", "pressure"),
+    Column("pressure_ratio", "p/p∞"),
+    Column("pressure_rise", "(p−p∞)/p∞"),
+    Column("cp", "Cp"),
+    Column("temperature", "静温 T", "temperature"),
+    Column("mach", "Mach M"),
+    Column("flow_angle", "流れ角 θ", "angle"),
+)
+BODY_FLOW_SHOCK_COLUMNS = (
+    Column("shock_axial_distance", "衝撃波 x_s", "length"),
+    Column("shock_radius", "衝撃波 r_s", "length"),
+    Column("shock_angle", "衝撃波角 β", "angle"),
+)
+
+
+BODY_FLOW_NET_COLUMNS = (
+    Column("row_index", "行番号"),
+    Column("node_index", "節点番号"),
+    Column("kind", "行種別"),
+    Column("ends_at_shock", "衝撃波で終端"),
+    Column("axial_distance", "軸方向距離 x", "length"),
+    Column("radius", "半径 r", "length"),
+    Column("flow_angle", "流れ角 θ", "angle"),
+    Column("pressure", "静圧 p", "pressure"),
+    Column("total_pressure", "全圧 p₀", "pressure"),
+    Column("mach", "Mach M"),
+    Column("cp", "Cp"),
+)
+
+
 def columns_for(calculator: str) -> tuple[Column, ...]:
     """Return ordered table columns for a calculator."""
     choices = {
         "aerodynamic_heating": HEATING_COLUMNS,
+        "axisymmetric_body": BODY_FLOW_COLUMNS,
+        "axisymmetric_body_shock": BODY_FLOW_SHOCK_COLUMNS,
+        "axisymmetric_body_net": BODY_FLOW_NET_COLUMNS,
         "conical_shock": CONICAL_SHOCK_COLUMNS,
         "detached_shock": DETACHED_SHOCK_COLUMNS,
         "flight": FLIGHT_COLUMNS,

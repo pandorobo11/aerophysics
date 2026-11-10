@@ -26,7 +26,11 @@ class ShapeCSV:
 
 def _columns(data: bytes | str, required: tuple[str, ...]) -> dict[str, np.ndarray]:
     try:
-        text = data.decode("utf-8-sig") if isinstance(data, bytes) else data
+        text = (
+            data.decode("utf-8-sig")
+            if isinstance(data, bytes)
+            else data.removeprefix("\ufeff")
+        )
         reader = csv.DictReader(io.StringIO(text))
         if reader.fieldnames is None or not set(required) <= set(reader.fieldnames):
             raise ValueError(f"CSV must contain columns: {', '.join(required)}")
@@ -92,3 +96,30 @@ def profile_csv_template() -> str:
 def shape_csv_template() -> str:
     """Return a minimal frontal-shape template in display units."""
     return "\ufeffheight,width\n0,0.01\n0.01,0\n"
+
+
+@dataclass(frozen=True, slots=True)
+class MeridianCSV:
+    """Body meridian vertices in SI metres."""
+
+    axial_distance: np.ndarray
+    radius: np.ndarray
+
+
+def parse_meridian_csv(data: bytes | str, units: UnitPreferences) -> MeridianCSV:
+    """Parse x,r in display length units, leaving convexity to the solver."""
+    values = _columns(data, ("x", "r"))
+    x = np.asarray(to_si(values["x"], "length", units.length), dtype=np.float64)
+    r = np.asarray(to_si(values["r"], "length", units.length), dtype=np.float64)
+    if x[0] != 0 or r[0] != 0:
+        raise ValueError("meridian must start at (0, 0)")
+    if np.any(np.diff(x) <= 0):
+        raise ValueError("x must be strictly increasing")
+    if np.any(r[1:] <= 0):
+        raise ValueError("r must be positive after the first point")
+    return MeridianCSV(x, r)
+
+
+def meridian_csv_template() -> str:
+    """Return a cone-cylinder template in display length units with a BOM."""
+    return "\ufeffx,r\n0,0\n0.3,0.05\n1.3,0.05\n"

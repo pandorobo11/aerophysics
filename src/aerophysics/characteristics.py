@@ -39,11 +39,90 @@ class BoundaryLayerInputs(NamedTuple):
 
 
 @dataclass(frozen=True, slots=True)
+class CharacteristicRow:
+    """One C+ characteristic from the wall outward, with owned read-only arrays.
+
+    Lengths are in metres, angles from +x in radians, pressures in Pa, and
+    Mach dimensionless. Total pressure varies across streamlines. ``kind`` is
+    ``initial``, ``fan``, ``wall`` or ``inverse_wall``. ``parent_offset`` maps
+    node k to previous-row node k - 1 + s, except at a fitted shock or an
+    inverse-wall node (whose incoming foot is interpolated, not a node).
+    """
+
+    axial_distance: FloatArray
+    radius: FloatArray
+    flow_angle: FloatArray
+    pressure: FloatArray
+    total_pressure: FloatArray
+    mach: FloatArray
+    kind: str
+    parent_offset: int
+    ends_at_shock: bool
+
+    def __post_init__(self) -> None:
+        for descriptor in fields(self):
+            value = getattr(self, descriptor.name)
+            if isinstance(value, np.ndarray):
+                owned = np.array(value, dtype=np.float64, copy=True)
+                owned.flags.writeable = False
+                object.__setattr__(self, descriptor.name, owned)
+
+
+@dataclass(frozen=True, slots=True)
+class CharacteristicNet:
+    """Recorded numerical C+ rows; not a converged full-field solution."""
+
+    rows: tuple[CharacteristicRow, ...]
+
+    def minus_characteristics(self) -> tuple[tuple[FloatArray, FloatArray], ...]:
+        """Return owned read-only C- polylines (x, r), upstream to downstream.
+
+        Reconstruct node connections using parent offsets. Shock nodes start
+        new lines; inverse-wall feet are not nodes and their incoming segment
+        is omitted. Coincident fan wall nodes add no zero-length segments.
+        Lines with fewer than two distinct points are omitted.
+        """
+        paths: list[list[tuple[float, float]]] = []
+        previous: list[int] = []
+        for row in self.rows:
+            current = []
+            for k, (x, r) in enumerate(
+                zip(row.axial_distance, row.radius, strict=True)
+            ):
+                parent = k - 1 + row.parent_offset
+                if (
+                    previous
+                    and not (k == 0 and row.kind == "inverse_wall")
+                    and not (row.ends_at_shock and k == len(row.radius) - 1)
+                    and 0 <= parent < len(previous)
+                ):
+                    index = previous[parent]
+                else:
+                    index = len(paths)
+                    paths.append([])
+                point = (float(x), float(r))
+                if not paths[index] or paths[index][-1] != point:
+                    paths[index].append(point)
+                current.append(index)
+            previous = current
+        lines = []
+        for path in paths:
+            if len(path) < 2:
+                continue
+            x = np.array([point[0] for point in path])
+            r = np.array([point[1] for point in path])
+            x.flags.writeable = r.flags.writeable = False
+            lines.append((x, r))
+        return tuple(lines)
+
+
+@dataclass(frozen=True, slots=True)
 class AxisymmetricBodyFlowResult:
     """Surface and fitted-shock stations, with owned read-only arrays.
 
     At a convex vertex the surface array retains only the downstream limit.
-    Intermediate fan states are internal, at the same physical vertex. The
+    Intermediate fan states share the same physical vertex and are available
+    only in the optional ``characteristic_net``. The
     sharp-tip state is the limiting cone surface state. ``gas`` is retained
     so that :meth:`boundary_layer_inputs` also works for non-air perfect gases.
     """
@@ -62,6 +141,7 @@ class AxisymmetricBodyFlowResult:
     total_temperature: float
     gas: PerfectGas = AIR
     _corner_states: tuple[tuple[int, float], ...] = field(default=(), repr=False)
+    characteristic_net: CharacteristicNet | None = None
 
     def __post_init__(self) -> None:
         for descriptor in fields(self):
@@ -517,6 +597,7 @@ def axisymmetric_body_flow(
     gas: PerfectGas = AIR,
     characteristic_count: int = 88,
     fan_angle_step: float = np.pi / 180.0,
+    include_characteristic_net: bool = False,
 ) -> AxisymmetricBodyFlowResult:
     """Solve sharp convex axisymmetric external flow with a fitted shock.
 
@@ -533,6 +614,9 @@ def axisymmetric_body_flow(
     further wall steps, raise ModelRangeError; reduce ``fan_angle_step`` for
     long bodies with coarse fans. All input lengths are in metres, pressure in Pa and
     temperature in K; angles and ``fan_angle_step`` are in radians.
+
+    Set ``include_characteristic_net=True`` to retain the exact numerical
+    rows as :class:`CharacteristicNet`. By default no rows are collected.
 
     Raises
     ------
@@ -551,6 +635,7 @@ def axisymmetric_body_flow(
         gas=gas,
         characteristic_count=characteristic_count,
         fan_angle_step=fan_angle_step,
+        include_characteristic_net=include_characteristic_net,
     )[0]
 
 
@@ -595,9 +680,12 @@ def _solve(
     gas: PerfectGas = AIR,
     characteristic_count: int = 88,
     fan_angle_step: float = np.pi / 180,
+    include_characteristic_net: bool = False,
     axisymmetric: bool = True,
     starting_distance: float | None = None,
 ) -> tuple[AxisymmetricBodyFlowResult, list[_Point]]:
+    if not isinstance(include_characteristic_net, bool):
+        raise ValueError("include_characteristic_net must be a bool")
     original_x, original_r, original_angles = _body_inputs(axial_distance, radius)
     intervals = np.diff(original_x)
     # A few rounding units relative to the SMALLER adjacent input interval.
@@ -681,6 +769,11 @@ def _solve(
     corner_states: list[tuple[int, float]] = []
     has_shock = True
     last_complete = points
+    net_rows = (
+        [_characteristic_row(points, flow, pressure, "initial", 0, True)]
+        if include_characteristic_net
+        else None
+    )
     for segment in range(cone_end, len(angles)):
         angle = float(angles[segment])
         turn = wall.theta - angle
@@ -713,6 +806,10 @@ def _solve(
                     has_shock,
                     wall_angle=angle,
                 )
+                if net_rows is not None:
+                    net_rows.append(
+                        _characteristic_row(points, flow, pressure, "fan", 1, has_shock)
+                    )
                 if has_shock:
                     shocks.append((points[-1].x, points[-1].r, beta))
                     last_complete = points
@@ -756,6 +853,12 @@ def _solve(
                 points, beta, has_shock = _row(
                     wall, points[2:], flow, beta, float(x[-1]), has_shock
                 )
+                if net_rows is not None:
+                    net_rows.append(
+                        _characteristic_row(
+                            points, flow, pressure, "wall", 2, has_shock
+                        )
+                    )
             elif new.x >= target_x:
                 # Inverse wall point: interpolate incoming C- foot on first edge.
                 new = _wall_at(points, wall, angle, target_x, flow)
@@ -763,11 +866,23 @@ def _solve(
                 points, beta, has_shock = _row(
                     wall, points[1:], flow, beta, float(x[-1]), has_shock
                 )
+                if net_rows is not None:
+                    net_rows.append(
+                        _characteristic_row(
+                            points, flow, pressure, "inverse_wall", 1, has_shock
+                        )
+                    )
             else:
                 wall = new
                 points, beta, has_shock = _row(
                     wall, points[2:], flow, beta, float(x[-1]), has_shock
                 )
+                if net_rows is not None:
+                    net_rows.append(
+                        _characteristic_row(
+                            points, flow, pressure, "wall", 2, has_shock
+                        )
+                    )
             _append_surface(surface, wall, original_x, original_r, vertex_tolerances)
             if has_shock:
                 shocks.append((points[-1].x, points[-1].r, beta))
@@ -795,7 +910,30 @@ def _solve(
         total_t,
         gas,
         tuple(corner_states),
+        CharacteristicNet(tuple(net_rows)) if net_rows is not None else None,
     ), last_complete
+
+
+def _characteristic_row(
+    points: list[_Point],
+    flow: _Flow,
+    pressure: float,
+    kind: str,
+    parent_offset: int,
+    ends_at_shock: bool,
+) -> CharacteristicRow:
+    """Snapshot exact solver states only on the opted-in path."""
+    return CharacteristicRow(
+        np.array([q.x for q in points]),
+        np.array([q.r for q in points]),
+        np.array([q.theta for q in points]),
+        pressure * np.exp([q.p for q in points]),
+        pressure * np.exp([q.p0 for q in points]),
+        np.array([flow.mach_at(q) for q in points]),
+        kind,
+        parent_offset,
+        ends_at_shock,
+    )
 
 
 def _wall_at(

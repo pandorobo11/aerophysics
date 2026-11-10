@@ -49,3 +49,42 @@ def test_profile_csv_rejects_invalid_data(text: str, message: str) -> None:
 def test_shape_csv_rejects_negative_width() -> None:
     with pytest.raises(ValueError, match="non-negative"):
         parse_shape_csv("height,width\n0,1\n1,-1\n", UnitPreferences())
+
+
+def test_meridian_csv_display_units_and_template() -> None:
+    from aerophysics.gui.csv_inputs import meridian_csv_template, parse_meridian_csv
+
+    vertices = parse_meridian_csv(
+        b"x,r\n0,0\n1,0.1\n2,0.1\n", UnitPreferences(length="ft")
+    )
+    assert vertices.axial_distance[-1] == pytest.approx(0.6096)
+    assert vertices.radius[-1] == pytest.approx(0.03048)
+    assert meridian_csv_template().startswith("\ufeffx,r\n")
+    assert (
+        len(
+            parse_meridian_csv(
+                meridian_csv_template().encode("utf-8"), UnitPreferences()
+            ).radius
+        )
+        == 3
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("x,y\n0,0\n1,1\n", "columns"),
+        ("x,r\n1,0\n2,1\n", "start"),
+        ("x,r\n0,1\n1,1\n", "start"),
+        ("x,r\n0,0\n0,1\n", "increasing"),
+        ("x,r\n0,0\n1,1\n0.5,1\n", "increasing"),
+        ("x,r\n0,0\n1,0\n", "positive"),
+        ("x,r\n0,0\n1,-1\n", "positive"),
+        ("x,r\n0,0\n1,nan\n", "finite"),
+    ],
+)
+def test_meridian_csv_structural_errors(text: str, message: str) -> None:
+    from aerophysics.gui.csv_inputs import parse_meridian_csv
+
+    with pytest.raises(ValueError, match=message):
+        parse_meridian_csv(text, UnitPreferences())

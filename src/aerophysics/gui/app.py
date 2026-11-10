@@ -11,6 +11,7 @@ from aerophysics.gui.analysis_pages import (
     render_thermochemistry,
     render_viscosity,
 )
+from aerophysics.gui.body_flow_page import render_axisymmetric_body
 from aerophysics.gui.components import render_unit_sidebar
 from aerophysics.gui.documentation import render_documentation
 from aerophysics.gui.flow_pages import (
@@ -51,6 +52,10 @@ def boundary_layer_page() -> None:
 
 def conical_shock_page() -> None:
     render_conical_shock(preferences)
+
+
+def axisymmetric_body_page() -> None:
+    render_axisymmetric_body(preferences)
 
 
 def isentropic_page() -> None:
@@ -131,6 +136,11 @@ pages = {
             conical_shock_page,
             title="円錐衝撃波",
             icon="🔺",
+        ),
+        st.Page(
+            axisymmetric_body_page,
+            title="軸対称物体流れ（特性曲線法）",
+            icon="🚀",
         ),
         st.Page(
             detached_shock_page,

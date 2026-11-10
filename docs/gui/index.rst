@@ -56,6 +56,9 @@ page of this manual directly.
      - 円錐衝撃波 (conical shock)
      - :doc:`../models/conical_shocks`
    * -
+     - 軸対称物体流れ（特性曲線法） (axisymmetric body flow)
+     - :doc:`../models/axisymmetric_characteristics`
+   * -
      - 離脱衝撃波 (detached shock)
      - :doc:`../models/detached_shocks`
    * -

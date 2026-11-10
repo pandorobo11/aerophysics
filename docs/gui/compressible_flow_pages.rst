@@ -2,7 +2,7 @@ Compressible-flow pages
 =======================
 
 These notes cover the **等エントロピー流れ**, **垂直衝撃波**, **斜め衝撃波**,
-**円錐衝撃波**, **離脱衝撃波**, and **Prandtl–Meyer膨張** pages. For the
+**円錐衝撃波**, **軸対称物体流れ（特性曲線法）**, **離脱衝撃波**, and **Prandtl–Meyer膨張** pages. For the
 theory, use each page's **📖 理論・モデルの説明** button or the table in
 :doc:`index`.
 
@@ -131,3 +131,96 @@ Shock-shape export
 The **離脱衝撃波** (detached shock) page can export the calculated
 shock-shape coordinates as CSV, in the upstream-positive coordinate system
 described above.
+
+
+Axisymmetric body flow (軸対称物体流れ（特性曲線法）)
+--------------------------------------------------------------------------
+
+This single-point page uses only calorically perfect ``AIR``. It calls
+:func:`~aerophysics.characteristics.axisymmetric_body_flow` when **計算** is
+pressed. Editing inputs retains the previous result with a warning; changing
+the pressure display quantity does not rerun the solver. Inputs and outputs
+use the sidebar display units; settings JSON stores SI values and radians.
+
+Choose **パラメトリック** or **CSV** under **形状の入力**. The default is a
+0.3 m cone of base radius 0.05 m followed by a 1 m cylinder. A zero cylinder
+length omits that vertex. An optional boattail needs positive length and a
+rear radius strictly between zero and the base radius. The meridian starts at
+``(0,0)``, axial distance increases strictly and subsequent radii are positive.
+Segment angles must be non-increasing; concave corners are rejected by the
+solver. The **母線CSVテンプレート** uses columns ``x,r`` in the current
+length unit. An uploaded file is read once, in the length unit selected when
+it is uploaded; changing the display units afterwards does not rescale the
+body. CSV vertices are embedded in exported settings, so loading the
+JSON does not require uploading the CSV again.
+
+The **接線オジーブ** nose uses 32 straight chords by default (2--200).
+For nose length :math:`L_n` and radius :math:`R`, the circle has radius
+:math:`\rho=(R^2+L_n^2)/(2R)` and tip half-angle
+:math:`\phi_0=\sin^{-1}(L_n/\rho)`. This construction requires
+:math:`0<R\le L_n`. Chords have equal arc-angle intervals and exact tip
+and base vertices. The page shows the first chord's effective cone half-angle
+and the exact ogive tip angle. Changing the chord count changes the polygon
+and the result; a smooth-ogive solution is not implied.
+
+Free-stream inputs are either **静圧・静温・Mach** (defaults 101325 Pa,
+288.15 K and Mach 3) or **標準大気・Mach** (default altitude 10000 m).
+Select geometric or geopotential altitude; the latter is converted to
+geometric altitude for the standard-atmosphere API. Resolved pressure and
+temperature are displayed. Mach must exceed one.
+
+**詳細設定（解像度）** exposes the starting characteristic count (default 88,
+range 4--1000) and fan increment (default 1 degree, range 0.05--5 degrees,
+shown in the selected angle unit). For refinement, double the count and
+halve the increment. Long bodies with coarse fans can fail and require a
+smaller increment; failures retain the solver's location-bearing message.
+
+**形状と衝撃波** draws the body section at equal length scales, in the same
+style as the oblique- and conical-shock pages: the grey body is the meridian
+mirrored about the dashed axis (closing at the flat base), and the red line is
+the fitted shock, shown above the axis only. **表面圧** defaults to the pressure coefficient
+
+.. math::
+
+   C_p = \frac{p-p_\infty}{\tfrac12\gamma p_\infty M_\infty^2}.
+
+Here :math:`\gamma` is the constant heat-capacity ratio of ``AIR`` (1.4).
+
+The selector switches to :math:`(p-p_\infty)/p_\infty`; both quantities
+are always in the surface table and CSV. Other columns are axial distance
+``x``, radius ``r``, surface distance ``s``, static pressure, ``p/p∞``, static
+temperature, Mach and flow angle from the positive x axis. The third figure
+shows Mach, temperature and flow angle. A separate **衝撃波の軌跡** table
+and CSV give shock ``x_s``, ``r_s`` and angle ``β``. Metrics show tip surface
+``p/p∞`` (the cone-surface limit), tip shock angle, post-shock body-streamline
+total pressure, uniform total temperature, minimum Cp and body-end Cp.
+
+The fourth tab, **特性曲線網**, draws the same body section and fitted shock with
+C+ rows (blue) and reconstructed C- lines (green) above the axis, with equal axes in display
+length units. The GUI requests the optional net automatically. At most 150
+C+ rows and 80 C- lines are evenly selected for display, retaining the first
+and last of each family; a caption reports downsampling. **特性曲線網の節点色**
+selects **なし** (default), **Mach** or **Cp**, with a colorbar and at most
+20,000 markers from the displayed rows. This selector and the surface-pressure
+selector reuse the saved result without recalculating or marking inputs stale.
+Settings store ``net_coloring`` as ``none``, ``mach`` or ``cp``; older settings
+without it load as ``none``.
+
+**特性曲線網CSVをダウンロード** exports every recorded node, without display
+thinning. Columns are zero-based row and node indices, row kind, whether the
+row ends at the shock, x, r, flow angle, static pressure, total pressure,
+Mach and Cp. Lengths, angles and pressures use the selected display units.
+Fan rows retain intermediate states at the same physical vertex; the
+inverse-wall incoming foot is not a node and its segment is omitted from C-.
+The upstream conical region is an exact similarity solution, not a marched
+net. The displayed net does not establish a converged field solution.
+
+**現在の物体流れケースとして保存** stores the raw solver result for future
+use in the current GUI session. No downstream consumer is included here.
+Surface results at convex vertices keep only the downstream fan state. The shock trace can end
+before or extend beyond the body endpoint; rows can terminate without a shock node.
+The model excludes blunt noses, incidence, concave corners, subsonic regions,
+viscous displacement, separation and high-temperature chemistry. Crossed
+characteristics and convergence failures remove the previous result and show
+an error. Accuracy against experiment is not established. See
+:doc:`../models/axisymmetric_characteristics` for verification and limitations.

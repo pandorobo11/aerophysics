@@ -8,6 +8,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from aerophysics.characteristics import CharacteristicNet
 from aerophysics.detached_shock import (
     BilligShockShapeResult,
     DetachedShockGeometry,
@@ -1720,3 +1721,170 @@ def heating_trends(
     figure.update_xaxes(title_text=title)
     figure.update_yaxes(title_text=f"熱流束 [{preferences.heat_flux}]")
     return {"熱流束": _style(figure, "空力加熱")}
+
+
+def body_flow_figures(
+    rows: tuple[Row, ...],
+    shock_rows: tuple[Row, ...],
+    preferences: UnitPreferences,
+    *,
+    pressure_quantity: str = "cp",
+    characteristic_net: CharacteristicNet | None = None,
+    net_coloring: str = "none",
+    freestream_pressure: float = 101325.0,
+    freestream_mach: float = 3.0,
+    heat_capacity_ratio: float = 1.4,
+) -> dict[str, go.Figure]:
+    """Plot the meridian, fitted shock and surface quantities in display units."""
+    x = _converted(rows, "axial_distance", "length", preferences)
+    x_title = f"軸方向距離 x [{preferences.length}]"
+    radius = _converted(rows, "radius", "length", preferences)
+    shape = go.Figure()
+    # Mirror the meridian into a filled section, as on the cone-shock page;
+    # closing the polygon draws the flat base between r and -r.
+    shape.add_trace(
+        go.Scatter(
+            x=np.concatenate((x, x[::-1])),
+            y=np.concatenate((radius, -radius[::-1])),
+            mode="lines",
+            line={"width": 3, "color": "#555"},
+            fill="toself",
+            fillcolor="#e2e8f0",
+            name="機体（断面）",
+            hoverinfo="name",
+        )
+    )
+    shape.add_trace(
+        go.Scatter(
+            x=_converted(shock_rows, "shock_axial_distance", "length", preferences),
+            y=_converted(shock_rows, "shock_radius", "length", preferences),
+            mode="lines",
+            line={"width": 3, "color": "#d62728"},
+            name="衝撃波",
+        )
+    )
+    shape.add_shape(
+        type="line",
+        xref="paper",
+        x0=0.0,
+        x1=1.0,
+        y0=0.0,
+        y1=0.0,
+        line={"color": "#94a3b8", "width": 1.5, "dash": "dash"},
+        layer="below",
+    )
+    shape.update_xaxes(title_text=x_title)
+    shape.update_yaxes(
+        title_text=f"半径 r [{preferences.length}]", scaleanchor="x", scaleratio=1
+    )
+    label = "Cp" if pressure_quantity == "cp" else "(p−p∞)/p∞"
+    pressure = go.Figure(
+        go.Scatter(x=x, y=_numeric(rows, pressure_quantity), name=label)
+    )
+    pressure.update_xaxes(title_text=x_title)
+    pressure.update_yaxes(title_text=label)
+    flow = make_subplots(
+        rows=1, cols=3, subplot_titles=("Mach M", "静温 T", "流れ角 θ")
+    )
+    for column, values, title in (
+        (1, _numeric(rows, "mach"), "Mach M"),
+        (
+            2,
+            _converted(rows, "temperature", "temperature", preferences),
+            preferences.temperature,
+        ),
+        (3, _converted(rows, "flow_angle", "angle", preferences), preferences.angle),
+    ):
+        flow.add_trace(go.Scatter(x=x, y=values, name=title), row=1, col=column)
+        flow.update_yaxes(title_text=title, row=1, col=column)
+    flow.update_xaxes(title_text=x_title)
+    figures = {
+        "形状と衝撃波": _style(shape, "形状と衝撃波"),
+        "表面圧": _style(pressure, "表面圧"),
+        "Mach・温度・流れ角": _style(flow, "Mach・温度・流れ角"),
+    }
+    if characteristic_net is not None:
+        figures["特性曲線網"] = _body_flow_net_figure(
+            shape,
+            characteristic_net,
+            preferences,
+            net_coloring,
+            freestream_pressure,
+            0.5 * heat_capacity_ratio * freestream_pressure * freestream_mach**2,
+        )
+    return figures
+
+
+def _display_indices(count: int, limit: int) -> np.ndarray:
+    """Evenly select lines or nodes, retaining both endpoints."""
+    return np.linspace(0, count - 1, min(count, limit), dtype=int)
+
+
+def _body_flow_net_figure(
+    shape: go.Figure,
+    net: CharacteristicNet,
+    preferences: UnitPreferences,
+    coloring: str,
+    pressure: float,
+    dynamic_pressure: float,
+) -> go.Figure:
+    """Render bounded traces while preserving the complete net for export."""
+    figure = go.Figure(shape)
+    selected = [net.rows[i] for i in _display_indices(len(net.rows), 150)]
+    minus = net.minus_characteristics()
+    selected_minus = [minus[i] for i in _display_indices(len(minus), 80)]
+    for name, color, lines in (
+        ("C+", "#0072B2", [(row.axial_distance, row.radius) for row in selected]),
+        ("C−", "#009E73", selected_minus),
+    ):
+        x: list[float | None] = []
+        r: list[float | None] = []
+        for xx, rr in lines:
+            x.extend(np.asarray(from_si(xx, "length", preferences.length)).tolist())
+            r.extend(np.asarray(from_si(rr, "length", preferences.length)).tolist())
+            x.append(None)
+            r.append(None)
+        figure.add_trace(
+            go.Scatter(
+                x=x, y=r, mode="lines", name=name, line={"color": color, "width": 1}
+            )
+        )
+    node_count = sum(len(row.radius) for row in selected)
+    if coloring != "none" and selected:
+        indices = _display_indices(node_count, 20000)
+        xx = np.concatenate([row.axial_distance for row in selected])[indices]
+        rr = np.concatenate([row.radius for row in selected])[indices]
+        values = np.concatenate(
+            [
+                row.mach
+                if coloring == "mach"
+                else (row.pressure - pressure) / dynamic_pressure
+                for row in selected
+            ]
+        )[indices]
+        label = "Mach" if coloring == "mach" else "Cp"
+        figure.add_trace(
+            go.Scattergl(
+                x=from_si(xx, "length", preferences.length),
+                y=from_si(rr, "length", preferences.length),
+                mode="markers",
+                name=label,
+                marker={
+                    "size": 3,
+                    "color": values,
+                    "colorscale": "Viridis",
+                    "showscale": True,
+                    "colorbar": {"title": label},
+                },
+            )
+        )
+    figure.update_layout(
+        meta={
+            "downsampled": len(selected) < len(net.rows)
+            or len(selected_minus) < len(minus)
+            or (coloring != "none" and node_count > 20000),
+            "plus_lines": len(selected),
+            "minus_lines": len(selected_minus),
+        }
+    )
+    return _style(figure, "特性曲線網")
