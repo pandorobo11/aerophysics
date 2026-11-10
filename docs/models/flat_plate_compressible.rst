@@ -153,7 +153,7 @@ constant along a plate with constant edge and wall conditions. The returned
 coefficients, ``wall_shear_stress``, and ``drag_per_unit_width`` therefore use
 the edge dynamic-pressure definitions given above
 (:ref:`White, 2006 <ref-white-2006>`). Laminar portions instead use the
-similarity solution described below and return the edge Reynolds number.
+similarity solution described above and return the edge Reynolds number.
 
 All three turbulent thicknesses are ``NaN`` with this model, also after a
 specified transition. Friction and drag are available.
@@ -334,11 +334,12 @@ pressure gradient. The main findings are:
 
    * - Compared with
      - Typical difference
-   * - CFD with the Spalart--Allmaras model
-     - Friction within about 2% and momentum thickness within about 3.5% on
-       average. :math:`\delta_{99}` within 2--3% RMS up to
-       :math:`Re_{x,e}\approx10^8`; the difference then drifts to about −10%
-       at :math:`10^9` on cold supersonic walls.
+   * - SU2 8.5.0 standard SA
+     - Mean friction and momentum-thickness differences within about 2% and
+       3.5% in the reported cases. :math:`\delta_{99}` RMS differences are
+       2.5% for the eight fitted conditions and 2.3% for the six held-out
+       conditions. Cold supersonic walls reach about −10% at
+       :math:`Re_{x,e}=10^9`.
    * - Low-speed measurements and DNS
      - :math:`\delta_{99}` too thick by 19% at :math:`Re_x=10^6`, 15% at
        :math:`10^7`, and 10% at :math:`10^8`. Most of this comes from the
@@ -347,11 +348,19 @@ pressure gradient. The main findings are:
      - Friction within 4%. :math:`\delta_{99}` within 5% up to Mach 6, but
        15% too thick at Mach 14.
 
+The SU2 averages are not bounds for individual stations or other SA
+implementations. Additional DNS-matched SU2 cases have :math:`\delta_{99}`
+RMS differences of 1.8--4.0%, and low-speed recovery-temperature walls differ
+by +9 to +11% at :math:`Re_x=10^6`. SU2's convection also differs from the
+published SA model; see :ref:`the comparison note <su2-sa-convection>`.
+
 These comparisons show where the model has been checked. They do not
 guarantee every combination of Mach number, wall temperature, and Reynolds
-number. On very cold walls at very high Reynolds number (for example Mach 10
-with :math:`T_w/T_{aw}=0.07` near :math:`Re_{x,e}\approx1.5\times10^9`), no
-admissible profile exists and the call raises ``ModelRangeError``.
+number. On very cold walls at very high Reynolds number, the wake bound can
+be exceeded and the call raises ``ModelRangeError``. For Mach 10 with
+:math:`T_w/T_{aw}=0.07`, extrapolation of the measured wake-parameter trend
+suggests this near :math:`Re_{x,e}\approx1.5\times10^9`; that value is not a
+verified threshold.
 
 The exponent 0.064 and the factor 0.978 were fitted to CFD results and are
 not universal constants. The full comparisons are in

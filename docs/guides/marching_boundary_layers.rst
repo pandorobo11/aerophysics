@@ -223,8 +223,9 @@ Notes on ``wall_radius``:
 * The radius is joined by straight lines between your positions, so give a
   curved body enough points.
 * The method assumes that the boundary layer is thin compared with the radius.
-  A warning appears when the thickness exceeds 10% of the radius. This always
-  happens close to a pointed tip and can be ignored there.
+  A warning appears when the thickness exceeds 10% of the radius. This is an
+  uncalibrated indicator, not an accuracy bound. It is common near a pointed
+  tip, but that does not make the thin-layer approximation valid there.
 
 Cone--cylinder: outer flow and boundary layer together
 ------------------------------------------------------
@@ -276,11 +277,12 @@ Limits of this method:
 * At the sharp corner between cone and cylinder, the pressure drops almost
   instantly. A real boundary layer changes the outer flow there, which this
   one-way calculation ignores. Expect a warning about the steep pressure
-  change, and do not rely on the results close to the corner. Farther
-  downstream, at a hundred or so boundary-layer thicknesses, the effect of the
-  corner treatment falls to about 0.1%.
+  change, and do not rely on the results close to the corner. Sensitivity to
+  the artificial ramp length must be checked for the case being calculated;
+  a small difference between ramp lengths does not establish physical accuracy.
 
-The details are in :doc:`../models/axisymmetric_characteristics`.
+The details and case-specific ramp-length comparisons are in
+:doc:`../models/axisymmetric_characteristics`.
 
 Warnings and errors
 -------------------

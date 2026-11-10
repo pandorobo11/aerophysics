@@ -127,8 +127,11 @@ Limits to keep in mind
 
 * These are estimates for the stagnation point or leading edge only. They do
   not give the heating over the rest of the body.
-* Air is treated as a gas with constant heat capacity. Above a stagnation
-  temperature of about 2000 K real air starts to break up into atoms, which
-  these methods do not model. The functions warn when this happens.
+* The gas properties assume constant heat capacity and do not calculate
+  dissociation. Fay--Riddell and the turbulent attachment-line function warn
+  above a stagnation temperature of 2000 K. This is the package's warning
+  threshold, not a universal temperature at which air breaks up into atoms.
+  The Tauber functions use different applicability checks; the absence of a
+  warning does not establish that perfect-gas properties are adequate.
 * Radiation from the hot gas, which matters at very high entry speeds, is not
   included.
