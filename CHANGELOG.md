@@ -12,6 +12,13 @@ uses Semantic Versioning, including during the pre-1.0 period.
   preserving default solver outputs. Add the GUI characteristic-net tab,
   Mach/Cp node coloring and full-node CSV export in display units.
 
+- Add the marching boundary-layer GUI page (境界層マーチング解析) for
+  `marching_boundary_layer`: laminar, SA-noft2 turbulent or prescribed
+  transition, adiabatic or isothermal wall, with the edge taken from a uniform
+  flat-plate/cone state, an `s,p[,r]` CSV, or the saved axisymmetric body-flow
+  case. It shows wall, thickness, edge and profile plots, keeps the stations
+  upstream of a separation, and supports CSV export and settings replay.
+
 - Add the single-point AIR axisymmetric body-flow GUI page with cone/ogive,
   cylinder/boattail or CSV geometry, fitted-shock and surface plots, Cp,
   atmosphere inputs, settings replay and session case saving.

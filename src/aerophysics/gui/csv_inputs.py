@@ -24,7 +24,9 @@ class ShapeCSV:
     width: np.ndarray
 
 
-def _columns(data: bytes | str, required: tuple[str, ...]) -> dict[str, np.ndarray]:
+def _columns(
+    data: bytes | str, required: tuple[str, ...], optional: tuple[str, ...] = ()
+) -> dict[str, np.ndarray]:
     try:
         text = (
             data.decode("utf-8-sig")
@@ -39,7 +41,10 @@ def _columns(data: bytes | str, required: tuple[str, ...]) -> dict[str, np.ndarr
             raise ValueError("CSV must contain at least two data rows")
         result = {
             name: np.asarray([float(row[name]) for row in rows], dtype=np.float64)
-            for name in required
+            for name in (
+                *required,
+                *(name for name in optional if name in reader.fieldnames),
+            )
         }
     except (UnicodeDecodeError, TypeError, ValueError) as error:
         if isinstance(error, ValueError) and str(error).startswith("CSV"):
@@ -123,3 +128,37 @@ def parse_meridian_csv(data: bytes | str, units: UnitPreferences) -> MeridianCSV
 def meridian_csv_template() -> str:
     """Return a cone-cylinder template in display length units with a BOM."""
     return "\ufeffx,r\n0,0\n0.3,0.05\n1.3,0.05\n"
+
+
+@dataclass(frozen=True, slots=True)
+class EdgeCSV:
+    """Boundary-layer edge pressure and optional wall radius in SI units."""
+
+    distance: np.ndarray
+    pressure: np.ndarray
+    radius: np.ndarray | None
+
+
+def parse_edge_csv(data: bytes | str, units: UnitPreferences) -> EdgeCSV:
+    """Parse s,p and an optional r column in display length and pressure units."""
+    values = _columns(data, ("s", "p"), ("r",))
+    distance = np.asarray(to_si(values["s"], "length", units.length), dtype=np.float64)
+    pressure = np.asarray(
+        to_si(values["p"], "pressure", units.pressure), dtype=np.float64
+    )
+    _wall_grid(distance, "s")
+    if np.any(pressure <= 0.0):
+        raise ValueError("p must be greater than zero")
+    radius = None
+    if "r" in values:
+        radius = np.asarray(
+            to_si(values["r"], "length", units.length), dtype=np.float64
+        )
+        if radius[0] < 0.0 or np.any(radius[1:] <= 0.0):
+            raise ValueError("r must be non-negative at s = 0 and positive after it")
+    return EdgeCSV(distance, pressure, radius)
+
+
+def edge_csv_template() -> str:
+    """Return a planar, mildly accelerating edge template in SI display units."""
+    return "\ufeffs,p\n0,10000\n0.25,9800\n0.5,9600\n0.75,9400\n1,9200\n"
