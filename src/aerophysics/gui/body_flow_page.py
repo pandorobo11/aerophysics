@@ -218,12 +218,26 @@ def render_axisymmetric_body(preferences: UnitPreferences) -> None:
             key="body_flow_template",
         )
         st.caption(
-            "x,r は表示長さ単位です。先頭は (0,0)、x は単調増加、以降の r は正。"
+            "x,r はアップロード時の表示長さ単位で読み込み、"
+            "その後に表示単位を変えても形状は変わりません。"
+            "先頭は (0,0)、x は単調増加、以降の r は正。"
             "凸性は計算時に検証します。"
         )
         try:
             if uploaded is not None:
-                meridian = parse_meridian_csv(uploaded.getvalue(), preferences)
+                # Interpret a file once, in the length unit active when it was
+                # uploaded; later display-unit changes must not rescale it.
+                cached = st.session_state.get("body_flow_meridian_upload_si")
+                if cached is not None and cached[0] == uploaded.file_id:
+                    meridian = MeridianCSV(np.asarray(cached[1]), np.asarray(cached[2]))
+                else:
+                    st.session_state.pop("body_flow_meridian_upload_si", None)
+                    meridian = parse_meridian_csv(uploaded.getvalue(), preferences)
+                    st.session_state["body_flow_meridian_upload_si"] = (
+                        uploaded.file_id,
+                        meridian.axial_distance.tolist(),
+                        meridian.radius.tolist(),
+                    )
                 inputs["meridian_x"] = meridian.axial_distance.tolist()
                 inputs["meridian_r"] = meridian.radius.tolist()
             elif inputs["meridian_x"] is not None and inputs["meridian_r"] is not None:

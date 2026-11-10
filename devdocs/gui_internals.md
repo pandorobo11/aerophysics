@@ -88,7 +88,9 @@ metres. Models are `geometry_source` (`parametric`/`csv`), `nose`
 (`cone`/`tangent_ogive`), boolean `boattail`, `freestream_basis`
 (`static`/`atmosphere`), `altitude_basis` (`geometric`/`geopotential`) and
 `pressure_quantity` (`cp`/`pressure_rise`). CSV settings embed SI vertices
-and can replay without an upload. Geometric/physical validity is checked at
+and can replay without an upload. An upload is parsed once per Streamlit
+`file_id` and its SI vertices are cached in `body_flow_meridian_upload_si`, so
+a display-unit change never reinterprets the same file in the new unit. Geometric/physical validity is checked at
 calculation time, including concavity in the solver. Tangent ogives require
 `base_radius <= nose_length` for the specified circle parameterization.
 
