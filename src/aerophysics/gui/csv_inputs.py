@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from aerophysics.gui.units import UnitPreferences, to_si
+from aerophysics.gui.units import UnitPreferences, from_si, to_si
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +159,24 @@ def parse_edge_csv(data: bytes | str, units: UnitPreferences) -> EdgeCSV:
     return EdgeCSV(distance, pressure, radius)
 
 
-def edge_csv_template() -> str:
-    """Return a planar, mildly accelerating edge template in SI display units."""
-    return "\ufeffs,p\n0,10000\n0.25,9800\n0.5,9600\n0.75,9400\n1,9200\n"
+_EDGE_TEMPLATE_SI = (
+    (0.0, 10000.0),
+    (0.25, 9800.0),
+    (0.5, 9600.0),
+    (0.75, 9400.0),
+    (1.0, 9200.0),
+)
+
+
+def edge_csv_template(units: UnitPreferences) -> str:
+    """Return a planar, mildly accelerating edge template in display units.
+
+    The values are written in ``units`` because :func:`parse_edge_csv` reads
+    an upload in the display units active when it arrives.
+    """
+    lines = (
+        f"{float(from_si(s, 'length', units.length)):.12g},"
+        f"{float(from_si(p, 'pressure', units.pressure)):.12g}"
+        for s, p in _EDGE_TEMPLATE_SI
+    )
+    return "\ufeffs,p\n" + "".join(f"{line}\n" for line in lines)

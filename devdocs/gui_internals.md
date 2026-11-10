@@ -164,8 +164,10 @@ selected.
 
 CSV and body-case edges are embedded as SI arrays, so settings replay without
 an upload or a saved case. An upload is parsed once per Streamlit `file_id`
-and cached in `march_bl_edge_upload_si`. Selecting another edge source drops
-the embedded arrays. For the body source the session's
+and cached in `march_bl_edge_upload_si`; removing the upload drops that cache
+and the arrays it supplied, while arrays from an imported settings file (which
+leave no cache) stay in use. `edge_csv_template` writes the template in the
+current display units. Selecting another edge source drops the embedded arrays. For the body source the session's
 `current_axisymmetric_body_case` is converted on every rerun, except after a
 settings import: `march_bl_keep_embedded` then keeps the loaded arrays until
 the user presses the switch button, which is rendered only when both exist.

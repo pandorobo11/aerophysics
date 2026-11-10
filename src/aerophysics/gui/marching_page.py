@@ -267,7 +267,7 @@ def render_marching_boundary_layer(preferences: UnitPreferences) -> None:
         )
         right.download_button(
             "エッジ圧力CSVテンプレート",
-            edge_csv_template(),
+            edge_csv_template(preferences),
             "aerophysics-boundary-layer-edge.csv",
             "text/csv",
             key="march_bl_template",
@@ -300,6 +300,10 @@ def render_marching_boundary_layer(preferences: UnitPreferences) -> None:
                 inputs["edge_distance"] = cached[1]
                 inputs["edge_pressure"] = cached[2]
                 inputs["edge_radius"] = cached[3]
+            elif st.session_state.pop("march_bl_edge_upload_si", None) is not None:
+                # The upload was removed, so its arrays must not stay in use.
+                inputs["edge_distance"] = inputs["edge_pressure"] = None
+                inputs["edge_radius"] = None
             elif inputs["edge_distance"] is not None:
                 st.caption("設定JSONに保存されたエッジ分布を使用します。")
             definition = _embedded_edge(inputs)

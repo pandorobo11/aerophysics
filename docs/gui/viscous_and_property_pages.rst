@@ -99,7 +99,9 @@ The solver does not compute the outer flow. Choose the edge under
   is positive and below the entered edge total pressure, and ``r`` may be zero
   only at ``s = 0``. The total pressure (the post-shock value behind a shock)
   and total temperature are entered separately. A file is read once, in the
-  length and pressure units selected when it is uploaded. Output stations are
+  length and pressure units selected when it is uploaded; the downloadable
+  template is written in those units. Removing the uploaded file also removes
+  its edge, so a calculation then needs a new upload. Output stations are
   the CSV rows after the first. The solver follows a monotone interpolation of
   the pressure, so resolve pressure changes with enough rows.
 * **保存した軸対称物体流れケース** uses the case saved on the

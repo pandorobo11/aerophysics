@@ -311,10 +311,16 @@ def test_body_case_edge_matches_boundary_layer_inputs() -> None:
 
 def test_edge_csv_parsing() -> None:
     units = UnitPreferences(length="mm", pressure="kPa")
-    planar = parse_edge_csv(edge_csv_template(), UnitPreferences())
+    planar = parse_edge_csv(edge_csv_template(UnitPreferences()), UnitPreferences())
     assert planar.radius is None
     np.testing.assert_array_equal(planar.distance, [0, 0.25, 0.5, 0.75, 1])
     np.testing.assert_array_equal(planar.pressure, [10000, 9800, 9600, 9400, 9200])
+    # The template is written in the display units the upload is read in.
+    for display in (units, UnitPreferences(length="ft", pressure="psi")):
+        converted = parse_edge_csv(edge_csv_template(display), display)
+        np.testing.assert_allclose(converted.distance, planar.distance, rtol=1e-11)
+        np.testing.assert_allclose(converted.pressure, planar.pressure, rtol=1e-11)
+    assert "\n0,10\n250,9.8\n" in edge_csv_template(units)
     body = parse_edge_csv(b"s,p,r,note\n0,10,0,a\n500,9,50,b\n", units)
     np.testing.assert_allclose(body.distance, [0, 0.5])
     np.testing.assert_allclose(body.pressure, [10000, 9000])
@@ -504,11 +510,14 @@ def test_page_cone_isothermal_transitional() -> None:
     assert draft["wall_temperature"] is None and draft["cone_half_angle"] is None
 
 
-def _upload(app: AppTest, name: str, data: bytes) -> None:
-    uploader: Any = next(
+def _uploader(app: AppTest) -> Any:
+    return next(
         item for item in app.get("file_uploader") if item.key == "march_bl_edge_upload"
     )
-    uploader.upload(name, data, "text/csv").run()
+
+
+def _upload(app: AppTest, name: str, data: bytes) -> None:
+    _uploader(app).upload(name, data, "text/csv").run()
 
 
 def test_page_csv_upload_keeps_si_values_across_unit_changes() -> None:
@@ -519,7 +528,7 @@ def test_page_csv_upload_keeps_si_values_across_unit_changes() -> None:
     )
     app.button(key="march_bl_calculate").click().run()
     assert "エッジ圧力CSVを選択してください" in app.error[0].value
-    _upload(app, "edge.csv", edge_csv_template().encode("utf-8"))
+    _upload(app, "edge.csv", edge_csv_template(UnitPreferences()).encode("utf-8"))
     app.button(key="march_bl_calculate").click().run()
     assert not app.exception and not app.error and not app.warning
     payload = app.session_state["march_bl_payload"]
@@ -551,6 +560,16 @@ def test_page_csv_upload_keeps_si_values_across_unit_changes() -> None:
     assert not app.exception
     assert "p must be greater than zero" in app.error[0].value
     assert "march_bl_payload" not in app.session_state
+    # Removing an upload drops its arrays instead of reusing them silently.
+    _upload(app, "edge.csv", edge_csv_template(UnitPreferences()).encode("utf-8"))
+    assert app.session_state["march_bl_draft"]["inputs_si"]["edge_distance"]
+    _uploader(app).set_value(None).run()
+    assert not app.exception
+    assert app.session_state["march_bl_draft"]["inputs_si"]["edge_distance"] is None
+    assert "march_bl_edge_upload_si" not in app.session_state
+    assert not any("設定JSON" in item.value for item in app.caption)
+    app.button(key="march_bl_calculate").click().run()
+    assert "エッジ圧力CSVを選択してください" in app.error[0].value
     # Arrays of one source are dropped when another source is selected.
     replay = _app()
     replay.session_state[_PENDING] = load_configuration(
