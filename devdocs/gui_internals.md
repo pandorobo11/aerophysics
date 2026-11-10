@@ -107,7 +107,7 @@ raw result only after an explicit save; this change adds no consumer.
 The adapter requests `include_characteristic_net=True` and retains it in
 `raw`; no solver invocation occurs on pressure, coloring or unit changes.
 The fourth figure tab uses one `None`-separated trace per characteristic
-family (C+ blue, C- orange), capped at 150 rows and 80 C- polylines by evenly
+family (C+ blue, C- green; body and shock follow the cone-shock styling), capped at 150 rows and 80 C- polylines by evenly
 spaced indices including the endpoints. `layout.meta.downsampled` drives the
 page caption. Optional `Scattergl` markers sample at most 20,000 nodes from
 the displayed rows. Cp uses the saved calculation's freestream, even when

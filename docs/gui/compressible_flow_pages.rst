@@ -173,8 +173,10 @@ shown in the selected angle unit). For refinement, double the count and
 halve the increment. Long bodies with coarse fans can fail and require a
 smaller increment; failures retain the solver's location-bearing message.
 
-**形状と衝撃波** plots the body meridian and fitted shock at equal length
-scales. **表面圧** defaults to the pressure coefficient
+**形状と衝撃波** draws the body section at equal length scales, in the same
+style as the oblique- and conical-shock pages: the grey body is the meridian
+mirrored about the dashed axis (closing at the flat base), and the red line is
+the fitted shock, shown above the axis only. **表面圧** defaults to the pressure coefficient
 
 .. math::
 
@@ -191,8 +193,8 @@ and CSV give shock ``x_s``, ``r_s`` and angle ``β``. Metrics show tip surface
 ``p/p∞`` (the cone-surface limit), tip shock angle, post-shock body-streamline
 total pressure, uniform total temperature, minimum Cp and body-end Cp.
 
-The fourth tab, **特性曲線網**, draws the body and fitted shock with C+ rows
-and reconstructed C- lines in distinct colors, with equal axes in display
+The fourth tab, **特性曲線網**, draws the same body section and fitted shock with
+C+ rows (blue) and reconstructed C- lines (green) above the axis, with equal axes in display
 length units. The GUI requests the optional net automatically. At most 150
 C+ rows and 80 C- lines are evenly selected for display, retaining the first
 and last of each family; a caption reports downsampling. **特性曲線網の節点色**

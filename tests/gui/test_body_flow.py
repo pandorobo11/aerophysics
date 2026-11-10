@@ -292,6 +292,11 @@ def test_figures_tables_and_display_units(calculation: BodyFlowCalculation) -> N
     assert shocks[0]["衝撃波角 β [rad]"] == calculation.raw.shock_angle[0]
     figures = body_flow_figures(calculation.surface.rows, calculation.shock_rows, units)
     assert figures["形状と衝撃波"].layout.yaxis.scaleanchor == "x"
+    body, shock = figures["形状と衝撃波"].data
+    assert body.fill == "toself" and shock.name == "衝撃波"
+    radius = np.array([r["radius"] for r in calculation.surface.rows]) / 0.3048
+    np.testing.assert_array_equal(body.y, np.concatenate((radius, -radius[::-1])))
+    assert figures["形状と衝撃波"].layout.shapes[0].line.dash == "dash"
     np.testing.assert_array_equal(
         figures["表面圧"].data[0].y, [r["cp"] for r in calculation.surface.rows]
     )

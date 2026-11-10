@@ -1738,18 +1738,40 @@ def body_flow_figures(
     """Plot the meridian, fitted shock and surface quantities in display units."""
     x = _converted(rows, "axial_distance", "length", preferences)
     x_title = f"軸方向距離 x [{preferences.length}]"
+    radius = _converted(rows, "radius", "length", preferences)
     shape = go.Figure()
+    # Mirror the meridian into a filled section, as on the cone-shock page;
+    # closing the polygon draws the flat base between r and -r.
     shape.add_trace(
         go.Scatter(
-            x=x, y=_converted(rows, "radius", "length", preferences), name="物体母線"
+            x=np.concatenate((x, x[::-1])),
+            y=np.concatenate((radius, -radius[::-1])),
+            mode="lines",
+            line={"width": 3, "color": "#555"},
+            fill="toself",
+            fillcolor="#e2e8f0",
+            name="機体（断面）",
+            hoverinfo="name",
         )
     )
     shape.add_trace(
         go.Scatter(
             x=_converted(shock_rows, "shock_axial_distance", "length", preferences),
             y=_converted(shock_rows, "shock_radius", "length", preferences),
+            mode="lines",
+            line={"width": 3, "color": "#d62728"},
             name="衝撃波",
         )
+    )
+    shape.add_shape(
+        type="line",
+        xref="paper",
+        x0=0.0,
+        x1=1.0,
+        y0=0.0,
+        y1=0.0,
+        line={"color": "#94a3b8", "width": 1.5, "dash": "dash"},
+        layer="below",
     )
     shape.update_xaxes(title_text=x_title)
     shape.update_yaxes(
@@ -1813,7 +1835,7 @@ def _body_flow_net_figure(
     selected_minus = [minus[i] for i in _display_indices(len(minus), 80)]
     for name, color, lines in (
         ("C+", "#0072B2", [(row.axial_distance, row.radius) for row in selected]),
-        ("C−", "#D55E00", selected_minus),
+        ("C−", "#009E73", selected_minus),
     ):
         x: list[float | None] = []
         r: list[float | None] = []
