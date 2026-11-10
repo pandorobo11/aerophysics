@@ -16,6 +16,7 @@ uses Semantic Versioning, including during the pre-1.0 period.
   cylinder/boattail or CSV geometry, fitted-shock and surface plots, Cp,
   atmosphere inputs, settings replay and session case saving.
 
+
 - Add `transition_distance` to `marching_boundary_layer` with
   `regime=TRANSITIONAL` for a user-specified transition position.
   The resulting SA-noft2 transition length is not a physical prediction.
@@ -81,6 +82,25 @@ uses Semantic Versioning, including during the pre-1.0 period.
   boundary-layer profile page.
 
 ### Changed
+
+- Reorganize the user manual around how the package is used. The guides are
+  rewritten in plainer language, with new guides for gas properties,
+  aerodynamic heating, and boundary layers under a changing outer flow
+  (including the cone--cylinder method), and the quickstart now also shows a
+  shock and a boundary-layer calculation. GUI notes for the flight-condition,
+  sequential-flow, and flat-plate pages are collected in the GUI manual.
+  Solver algorithms, grid and tolerance details, refinement measurements, and
+  legacy settings conversion move from the manual to `devdocs/`; the R&M 3633
+  comparison moves to the verification appendix. The GUI documentation page
+  lists the user guide and the marching boundary-layer and axisymmetric
+  characteristics pages. No calculation changes.
+- Split the flat-plate boundary-layer model page into an overview and pages
+  for low-speed correlations, specified transition, high-speed models, and
+  heat transfer and profiles. Its CFD, DNS, and measurement comparisons move
+  to a new verification page, and solver details move to `devdocs/`. The
+  velocity-transformation page now presents the implemented tools first and
+  the literature survey as background. The other model pages link to their
+  guides and use plainer wording.
 
 - Use an analytic Jacobian for the SA-noft2 station solve with the built-in
   Sutherland and Keyes viscosity models. SA marches run about 1.5 to 2.2 times

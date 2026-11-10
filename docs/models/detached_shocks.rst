@@ -5,6 +5,7 @@ Detached shocks
 
 Lengths are in metres and Mach number is the free-stream value. The physical
 meaning of a shock is explained in :doc:`shock_waves`.
+For worked examples, see :doc:`../guides/compressible_flow`.
 
 Physical background
 -------------------
@@ -78,8 +79,9 @@ The origin is the centre of nose curvature, positive :math:`x` points
 upstream, the body vertex is at :math:`x=R_n`, and the shock vertex is at
 :math:`x=R_n+\Delta`. The shape always uses the Ambrosio--Wortman value of
 :math:`\Delta`, even when a Seiff estimate is also displayed. The transverse
-coordinate :math:`y` is a one-dimensional array and is appended as the last
-output axis, so broadcast Mach and radius cases keep their own axes. Close to
+coordinate :math:`y` is a one-dimensional array. When the Mach number or
+radius is an array as well, the shock coordinates have one extra, last axis
+for :math:`y`. Close to
 :math:`M=1` the fitted curvature grows without bound. Inputs that would give
 non-finite coordinates raise :class:`ValueError`.
 

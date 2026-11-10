@@ -3,8 +3,8 @@ Transport properties
 
 The :mod:`aerophysics.transport` module provides interchangeable,
 temperature-dependent dynamic-viscosity models. All models accept temperature
-in kelvin and return dynamic viscosity in Pa s. Scalar input returns a Python
-``float`` and array-like input returns a float64 NumPy array.
+in kelvin and return dynamic viscosity in Pa s. The temperature may be a
+single number or an array. For worked examples, see :doc:`../guides/gas_properties`.
 
 Physical background
 -------------------

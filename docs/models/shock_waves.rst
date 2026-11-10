@@ -5,8 +5,7 @@ This page explains what a shock wave is and the conservation laws behind all
 shock models. The equations for each kind of shock are on the following
 pages. State ratios are downstream over upstream, and angles are in radians.
 Convert explicitly with :func:`aerophysics.units.degrees_to_radians` and
-:func:`aerophysics.units.radians_to_degrees`. For task-oriented examples, see
-:doc:`../guides/compressible_flow`.
+:func:`aerophysics.units.radians_to_degrees`. For worked examples, see :doc:`../guides/compressible_flow`.
 
 Physical background
 -------------------

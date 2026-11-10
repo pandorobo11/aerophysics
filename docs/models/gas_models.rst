@@ -6,7 +6,7 @@ entropy, and speed of sound used by the flow calculations. This page
 describes every gas model in the package, from constant-property air to a
 dense-gas equation of state. See :doc:`transport_properties` for viscosity
 and conductivity, and :doc:`../getting_started/conventions` for which
-calculations accept each model.
+calculations accept each model. For worked examples, see :doc:`../guides/gas_properties`.
 
 Physical background
 -------------------

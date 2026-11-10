@@ -1,121 +1,206 @@
-Sequential flow transformations
-===============================
+Several waves in a row
+======================
 
-Many practical flows pass through several waves in a row. A supersonic inlet,
-for example, may compress the air with one or more oblique shocks, turn it
-with an expansion, and finish with a normal shock. The **連続流れ計算**
-(sequential flow) GUI page and :mod:`aerophysics.flow_sequence` model such a
-path by applying the single-wave models one after another. The exit state of
-each stage becomes the inlet state of the next.
+Many practical flows pass through several waves, one after another. A
+supersonic inlet, for example, may compress the air with one or two oblique
+shocks, turn it through an expansion, and finish with a normal shock.
 
-In the GUI, select the gas, enter the initial condition, add stages, and press
-**計算** (calculate). Stages can be named, duplicated, deleted, and moved up or
-down. Results include the initial state and the exit of each stage, a stage
-plot, an SI CSV export, and a settings JSON file that reproduces the case.
-Changing an input marks the previous result as out of date until you
-calculate again.
+:mod:`aerophysics.flow_sequence` calculates such a path. You describe the
+starting flow and a list of stages. Each stage uses the single-wave model from
+:doc:`compressible_flow`, and the flow leaving one stage enters the next. The
+GUI offers the same calculation on its **連続流れ計算** (sequential flow) page;
+see :doc:`../gui/flight_and_sequence_pages`.
 
-Python example
---------------
+A first example
+---------------
 
-.. code-block:: python
+This inlet flies at Mach 3 at 10 km. It has an 8° compression ramp, a 3°
+expansion corner, and a normal shock at the end:
 
-   from math import radians
-   from aerophysics.flow_sequence import (
-       FlowState, ObliqueShockStep, ExpansionStep, NormalShockStep,
-       solve_flow_sequence,
-   )
+>>> from math import radians
+>>> from aerophysics.flow_sequence import (
+...     ExpansionStep,
+...     FlowState,
+...     NormalShockStep,
+...     ObliqueShockStep,
+...     solve_flow_sequence,
+... )
+>>> inlet = FlowState.from_atmosphere(10_000.0, mach=3.0)
+>>> result = solve_flow_sequence(
+...     inlet,
+...     [
+...         ObliqueShockStep(radians(8.0), name="Compression ramp"),
+...         ExpansionStep(radians(3.0), name="Expansion corner"),
+...         NormalShockStep(name="Terminal shock"),
+...     ],
+... )
+>>> result.complete
+True
+>>> for stage in result.steps:
+...     print(
+...         stage.step.name,
+...         round(stage.properties.state.mach, 4),
+...         round(stage.total_pressure_recovery, 4),
+...     )
+Compression ramp 2.6031 0.9799
+Expansion corner 2.7402 0.9799
+Terminal shock 0.4925 0.4014
 
-   inlet = FlowState.from_atmosphere(10_000.0, mach=3.0)
-   result = solve_flow_sequence(inlet, [
-       ObliqueShockStep(radians(8), name="Compression ramp"),
-       ExpansionStep(radians(3), name="Expansion corner"),
-       NormalShockStep(name="Terminal shock"),
-   ])
-   assert result.complete
-   for stage in result.steps:
-       print(stage.step.name, stage.properties.state)
-       print(stage.total_pressure_recovery, stage.entropy_change)
+The last column shows that about 40% of the free-stream total pressure is left
+after the normal shock.
 
-Initial conditions and units
-----------------------------
+The starting flow
+-----------------
 
-``FlowState(pressure, temperature, mach)`` uses static pressure [Pa], static
-absolute temperature [K], and non-negative Mach. ``from_velocity`` accepts a
-speed magnitude [m/s] and gas; ``from_total`` accepts stagnation pressure,
-stagnation temperature, Mach, and gas. Pass the same gas to initialization
-and ``solve_flow_sequence``. ``from_atmosphere`` uses geometric altitude [m]
-from -5000 to 86000 m and returns US Standard Atmosphere 1976 static p,T.
-The GUI additionally accepts altitude and speed. For standard-atmosphere
-initialization, altitude can be entered as geometric or geopotential altitude;
-the selected coordinate is stored with the settings, while the Python API
-continues to use geometric altitude. Standard-atmosphere p,T are initialization
-data; density and sound speed use the selected gas model.
+A :class:`~aerophysics.flow_sequence.FlowState` holds the static pressure in
+Pa, the static temperature in K, and the Mach number. Create it in whichever
+way suits your data:
 
-The API uses radians. GUI input and output honor the sidebar display units;
-CSV and plots use SI. Flow speed is a magnitude, not a global direction.
-Angles are non-negative local compression/expansion or cone half-angles.
-The sequence does not track signed turns or global coordinates.
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
 
-Stages and model boundaries
----------------------------
+   * - You know
+     - Use
+   * - Static pressure, static temperature, and Mach number
+     - ``FlowState(pressure, temperature, mach)``
+   * - Static pressure, static temperature, and speed
+     - ``FlowState.from_velocity(...)``
+   * - Total pressure, total temperature, and Mach number
+     - ``FlowState.from_total(...)``
+   * - Altitude and Mach number
+     - ``FlowState.from_atmosphere(geometric_altitude, mach)``
 
-* ``NormalShockStep()`` applies the normal-shock equations.
-* ``ObliqueShockStep(angle, branch)`` selects the weak (default) or strong
-  attached solution.
-* ``ConicalShockStep(angle)`` selects the weak attached Taylor--Maccoll
-  solution and hands the **cone surface state** to the next stage. The
-  immediate post-shock Mach and shock angle are also reported.
-* ``ExpansionStep(angle)`` applies a centered Prandtl--Meyer expansion.
-* ``IsentropicStep(value, basis, branch)`` specifies exit Mach, static
-  pressure ratio ``p2/p1``, or area ratio ``A2/A1``. Area input requires an
-  explicit ``MachBranch.SUBSONIC`` or ``MachBranch.SUPERSONIC`` exit branch.
-  It computes ``A2/A* = (A2/A1)(A1/A*)`` at fixed total conditions and mass
-  flow. An area smaller than the sonic throat area fails, and an inlet at
-  rest cannot define a finite area ratio. Switching between subsonic and
-  supersonic assumes a throat in between; its geometry is not calculated.
+``from_atmosphere`` takes the pressure and temperature from the U.S. Standard
+Atmosphere 1976 between -5 km and 86 km.
 
-The gas and composition remain fixed. The supported models are
-``PerfectGas``, ``ThermallyPerfectGas`` (including NASA7/NASA9 air), and
-``HarmonicOscillatorGas``. Thermal models use local heat capacity and
-enthalpy within their temperature limits, without extrapolation.
+The stages
+----------
 
-Chemical reactions, dissociation, heat addition, friction, flow separation,
-wave interactions, duct startability and geometric realizability are outside
-this calculation. In particular, chaining cone and planar stages is a local
-state approximation, not a solution of a combined axisymmetric flow field.
-See :doc:`../models/index` for each underlying model's sources and limits.
+.. list-table::
+   :header-rows: 1
+   :widths: 38 62
 
-Results and failures
---------------------
+   * - Stage
+     - What it does
+   * - ``NormalShockStep()``
+     - A normal shock.
+   * - ``ObliqueShockStep(angle)``
+     - An oblique shock that turns the flow by ``angle``. The weak solution is
+       used unless you pass ``branch=ShockBranch.STRONG``.
+   * - ``ConicalShockStep(angle)``
+     - A shock on a cone with half-angle ``angle``. The next stage starts from
+       the flow on the cone surface.
+   * - ``ExpansionStep(angle)``
+     - A Prandtl--Meyer expansion that turns the flow by ``angle``.
+   * - ``IsentropicStep(value, basis)``
+     - A smooth change without losses, as in a nozzle or diffuser. ``value`` is
+       the exit Mach number (``basis="mach"``, the default), the pressure ratio
+       :math:`p_2/p_1` (``"pressure_ratio"``), or the area ratio
+       :math:`A_2/A_1` (``"area_ratio"``).
 
-Each successful stage supplies static p,T,M, density, velocity, sound speed,
-dynamic pressure, mass flux, total enthalpy, total temperature and total
-pressure. Pressure and temperature ratios refer to the immediately preceding
-state; total-pressure recovery and entropy increase [J/(kg K)] refer to the
-initial state. No cross-sectional area is specified, so mass flow is not
-reported. Enthalpy uses the selected model's reference convention; compare
-its conservation within the same model rather than across models.
+Angles are in radians and are never negative: a shock stage always compresses
+and an expansion stage always expands. The calculation follows only the state
+of the gas. It does not keep track of the direction of the flow or the shape of
+the duct.
 
-If stagnation temperature alone exceeds a thermal model's range, static
-properties remain available, while total pressure and temperature become
-``None`` with a warning. Recovery and entropy still follow the stage losses.
-An isentropic stage currently requires in-range stagnation conditions.
+With ``basis="area_ratio"``, also pass ``branch=MachBranch.SUBSONIC`` or
+``MachBranch.SUPERSONIC`` to say which exit flow you want. Going from subsonic
+to supersonic, or back, assumes that a throat lies between the two stations.
+The stage fails if the exit area is smaller than the throat that the flow
+needs.
 
-Invalid initial conditions raise an exception. A failed stage is classified
-as ``invalid_input``, ``out_of_range``, ``detached``, or ``convergence_error``;
-its message is retained. Earlier valid states remain, later stages have
-``not_computed`` status, and ``result.complete`` is false. An empty sequence
-returns just the initialized state. Missing values never imply a successful
-calculation.
+Every stage accepts a ``name``, which is used only to label the results.
 
-Verification
-------------
+Reading the results
+-------------------
 
-The tests compare each stage with the corresponding single-wave API and with
-closed-form constant-gamma results. They also check conservation of mass,
-momentum, and total enthalpy, entropy rise across shocks, constant total
-pressure in isentropic stages, range limits, failure handling, and settings
-replay. These checks confirm that the existing models are chained correctly.
-They are not a CFD or experimental validation of a particular inlet or
-nozzle.
+``result.initial`` describes the starting flow, and ``result.steps`` holds one
+entry per stage. For each stage:
+
+* ``properties`` holds the flow leaving the stage: ``state`` (static pressure,
+  temperature, and Mach number), density, velocity, speed of sound, dynamic
+  pressure, mass flux, total enthalpy, total temperature, and total pressure.
+  The mass flux is per unit area. No duct area is given, so a mass flow is not
+  reported.
+* ``pressure_ratio`` and ``temperature_ratio`` compare the stage's exit with
+  its own inlet.
+* ``total_pressure_recovery`` and ``entropy_change`` (in J/(kg K)) compare the
+  stage's exit with the **starting** flow, so they accumulate along the
+  sequence.
+* Shock stages also report ``shock_angle``. A conical stage reports
+  ``post_shock_mach``, the Mach number just behind the shock, in addition to
+  the surface state.
+
+When a stage cannot be calculated
+---------------------------------
+
+A stage can fail, for example because the turn angle is too large for an
+attached shock. The calculation then stops at that stage, but it does not raise
+an exception. Check ``result.complete`` and each stage's ``status``:
+
+>>> failed = solve_flow_sequence(
+...     inlet, [ObliqueShockStep(radians(40.0)), NormalShockStep()]
+... )
+>>> failed.complete
+False
+>>> [stage.status for stage in failed.steps]
+['detached', 'not_computed']
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Status
+     - Meaning
+   * - ``ok``
+     - The stage was calculated.
+   * - ``invalid_input``
+     - The stage cannot apply to its inlet flow, for example a shock in
+       subsonic flow.
+   * - ``out_of_range``
+     - A temperature left the range of the gas model.
+   * - ``detached``
+     - The wedge or cone angle is too large for an attached shock.
+   * - ``convergence_error``
+     - The numerical solution did not converge.
+   * - ``not_computed``
+     - An earlier stage failed, so this one was skipped.
+
+A failed stage keeps an explanation in ``message``, and the stages before it
+keep their results. An invalid starting flow, such as a negative pressure,
+does raise an exception.
+
+Hot flows
+---------
+
+Pass a gas model as the third argument to ``solve_flow_sequence`` to let the
+heat capacity change with temperature. ``AIR``, ``AIR_NASA7``, ``AIR_NASA9``,
+and ``AIR_HARMONIC_OSCILLATOR`` are accepted. If you built the starting flow
+with ``from_velocity`` or ``from_total``, give the same gas there.
+
+With these models, the total temperature of a fast flow can lie above the
+model's range even though the static temperature is inside it. The static
+results are then still calculated, and ``total_temperature`` and
+``total_pressure`` are ``None`` with a note in ``properties.warning``. An
+``IsentropicStep`` needs the total conditions and fails in this situation.
+
+What the calculation leaves out
+-------------------------------
+
+The sequence applies one ideal wave after another. It does not include:
+
+* friction, heat addition, or flow separation;
+* interactions between waves, such as a shock reflecting from a wall or meeting
+  another shock;
+* chemical reactions or changes in the composition of the gas;
+* whether the duct can actually start or hold the flow you describe.
+
+A cone followed by a wedge or a corner is therefore only a rough estimate. The
+real flow around such a shape is axisymmetric throughout. For a cone followed
+by a cylinder, :doc:`marching_boundary_layers` shows a more complete method.
+
+The package's tests check each stage against the single-wave functions and
+check that mass, momentum, and energy are conserved. They confirm that the
+stages are combined correctly, not that the result matches a particular inlet
+or nozzle.

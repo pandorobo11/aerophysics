@@ -3,7 +3,7 @@ Normal and oblique shocks
 
 State ratios are downstream over upstream, and angles are in radians. The
 conservation laws and the physical meaning of a shock are explained in
-:doc:`shock_waves`.
+:doc:`shock_waves`. For worked examples, see :doc:`../guides/compressible_flow`.
 
 Normal shocks
 -------------
@@ -156,7 +156,7 @@ Pass a :class:`~aerophysics.thermochemistry.ThermallyPerfectGas` (including
 ``upstream_temperature`` as the upstream **static** temperature in kelvin.
 Temperature is needed because the ratios now depend on the actual
 temperature, not on Mach number alone. Mach number, angle, and temperature
-broadcast together. Without a gas argument, the constant-:math:`\gamma`
+may each be a single number or an array. Without a gas argument, the constant-:math:`\gamma`
 ``AIR`` model is used.
 
 The model assumes steady, inviscid, adiabatic, two-dimensional ideal-gas

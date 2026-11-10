@@ -10,7 +10,7 @@ layer. The Poll correlation for the swept-cylinder attachment line assumes a
 fully turbulent boundary layer; see
 :ref:`aerodynamic-heating-turbulent-attachment-line`. All use SI units. Heat flux :math:`q_w` is in W/m² and is positive
 into the wall; a wall hotter than the gas gives a negative value. Enthalpies
-are in J/kg, and angles are in radians.
+are in J/kg, and angles are in radians. For worked examples, see :doc:`../guides/aerodynamic_heating`.
 
 Physical background
 -------------------
@@ -309,36 +309,20 @@ or of CR-181893. On this database, Bénard et al. report a standard deviation
 of 26.7% for Poll's reference-temperature method. Being within the ranges
 is not an accuracy guarantee.
 
-A separate warning above :math:`T_0=2000` K is an implementation-policy
-threshold, shared with the existing Fay--Riddell implementation, rather
-than a literature database limit. Perfect-gas properties omit dissociation;
+A separate warning above :math:`T_0=2000` K is this package's own threshold,
+shared with the Fay--Riddell model, rather than a limit of the database. Perfect-gas properties omit dissociation;
 a numerical prediction at high Mach number is not validation of
 high-enthalpy reacting flow. All quantities use SI units and radians.
 A wall hotter than :math:`T_{aw}` returns negative heat flux without clipping
 or an additional hot-wall warning. Applicability in that cooling direction
 is not established by the literature; the database-range warnings still apply.
 
-Comparison with :ref:`Poll (1981) <ref-poll-1981>` itself remains incomplete;
-identity with the original paper is not assumed. Bénard et al.'s separate
-correlation, equations (11)--(12), is **not implemented**: the ``e0`` subscript
-in its Stanton density :math:`\rho_{e0}` is undefined in the nomenclature,
-and the high-Reynolds-number Stanton plateau in figure 2, titled "Typical
-transition case", reads approximately :math:`St=2.0\times10^{-3}` at
-:math:`\overline R^*\approx330`--380. The figure conditions are
-:math:`\Lambda=60^\circ`, :math:`M_\infty=7.14`,
-:math:`T_w/T_0\approx0.38`, and :math:`M_e\approx3.28`.
-Evaluating equation (11) at :math:`\overline R^*=350`, assuming
-:math:`T_0=750` K within the paper's 650--800 K wind-tunnel range, and using
-this library's air viscosity model to convert from the :math:`T^*` to the
-:math:`\overline T` Reynolds-number basis, gives
-:math:`St\approx4.6\times10^{-3}` (about 2.3 times
-the figure reading). This is inconsistent with the reported 11.7% standard
-deviation. No inferred coefficient correction is used.
+The original :ref:`Poll (1981) <ref-poll-1981>` paper has not been compared
+directly, and the model has not been compared independently with experimental
+data. The separate correlation proposed by Bénard et al. is not implemented,
+because its published form could not be reconciled with the figure in the same
+paper.
 
-Tests verify analytical relations, algebraic equivalence with CR-181893
-(5.12), direct edge-state calculations, and numerical regression values.
-Independent comparison against experimental data has not yet been performed.
-The existing laminar APIs and their angle conventions are unchanged.
 The following example has :math:`T_0=1857.3` K and lies inside both database
 ranges, so it emits no applicability warning:
 

@@ -1,9 +1,10 @@
 Models and equations
 ====================
 
-Each page starts with a short physical background in plain language, then
-gives the equations, symbols, assumptions, ranges, and primary sources of the
-model. The pages are grouped in the same order as the GUI sidebar.
+These pages explain how each model works. Each one starts with a short
+physical background in plain language, then gives the equations, symbols,
+assumptions, ranges, and primary sources. For how to call the functions, see
+the :doc:`../guides/index`.
 
 **Gas properties and atmosphere**
 

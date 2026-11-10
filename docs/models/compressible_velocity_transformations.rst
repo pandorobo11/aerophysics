@@ -1,39 +1,27 @@
 .. _compressible-velocity-transformations:
 
-Compressible turbulent mean-velocity transformations
-=====================================================
+Compressible turbulent velocity profiles
+========================================
 
-Purpose and scope
------------------
+This page covers two related tools for turbulent boundary layers in
+high-speed flow:
 
-The transformations on this page map a known compressible turbulent mean
-velocity profile to coordinates in which it can be compared with an
-incompressible law of the wall.  They are useful for comparing experiments and
-simulations, assessing wall models, and constructing reduced-order models.
+* :func:`~aerophysics.boundary_layer_profile.transform_compressible_velocity_profile`
+  takes a velocity profile that you already have, from a measurement or a
+  simulation, and rescales it so that it can be compared with the well-known
+  low-speed "law of the wall".
+* :func:`~aerophysics.boundary_layer_profile.compressible_turbulent_boundary_layer_profile`
+  goes the other way. From the edge flow, the thickness, and the wall shear
+  stress, it builds a velocity and temperature profile for a smooth plate
+  without pressure gradient.
 
-They are not, by themselves, closed models that predict a dimensional velocity
-profile from edge Mach number and wall temperature.  A forward transformation
-requires profiles of velocity and thermodynamic properties.  An inverse
-prediction also requires an incompressible wall law or wall model, a
-temperature--velocity closure, property models, outer matching data, and a
-method for determining wall shear stress.
+Two transformations are implemented: **Van Driest** and **Volpiani**. Two
+others from the literature, Trettel--Larsson and Griffin--Fu--Moin, are
+described under `Background: other transformations`_ to help you judge the
+choice; they are not available in the package.
 
-This page describes four transformations so that they can be compared.
-**Only the Van Driest and Volpiani transformations are implemented** (see
-:ref:`implemented-velocity-transformations`). The Trettel--Larsson and
-Griffin--Fu--Moin sections are background for choosing a method and are not
-available in the API.
-
-The four transformations are primarily inner-layer models.  The
-library additionally provides one explicit engineering construction for a
-smooth zero-pressure-gradient (ZPG) boundary layer: a Spalding inner profile
-plus a Coles wake, coupled to the inverse Van Driest or Volpiani mapping.  It
-does not provide a laminar or transition model or a universal treatment of
-roughness, three-dimensionality, pressure gradients, separation, or
-thermochemical nonequilibrium.
-
-For a task-oriented path from a flat-plate estimate to a mean profile and
-protrusion-drag calculation, see :doc:`../guides/boundary_layers`.
+For worked examples that start from a flat-plate estimate, see
+:doc:`../guides/boundary_layers`.
 
 Why a transformation is needed
 ------------------------------
@@ -84,24 +72,6 @@ The overbar denotes a Reynolds average.  In a mean-profile data set,
 The edge Mach number is written :math:`M_e`; the symbol :math:`M` is not used
 for the viscosity ratio on this page.
 
-Three different uses of the Van Driest name
---------------------------------------------
-
-The following models are distinct and should not be interchanged:
-
-* The **Van Driest velocity transformation** from 1951 is the density-weighted
-  mean-velocity mapping described below.
-* The **Van Driest II transformation** maps compressible skin-friction and
-  momentum-thickness correlations.  The
-  :class:`~aerophysics.boundary_layer.TurbulentModel`\ ``.VAN_DRIEST_II``
-  option implements an engineering form of that skin-friction correction; it
-  does not return a transformed mean velocity profile. See :ref:`Hopkins and
-  Inouye (1971) <ref-hopkins-inouye-1971>` and :ref:`Hopkins (1972)
-  <ref-hopkins-1972>`.
-* The **Van Driest damping function** from 1956 modifies a near-wall
-  mixing-length or eddy-viscosity model.  It is neither of the two
-  transformations above.
-
 Van Driest transformation
 -------------------------
 
@@ -132,44 +102,6 @@ adiabatic or nearly adiabatic, approximately zero-pressure-gradient boundary
 layers.  Its density-only scaling is generally inaccurate for strong wall
 heating or cooling and is not a reliable general transformation for internal
 flows.  See :ref:`Van Driest (1951) <ref-van-driest-1951>`.
-
-Trettel--Larsson transformation
--------------------------------
-
-Trettel and Larsson combined semi-local scaling with near-wall momentum
-conservation.  The transformed wall distance is :math:`y^*`, and the velocity
-increment is
-
-.. math::
-
-   \mathrm{d}U_{TL}^+
-   = r_\mu\frac{\mathrm{d}y^*}{\mathrm{d}y^+}
-     \,\mathrm{d}\widetilde U^+.
-
-Expanding the coordinate derivative gives
-
-.. math::
-
-   \mathrm{d}U_{TL}^+
-   =
-   \sqrt{r_\rho}
-   \left[
-     1
-     + \frac{y^+}{2r_\rho}
-       \frac{\mathrm{d}r_\rho}{\mathrm{d}y^+}
-     - \frac{y^+}{r_\mu}
-       \frac{\mathrm{d}r_\mu}{\mathrm{d}y^+}
-   \right]
-   \mathrm{d}\widetilde U^+.
-
-The transformation therefore needs velocity, density, and viscosity profiles,
-as well as :math:`\tau_w`.  It recovers the asymptotically correct viscous
-sublayer behavior and has performed particularly well for compressible
-channel flows with substantial property variation.  Subsequent assessments
-show that, in boundary layers, small sustained errors in the transformed
-shear can accumulate into a shifted logarithmic-law intercept, especially
-with wall heat transfer.  See
-:ref:`Trettel and Larsson (2016) <ref-trettel-larsson-2016>`.
 
 Volpiani data-driven transformation
 -----------------------------------
@@ -203,155 +135,10 @@ additional high-Reynolds-number evaluation.  Later comparisons found degraded
 performance in some channel, pipe, and non-canonical flows.  See
 :ref:`Volpiani et al. (2020) <ref-volpiani-2020>`.
 
-Griffin--Fu--Moin total-stress transformation
----------------------------------------------
-
-Griffin, Fu, and Moin (GFM) argued that distinct physics should be used for
-the viscous and turbulent parts of the inner layer.  Define the
-quasi-equilibrium and Trettel--Larsson-scaled mean shears as
-
-.. math::
-
-   S_{eq}^+
-   = \frac{1}{r_\mu}
-     \frac{\mathrm{d}\widetilde U^+}{\mathrm{d}y^*},
-   \qquad
-   S_{TL}^+
-   = r_\mu
-     \frac{\mathrm{d}\widetilde U^+}{\mathrm{d}y^+}.
-
-Here :math:`S_{eq}^+` represents the logarithmic-region scaling motivated by
-quasi-equilibrium between turbulence production and dissipation, whereas
-:math:`S_{TL}^+` supplies the viscous-sublayer scaling.  If
-:math:`\tau^+=\tau/\tau_w` is the local total shear stress, the composite
-transformed shear is
-
-.. math::
-
-   S_t^+
-   = \frac{\tau^+ S_{eq}^+}
-          {\tau^+ + S_{eq}^+ - S_{TL}^+},
-   \qquad
-   U_t^+(y^*) = \int_0^{y^*} S_t^+\,\mathrm{d}\eta.
-
-When a total-stress profile is unavailable, the constant-stress-layer
-approximation :math:`\tau^+\simeq1` gives
-
-.. math::
-
-   S_t^+
-   \simeq
-   \frac{S_{eq}^+}{1 + S_{eq}^+ - S_{TL}^+}.
-
-The exact form requires velocity, density, viscosity, wall shear, velocity
-gradients, and the total-stress profile.  The simplified form omits the last
-input but retains the constant-stress approximation.  The original study
-reported collapse across the viscous, buffer, and logarithmic regions for
-adiabatic, heated, and cooled boundary layers, channel and pipe flows, and a
-boundary layer downstream of shock impingement.  Its test set covered edge
-Mach numbers from 0 through 15 and friction Reynolds numbers from about 200
-through 2000.  See
-:ref:`Griffin, Fu, and Moin (2021) <ref-griffin-fu-moin-2021>`.
-
-GFM has the broadest validation set among the four methods for the canonical
-flows considered in its original paper, but this does not make it universally
-applicable.  Later work found mixed results for high-enthalpy and supercritical
-flows and noted limitations of semi-local wall-coordinate mappings.  Strong
-pressure gradients and other non-equilibrium conditions can also invalidate
-the stress and quasi-equilibrium assumptions.
-
-Comparison and selection
-------------------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 11 17 17 18 18 19
-
-   * - Method
-     - Recommended starting point
-     - Principal forward inputs
-     - Validation evidence
-     - Advantages
-     - Limitations
-   * - Van Driest (implemented)
-     - Adiabatic or nearly adiabatic, approximately ZPG boundary layers
-     - :math:`\widetilde U`, :math:`\overline\rho`, :math:`\tau_w`
-     - Long experimental and DNS history for adiabatic boundary layers
-     - Simplest method; no viscosity profile or property derivatives
-     - Density-only scaling; unreliable with strong wall heat transfer
-   * - Trettel--Larsson (not implemented)
-     - Variable-property channel flows and viscous-sublayer scaling
-     - :math:`\widetilde U`, :math:`\overline\rho`,
-       :math:`\overline\mu`, :math:`\tau_w`
-     - Supersonic channels and boundary layers with several thermal conditions
-     - Physics-based semi-local coordinate; correct near-wall asymptote
-     - Property derivatives amplify noise; boundary-layer log intercept can
-       shift
-   * - Volpiani et al. (implemented)
-     - Heated or cooled ZPG boundary layers when full property profiles exist
-     - :math:`\widetilde U`, :math:`\overline\rho`,
-       :math:`\overline\mu`, :math:`\tau_w`
-     - Original DNS set: :math:`M_e=2.3`--13.64 and varied wall temperature
-     - No profile derivatives; good original high-Mach thermal-wall results
-     - DNS-fitted powers; limited original :math:`Re_\tau`; weaker in some
-       internal and non-canonical flows
-   * - GFM (not implemented)
-     - Canonical flows spanning adiabatic and diabatic walls when gradient or
-       stress information is available
-     - Other methods' inputs plus velocity gradients; exact form also needs
-       :math:`\tau(y)`
-     - Original set: boundary layers, channels, pipes, and post-shock flow at
-       :math:`M_e=0`--15
-     - Treats viscous and turbulent stresses separately; broad canonical-flow
-       performance
-     - Most complex; relies on stress and quasi-equilibrium assumptions;
-       non-canonical performance is not uniform
-
-Here ZPG means zero pressure gradient.  A practical first choice is Van Driest
-for an adiabatic ZPG baseline, Trettel--Larsson for an internal flow or when
-near-wall semi-local scaling is the main interest, Volpiani for a thermally
-loaded ZPG boundary layer when derivative-free processing is valuable, and
-GFM when the broader canonical-flow behavior justifies its additional inputs.
-When the required inputs are available, applying more than one transformation
-is preferable to treating this selection as a universal ranking.
-
-Forward numerical workflow
---------------------------
-
-A reproducible forward comparison can use the following procedure:
-
-1. Assemble one-dimensional profiles of :math:`y`, :math:`\widetilde U`,
-   :math:`\overline\rho`, and :math:`\overline\mu`, together with
-   :math:`\tau_w`.  Require strictly increasing :math:`y`, positive density
-   and viscosity, and a wall point or a justified near-wall extrapolation.
-2. Compute :math:`u_\tau`, :math:`y^+`, :math:`\widetilde U^+`,
-   :math:`r_\rho`, :math:`r_\mu`, and :math:`y^*` on one common grid.  At a
-   resolved no-slip wall, :math:`\widetilde U^+=0` and
-   :math:`r_\rho=r_\mu=1`.
-3. Evaluate each differential mapping and use cumulative trapezoidal
-   integration from the wall.  For Trettel--Larsson, evaluating
-   :math:`r_\mu\,\mathrm{d}y^*/\mathrm{d}y^+` directly is algebraically
-   equivalent to differentiating density and viscosity separately and is
-   often easier to implement consistently.
-4. Use one-sided derivatives at the wall and a derivative method appropriate
-   for the grid spacing.  Experimental profiles may require uncertainty-aware
-   smoothing before applying Trettel--Larsson or GFM; smoothing must not alter
-   the wall value or create non-monotone coordinates.
-5. Plot the transformed velocity against its corresponding transformed wall
-   coordinate and compare with an incompressible reference at a comparable
-   Reynolds number.  Check both :math:`U^+\simeq y^+` in the viscous sublayer
-   and the logarithmic slope and intercept.  Do not interpret wake-region
-   scatter as an inner transformation error without an outer-layer analysis.
-
-The integrations are path integrals along the sampled profile: factors such
-as :math:`r_\rho` and :math:`r_\mu` must be evaluated at the same local
-position as each velocity or wall-distance increment.  Substituting one edge
-or wall value throughout generally changes the transformation.
-
 .. _implemented-velocity-transformations:
 
-Implemented forward transformations
------------------------------------
+Transforming a profile you already have
+---------------------------------------
 
 :func:`~aerophysics.boundary_layer_profile.transform_compressible_velocity_profile`
 implements the Van Driest and Volpiani path integrals, selected with
@@ -385,35 +172,16 @@ The equality in this example follows from the constant density.  A
 wall-resolved grid is essential: a coarse first interval can dominate a
 trapezoidal path integral even when the remainder of the profile is dense.
 
-Inverse use for profile prediction
-----------------------------------
+The transformations are integrals along the profile: the density and
+viscosity ratios must be taken at the same height as each velocity step.
+Using one edge or wall value throughout generally gives a different result.
 
-An inverse calculation starts from an incompressible law of the wall or an
-incompressible wall-model equation and maps its strain rate back to the
-compressible variables.  The following loop is required in a practical model:
+Building a profile
+------------------
 
-#. Guess or solve for :math:`\tau_w` and, when needed, wall heat flux.
-#. Use an algebraic temperature--velocity relation or an energy equation to
-   obtain :math:`T(y)` from the current velocity estimate.
-#. Evaluate :math:`\overline\rho(y)` and :math:`\overline\mu(y)` from an
-   equation of state and transport model.
-#. Integrate the selected inverse velocity mapping and match the result to a
-   supplied inner-layer state and boundary-layer-edge state.
-#. Iterate the coupled velocity, temperature, properties, and wall quantities
-   to convergence.
-
-Consequently, the inverse problem cannot be reproduced from :math:`M_e`,
-:math:`T_e`, and :math:`T_w` alone.  Griffin, Fu, and Moin coupled the inverse
-GFM transformation to a generalized Reynolds-analogy temperature relation and
-an incompressible wall model; their tested implementation predicts velocity,
-temperature, wall shear, and heat flux from matching data.  See
-:ref:`Griffin, Fu, and Moin (2023) <ref-griffin-fu-moin-2023>`.
-
-Spalding--Coles composite prediction
-------------------------------------
-
-The implemented inverse model closes the incompressible reference profile
-with Spalding's single law of the wall,
+The profile is built from an incompressible reference profile, which is then
+mapped back to the compressible flow with the inverse of the selected
+transformation. The reference profile is Spalding's single law of the wall,
 
 .. math::
 
@@ -426,7 +194,7 @@ with Spalding's single law of the wall,
        -\frac{(\kappa U_S^+)^3}{6}
      \right],
 
-and adds the Coles wake in transformed velocity:
+to which the Coles wake is added in transformed velocity:
 
 .. math::
 
@@ -440,7 +208,7 @@ and adds the Coles wake in transformed velocity:
 Here :math:`Y^+=y^+` for Van Driest and :math:`Y^+=y_V^+` for
 Volpiani.  The wake coordinate remains the physical outer coordinate
 :math:`y/\delta_{99}`.  Unless :math:`\Pi` is supplied, the implementation
-uses a bounded scalar solve over :math:`0\leq\Pi\leq1` to impose
+solves for the value in :math:`0\leq\Pi\leq1` that gives
 
 .. math::
 
@@ -503,8 +271,8 @@ integrates the compressible displacement and momentum thicknesses through
 These are truncated engineering estimates: the small remaining velocity
 defect beyond :math:`\delta_{99}` is not modeled.
 
-The following example passes the thickness and shear from the existing
-flat-plate correlation to the new, independent profile API:
+The following example passes the thickness and shear from the flat-plate
+correlation to the profile function:
 
 >>> from aerophysics import (
 ...     BoundaryLayerRegime,
@@ -554,11 +322,14 @@ The returned arrays can be passed directly to the provided-profile mode of
 >>> round(drag.shielding_factor, 3)
 0.598
 
-Applicability and evidence
---------------------------
+Applicability
+-------------
 
-The numerical ranges quoted above are validation ranges, not hard mathematical
-bounds.  Extrapolation needs independent evidence.  In particular:
+The implemented tools are for smooth, fully turbulent boundary layers that
+are close to two-dimensional and have little or no pressure gradient. The
+ranges quoted on this page are the ranges over which the original authors
+tested their methods, not hard limits, and using a method outside them needs
+independent evidence. In particular:
 
 * The original papers primarily address smooth, statistically
   two-dimensional, fully turbulent wall flows and inner-layer similarity.
@@ -574,9 +345,9 @@ bounds.  Extrapolation needs independent evidence.  In particular:
   for strongly cooled hypersonic ZPG data, including mappings used by
   Trettel--Larsson and GFM.  See
   :ref:`Danis and Durbin (2024) <ref-danis-durbin-2024>`.
-* The implemented Coles coupling supplies one ZPG outer-layer engineering
-  profile, but it does not extend the validation claims of the original
-  compressibility transformations into the wake region.  Rough walls,
+* The Coles wake used to build a profile is one engineering description of
+  the outer part of a boundary layer without pressure gradient. The evidence
+  for the transformations themselves concerns the inner part, near the wall.  Rough walls,
   three-dimensional boundary layers, pressure gradients, separation,
   shock/boundary-layer interaction, high-enthalpy chemistry, supercritical
   properties, and strong thermodynamic nonequilibrium require separate
@@ -586,3 +357,235 @@ The original papers' favorable results and later assessments' limitations are
 therefore complementary evidence: the former establish useful operating
 regimes, while the latter show why those regimes should not be generalized
 without qualification.
+
+Background: other transformations
+---------------------------------
+
+This section compares the two implemented transformations with two others
+from the literature. It is background for choosing a method and is not needed
+to use the package.
+
+Three different uses of the Van Driest name
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following models are distinct and should not be interchanged:
+
+* The **Van Driest velocity transformation** from 1951 is the density-weighted
+  mean-velocity mapping described above.
+* The **Van Driest II transformation** maps compressible skin-friction and
+  momentum-thickness correlations.  The
+  :class:`~aerophysics.boundary_layer.TurbulentModel`\ ``.VAN_DRIEST_II``
+  option implements an engineering form of that skin-friction correction; it
+  does not return a transformed mean velocity profile. See :ref:`Hopkins and
+  Inouye (1971) <ref-hopkins-inouye-1971>` and :ref:`Hopkins (1972)
+  <ref-hopkins-1972>`.
+* The **Van Driest damping function** from 1956 modifies a near-wall
+  mixing-length or eddy-viscosity model.  It is neither of the two
+  transformations above.
+
+Trettel--Larsson transformation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Trettel and Larsson combined semi-local scaling with near-wall momentum
+conservation.  The transformed wall distance is :math:`y^*`, and the velocity
+increment is
+
+.. math::
+
+   \mathrm{d}U_{TL}^+
+   = r_\mu\frac{\mathrm{d}y^*}{\mathrm{d}y^+}
+     \,\mathrm{d}\widetilde U^+.
+
+Expanding the coordinate derivative gives
+
+.. math::
+
+   \mathrm{d}U_{TL}^+
+   =
+   \sqrt{r_\rho}
+   \left[
+     1
+     + \frac{y^+}{2r_\rho}
+       \frac{\mathrm{d}r_\rho}{\mathrm{d}y^+}
+     - \frac{y^+}{r_\mu}
+       \frac{\mathrm{d}r_\mu}{\mathrm{d}y^+}
+   \right]
+   \mathrm{d}\widetilde U^+.
+
+The transformation therefore needs velocity, density, and viscosity profiles,
+as well as :math:`\tau_w`.  It recovers the asymptotically correct viscous
+sublayer behavior and has performed particularly well for compressible
+channel flows with substantial property variation.  Subsequent assessments
+show that, in boundary layers, small sustained errors in the transformed
+shear can accumulate into a shifted logarithmic-law intercept, especially
+with wall heat transfer.  See
+:ref:`Trettel and Larsson (2016) <ref-trettel-larsson-2016>`.
+
+Griffin--Fu--Moin total-stress transformation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Griffin, Fu, and Moin (GFM) argued that distinct physics should be used for
+the viscous and turbulent parts of the inner layer.  Define the
+quasi-equilibrium and Trettel--Larsson-scaled mean shears as
+
+.. math::
+
+   S_{eq}^+
+   = \frac{1}{r_\mu}
+     \frac{\mathrm{d}\widetilde U^+}{\mathrm{d}y^*},
+   \qquad
+   S_{TL}^+
+   = r_\mu
+     \frac{\mathrm{d}\widetilde U^+}{\mathrm{d}y^+}.
+
+Here :math:`S_{eq}^+` represents the logarithmic-region scaling motivated by
+quasi-equilibrium between turbulence production and dissipation, whereas
+:math:`S_{TL}^+` supplies the viscous-sublayer scaling.  If
+:math:`\tau^+=\tau/\tau_w` is the local total shear stress, the composite
+transformed shear is
+
+.. math::
+
+   S_t^+
+   = \frac{\tau^+ S_{eq}^+}
+          {\tau^+ + S_{eq}^+ - S_{TL}^+},
+   \qquad
+   U_t^+(y^*) = \int_0^{y^*} S_t^+\,\mathrm{d}\eta.
+
+When a total-stress profile is unavailable, the constant-stress-layer
+approximation :math:`\tau^+\simeq1` gives
+
+.. math::
+
+   S_t^+
+   \simeq
+   \frac{S_{eq}^+}{1 + S_{eq}^+ - S_{TL}^+}.
+
+The exact form requires velocity, density, viscosity, wall shear, velocity
+gradients, and the total-stress profile.  The simplified form omits the last
+input but retains the constant-stress approximation.  The original study
+reported collapse across the viscous, buffer, and logarithmic regions for
+adiabatic, heated, and cooled boundary layers, channel and pipe flows, and a
+boundary layer downstream of shock impingement.  Its test set covered edge
+Mach numbers from 0 through 15 and friction Reynolds numbers from about 200
+through 2000.  See
+:ref:`Griffin, Fu, and Moin (2021) <ref-griffin-fu-moin-2021>`.
+
+GFM has the broadest validation set among the four methods for the canonical
+flows considered in its original paper, but this does not make it universally
+applicable.  Later work found mixed results for high-enthalpy and supercritical
+flows and noted limitations of semi-local wall-coordinate mappings.  Strong
+pressure gradients and other non-equilibrium conditions can also invalidate
+the stress and quasi-equilibrium assumptions.
+
+Comparison and selection
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 11 17 17 18 18 19
+
+   * - Method
+     - Recommended starting point
+     - Principal forward inputs
+     - Validation evidence
+     - Advantages
+     - Limitations
+   * - Van Driest (implemented)
+     - Adiabatic or nearly adiabatic, approximately ZPG boundary layers
+     - :math:`\widetilde U`, :math:`\overline\rho`, :math:`\tau_w`
+     - Long experimental and DNS history for adiabatic boundary layers
+     - Simplest method; no viscosity profile or property derivatives
+     - Density-only scaling; unreliable with strong wall heat transfer
+   * - Trettel--Larsson (not implemented)
+     - Variable-property channel flows and viscous-sublayer scaling
+     - :math:`\widetilde U`, :math:`\overline\rho`,
+       :math:`\overline\mu`, :math:`\tau_w`
+     - Supersonic channels and boundary layers with several thermal conditions
+     - Physics-based semi-local coordinate; correct near-wall asymptote
+     - Property derivatives amplify noise; boundary-layer log intercept can
+       shift
+   * - Volpiani et al. (implemented)
+     - Heated or cooled ZPG boundary layers when full property profiles exist
+     - :math:`\widetilde U`, :math:`\overline\rho`,
+       :math:`\overline\mu`, :math:`\tau_w`
+     - Original DNS set: :math:`M_e=2.3`--13.64 and varied wall temperature
+     - No profile derivatives; good original high-Mach thermal-wall results
+     - DNS-fitted powers; limited original :math:`Re_\tau`; weaker in some
+       internal and non-canonical flows
+   * - GFM (not implemented)
+     - Canonical flows spanning adiabatic and diabatic walls when gradient or
+       stress information is available
+     - Other methods' inputs plus velocity gradients; exact form also needs
+       :math:`\tau(y)`
+     - Original set: boundary layers, channels, pipes, and post-shock flow at
+       :math:`M_e=0`--15
+     - Treats viscous and turbulent stresses separately; broad canonical-flow
+       performance
+     - Most complex; relies on stress and quasi-equilibrium assumptions;
+       non-canonical performance is not uniform
+
+Here ZPG means zero pressure gradient.  A practical first choice is Van Driest
+for an adiabatic ZPG baseline, Trettel--Larsson for an internal flow or when
+near-wall semi-local scaling is the main interest, Volpiani for a thermally
+loaded ZPG boundary layer when derivative-free processing is valuable, and
+GFM when the broader canonical-flow behavior justifies its additional inputs.
+When the required inputs are available, applying more than one transformation
+is preferable to treating this selection as a universal ranking.
+
+Forward numerical workflow
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A reproducible forward comparison can use the following procedure:
+
+1. Assemble one-dimensional profiles of :math:`y`, :math:`\widetilde U`,
+   :math:`\overline\rho`, and :math:`\overline\mu`, together with
+   :math:`\tau_w`.  Require strictly increasing :math:`y`, positive density
+   and viscosity, and a wall point or a justified near-wall extrapolation.
+2. Compute :math:`u_\tau`, :math:`y^+`, :math:`\widetilde U^+`,
+   :math:`r_\rho`, :math:`r_\mu`, and :math:`y^*` on one common grid.  At a
+   resolved no-slip wall, :math:`\widetilde U^+=0` and
+   :math:`r_\rho=r_\mu=1`.
+3. Evaluate each differential mapping and use cumulative trapezoidal
+   integration from the wall.  For Trettel--Larsson, evaluating
+   :math:`r_\mu\,\mathrm{d}y^*/\mathrm{d}y^+` directly is algebraically
+   equivalent to differentiating density and viscosity separately and is
+   often easier to implement consistently.
+4. Use one-sided derivatives at the wall and a derivative method appropriate
+   for the grid spacing.  Experimental profiles may require uncertainty-aware
+   smoothing before applying Trettel--Larsson or GFM; smoothing must not alter
+   the wall value or create non-monotone coordinates.
+5. Plot the transformed velocity against its corresponding transformed wall
+   coordinate and compare with an incompressible reference at a comparable
+   Reynolds number.  Check both :math:`U^+\simeq y^+` in the viscous sublayer
+   and the logarithmic slope and intercept.  Do not interpret wake-region
+   scatter as an inner transformation error without an outer-layer analysis.
+
+The integrations are path integrals along the sampled profile: factors such
+as :math:`r_\rho` and :math:`r_\mu` must be evaluated at the same local
+position as each velocity or wall-distance increment.  Substituting one edge
+or wall value throughout generally changes the transformation.
+
+Inverse use for profile prediction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An inverse calculation starts from an incompressible law of the wall or an
+incompressible wall-model equation and maps its strain rate back to the
+compressible variables.  The following loop is required in a practical model:
+
+#. Guess or solve for :math:`\tau_w` and, when needed, wall heat flux.
+#. Use an algebraic temperature--velocity relation or an energy equation to
+   obtain :math:`T(y)` from the current velocity estimate.
+#. Evaluate :math:`\overline\rho(y)` and :math:`\overline\mu(y)` from an
+   equation of state and transport model.
+#. Integrate the selected inverse velocity mapping and match the result to a
+   supplied inner-layer state and boundary-layer-edge state.
+#. Iterate the coupled velocity, temperature, properties, and wall quantities
+   to convergence.
+
+Consequently, the inverse problem cannot be reproduced from :math:`M_e`,
+:math:`T_e`, and :math:`T_w` alone.  Griffin, Fu, and Moin coupled the inverse
+GFM transformation to a generalized Reynolds-analogy temperature relation and
+an incompressible wall model; their tested implementation predicts velocity,
+temperature, wall shear, and heat flux from matching data.  See
+:ref:`Griffin, Fu, and Moin (2023) <ref-griffin-fu-moin-2023>`.

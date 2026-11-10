@@ -5,8 +5,8 @@ Marching boundary-layer model
 
 This page describes the laminar and SA-noft2 boundary-layer solver for edge
 conditions that change along a wall, including its equations, assumptions,
-and API mapping. For a task-oriented example, see
-:doc:`../guides/boundary_layers`.
+and API mapping. For worked examples, see
+:doc:`../guides/marching_boundary_layers`.
 
 Physical background
 -------------------
@@ -69,13 +69,6 @@ At the wall, :math:`f = f' = 0`, and :math:`g` is either the specified wall
 temperature ratio or follows from a zero wall heat flux. At the outer boundary,
 :math:`f' = g = 1`.
 
-The laminar and SA-noft2 station solves use analytic Jacobians for the exact
-built-in Sutherland and Keyes viscosity model types. Other viscosity models,
-including subclasses, use finite-difference Jacobians. SA differentiates the
-active nonsmooth branch, with right-sided derivatives at exact ties. These
-linearizations solve the same discrete equations with the same convergence
-tolerances; they do not change the physical model or its applicability.
-
 SA-noft2 transport
 ~~~~~~~~~~~~~~~~~~
 
@@ -109,47 +102,11 @@ The trip term ft2 is omitted. The wall has :math:`n=0`; the outer boundary has
 viscosity is conserved.
 The adiabatic wall uses a half-cell energy balance with zero wall flux.
 
-The five unknowns per node are ``(f, u, g, n, Y)``. Projected active-set Newton
-solves the local interior SA conditions :math:`n \geq 0`, :math:`R \leq 0`,
-and :math:`nR=0`, where :math:`R` is the discrete SA residual. Positive
-interior values satisfy the SA equation; zero values admit a nonpositive
-residual. Convergence requires a small applied update, the same active set in
-two consecutive linearizations, and
-:math:`\max_i|\min(n_i,-R_i/|J_{ii}|)|/\max(1,\max n)<10^{-9}`
-over interior SA rows. This uses the existing pre-update linearization and the
-same ``n`` scale as the update tolerance. If Phi fails this bound, a nonzero
-applied update permits further iteration within the iteration limit; a zero
-update requests Picard. Projection or damping stagnation cannot count as
-convergence. Undamped active rows are assigned exactly zero; damped rows
-retain the partial step toward zero. Newton falls back to relaxed Picard
-with nonnegative ``n`` clipping.
-At convergence, an active or projected-zero first interior SA node also
-requests Picard. Such wall-attached zero regions select the trivial partially
-laminar branch; the intended clipped set is the outer turbulent front.
-The explicitly zero edge-SA case retains legacy Newton for its intentional
-zero-SA limit.
-Picard projects the result of a coupled tridiagonal solve, satisfying
-:math:`\min(n,A(n)^{-1}R)=0` at its fixed point. This differs from Newton's
-local complementarity condition: clipping can leave residuals at positive
-neighbors of clipped nodes. Remeasured with the analytic Jacobian in M2--3
-fixed-wall and adiabatic marches, the maximum difference in ``n`` was less than
-:math:`2.12\times10^{-6}` of maximum ``n``; other output fields differed by less than
-:math:`7.08\times10^{-8}` of their respective maxima. These are not general
-bounds: remeasured with the wall guard at :math:`Re=10^{10}`, M2, edge 220 K
-and wall 300 K, the largest ``n`` difference is 8.099
-(:math:`6.03\times10^{-5}` of the profile maximum), two nodes before clipping.
-The last positive node changes from ``n=1996.166`` to ``2002.957``.
-Velocity and temperature profile differences are below
-:math:`8.2\times10^{-8}` of their maxima. These comparisons do not establish grid
-convergence or physical validation of the outer SA front.
-If both solvers fail the streamwise step halves.
-The eta grid has first spacing 0.0007 and spacing
-ratio 1.04. Before marching, define ``Re_equivalent = max(R)^2/2`` over the
-output stations and ``scale = max(1, (Re_equivalent/1e8)^0.42)``. The extent is
-``150 scale`` and the outer spacing cap is ``scale``. Up to Re_equivalent=1e8
-this is the original 312-node grid. These are geometric spacings, not
-geometrically positioned nodes. The outer-boundary check remains active:
-a compression can grow beyond this estimate and stop the march.
+The wall-normal grid is sized from the Reynolds number before the march
+starts. A strong compression can thicken the layer beyond that estimate; the
+march then stops with ``BoundaryLayerConvergenceError`` instead of returning a
+truncated layer. The numerical method is recorded in the developer notes
+(``devdocs/numerical_implementation.md``).
 
 Specified transition
 ~~~~~~~~~~~~~~~~~~~~
@@ -162,14 +119,11 @@ transition position; specifying it in another regime raises ``ValueError``.
 ``edge_sa_ratio`` must be positive: production is proportional to
 :math:`\widetilde\nu`, so an initially zero field cannot grow.
 
-SA-noft2 is solved over the entire domain on the same grid as ``TURBULENT``.
-Only :math:`c_{b1}\widetilde S n` is multiplied by zero for
-:math:`s \le s_{tr}` and by one downstream. Destruction, diffusion, convection,
-and the outer boundary condition remain active. The implementation applies
-the multiplier in the residual, its numerical Newton Jacobian, and Picard's
-lagged source and source-based relaxation. No profile or grid is replaced at
-the switch. The march passes through the transition position internally; the
-returned stations remain exactly ``edge.distance[1:]``.
+SA-noft2 is solved over the entire wall, exactly as for ``TURBULENT``. The
+only change is that the production term :math:`c_{b1}\widetilde S n` is switched
+off for :math:`s \le s_{tr}`. Destruction, diffusion, convection, and the outer
+boundary condition remain active. The returned stations are the same as in the
+other regimes.
 
 This follows the production suppression described for FUN3D by
 :ref:`Hildebrand et al. (2022) <ref-hildebrand-2022>`. It supplies a user-chosen
@@ -179,19 +133,11 @@ response, not a prediction of physical transition length.** The limitations of
 SA activation discussed by :ref:`Rumsey and Spalart (2009)
 <ref-rumsey-spalart-2009>` still apply.
 
-The upstream solution retains small eddy viscosity supplied from the edge.
-For ``edge_sa_ratio=3`` the measured maximum upstream departures from the
-laminar solver are 0.374% in Cf and 0.356% in wall heat flux over the four
-uniform-edge verification cases (M0.3, M2 cooled/adiabatic, M6 cooled).
-These are case-specific numerical measurements, not physical accuracy bounds.
-Reducing the seed reduces eddy viscosity but does not remove differences
-between the two existing discretizations: at M2, Te=220 K and Tw=300 K,
-``edge_sa_ratio=1e-3`` gives a 0.05304% upstream heat-flux difference from
-``LAMINAR``. This difference is recorded as a discretization diagnostic, without
-a pass/fail criterion. The laminar-limit check retains the V6 Cf target of 0.05%.
-The transition implementation is checked separately against
-``TURBULENT(edge_sa_ratio=0)`` on the same SA grid and with the same operators,
-using a maximum relative-difference limit of 1e-8% for both Cf and heat flux.
+Upstream of the transition position, a little eddy viscosity still enters from
+the edge, so the solution there is close to, but not identical to, the
+``LAMINAR`` result. With the default ``edge_sa_ratio=3``, the largest
+differences seen in the verification cases were about 0.4% in both Cf and wall
+heat flux. These are measurements for those cases, not accuracy bounds.
 
 The result includes read-only ``nu_tilde_ratio`` profiles. The ``y+ > 1``
 warning considers only output stations strictly downstream of the specified
@@ -224,12 +170,12 @@ temperature gradient, not from the Reynolds analogy that
 Thin axisymmetric geometry
 --------------------------
 
-``wall_radius=None`` retains the planar computation bit for bit. A positive
+``wall_radius=None`` gives the planar calculation. A positive
 scalar radius represents a cylinder beginning at a sharp leading edge, such as
 a thin-walled tube. An array matching ``edge.distance`` gives the local wall
 distance from the symmetry axis, in metres. Its first value may be zero for a
 sharp tip; all subsequent values must be strictly positive and finite.
-The input is copied. The result dataclass is unchanged.
+The result has the same fields as in the planar case.
 
 Radius is interpolated **piecewise linearly** in wall distance, preserving a
 cone-to-cylinder shoulder when its station is included. Curved bodies require
@@ -310,29 +256,16 @@ For variable radius, the laminar planar equivalent uses
 SA is not invariant under this mapping: its source contains :math:`R`, and
 :math:`R_a=(L/r)R_p`. No exact turbulent cone-to-plate ratio is imposed.
 
-The measured cone relation errors are below 6e-12 percent. With 801 nodes,
-the variable-radius laminar mapping differs by at most 0.000827 percent in Cf;
-the interpolation is performed in different distance variables. Axisymmetric
-momentum residual medians are below 0.05 percent. Streamwise and wall-normal
-refinement are recorded separately in the development memo, section 12.
-The :ref:`R&M 3633 worked example <rm3633-example>` reaches delta99/r_w=0.4774
-and differs from measured Cf by up to 0.0004443 (measurement accuracy
-+/-0.0002). This comparison does not establish a physical validity range.
+The cone relation is reproduced to within 6e-12 percent, and the
+variable-radius laminar mapping to within 0.001 percent in Cf. The
+:ref:`R&M 3633 comparison <rm3633-example>` reaches delta99/r_w=0.4774 and
+differs from measured Cf by up to 0.0004443 (measurement accuracy +/-0.0002).
+This comparison does not establish a physical validity range.
 
-The recorded synthetic cone-to-cylinder shoulder stress measurement (development
-memo, section 12) used a tanh pressure drop; it is **not a physical shoulder edge
-condition**. With input nodes locally spaced
-at most width/5, the pressure-length warning fires for SA at width 0.001 m
-(maximum delta99 times abs(d ln p/ds) 1.24051--1.26509), and for both regimes
-at width 0.0002 m (1.33059--6.29451). Widths 0.02 and 0.005 m do not trigger
-that warning. All 16 cases completed in 2.82--8.85 s in the recorded run,
-with zero Picard fallbacks. This is a timing observation, not a performance bound.
-The curvature maxima occur near the tip or downstream end, so that warning
-alone does not identify a shoulder problem. At s=0.31 m, relative SA-variable
-oscillations reach 1.46404%; the final station has no evaluable extrema triplets.
-Some oscillations occur without a pressure-length warning. These applicability
-warnings therefore do not establish local profile convergence or physical
-accuracy; the need for an additional oscillation diagnostic remains open.
+A sharp cone-to-cylinder shoulder is outside the thin-layer model. The
+pressure-length warning does not catch every case in which the solution near a
+shoulder is poorly resolved, so results close to a shoulder need separate
+judgement even without a warning.
 
 Edge state
 ----------
@@ -357,36 +290,27 @@ Assumptions and range
   the layer.
 * Isentropic edge flow with constant total enthalpy. Entropy layers from blunt
   noses are not represented.
-* No specified transition, roughness, suction, blowing, transverse or longitudinal curvature terms, or chemical
-  reactions, and no interaction with the outer flow.
+* No transition prediction, roughness, suction, blowing, transverse or
+  longitudinal curvature terms, or chemical reactions, and no interaction with
+  the outer flow. A transition position can be specified but is not predicted.
 * Wall temperature changes over distances much longer than the boundary-layer
   thickness. Unlike a pressure change, a shorter change does not raise a warning.
 
-``BoundaryLayerRegime.TRANSITIONAL`` raises ``ModelRangeError``.
 SA-noft2 develops its own laminar start and transition near the leading edge.
 This is not a transition prediction. Accuracy against experiment is not
 established. Agreement with CFD that uses the same model does not establish it.
 Wall-temperature changes as short as delta99 can be numerically resolved, but
 neglect of streamwise diffusion then has no established accuracy.
 
-Turbulent flow requires the viscosity model to accept ``T_e * exp(+/-1e-5)``
-for an edge viscosity derivative, including when ``edge_sa_ratio=0``. Near a
-temperature-range limit, a model that raises outside its range can fail at
-these temperatures, and a model that warns outside its range can warn.
-Laminar flow does not evaluate this SA derivative.
+Turbulent flow evaluates the viscosity model slightly above and below each
+edge temperature. If an edge temperature lies at the very limit of a viscosity
+model's range, that model can therefore raise or warn.
 
-The outer part of ``nu_tilde_ratio`` can oscillate and is not grid-converged
-in strong expansions or with a small ``edge_sa_ratio``. In the measured
-cases, relative oscillation amplitudes reached about 100% on the default
-grid and about 60% after outer-grid refinement, measured as half the excursion
-between neighbouring extrema divided by their mean. Wall quantities and
-delta99 were insensitive to that refinement in these cases: Cf changed by
-less than 0.01% and delta99 by less than 0.06%. These measurements are not
-general bounds.
-
-With the legacy positivity-damped Newton, M1.2 to 4 took about 25 s on one
-machine because of Picard fallbacks. Active-set Newton substantially reduced
-fallbacks in the measured verification tier; timings remain machine-dependent.
+In strong expansions, or with a small ``edge_sa_ratio``, the outer part of
+``nu_tilde_ratio`` can oscillate from one grid point to the next. In the cases
+examined, wall quantities and delta99 were not affected: Cf changed by less
+than 0.01% and delta99 by less than 0.06% when the outer grid was refined.
+Treat the outer part of the ``nu_tilde_ratio`` profile itself as approximate.
 
 .. list-table:: Reported conditions
    :header-rows: 1
