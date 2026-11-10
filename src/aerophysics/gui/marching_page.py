@@ -286,6 +286,9 @@ def render_marching_boundary_layer(preferences: UnitPreferences) -> None:
                 cached = st.session_state.get("march_bl_edge_upload_si")
                 if cached is None or cached[0] != uploaded.file_id:
                     st.session_state.pop("march_bl_edge_upload_si", None)
+                    # An invalid replacement must not appear to match the last result.
+                    inputs["edge_distance"] = inputs["edge_pressure"] = None
+                    inputs["edge_radius"] = None
                     parsed = parse_edge_csv(uploaded.getvalue(), preferences)
                     cached = (
                         uploaded.file_id,
