@@ -544,6 +544,9 @@ def test_page_csv_upload_keeps_si_values_across_unit_changes() -> None:
     assert inputs["edge_pressure"] == pytest.approx([10000, 9500, 9000])
     assert inputs["edge_radius"] == pytest.approx([0, 0.05, 0.05])
     _upload(app, "bad.csv", b"s,p\n0,1\n1,-1\n")
+    assert "march_bl_payload" in app.session_state
+    assert app.session_state["march_bl_draft"]["inputs_si"]["edge_distance"] is None
+    assert any("入力が変更されています" in item.value for item in app.warning)
     app.button(key="march_bl_calculate").click().run()
     assert not app.exception
     assert "p must be greater than zero" in app.error[0].value
