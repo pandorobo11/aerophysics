@@ -43,4 +43,4 @@ Axisymmetric external characteristics
 -------------------------------------
 
 .. automodule:: aerophysics.characteristics
-   :members: AxisymmetricBodyFlowResult, BoundaryLayerInputs, axisymmetric_body_flow
+   :members: AxisymmetricBodyFlowResult, BoundaryLayerInputs, CharacteristicNet, CharacteristicRow, axisymmetric_body_flow

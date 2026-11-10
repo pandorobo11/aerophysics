@@ -147,6 +147,7 @@ def calculate_body_flow(
         gas=AIR,
         characteristic_count=characteristic_count,
         fan_angle_step=fan_angle_step,
+        include_characteristic_net=True,
     )
     values = {
         "axial_distance": raw.axial_distance,
@@ -176,3 +177,30 @@ def calculate_body_flow(
         )
     )
     return BodyFlowCalculation(CalculationResult(rows), shock, raw)
+
+
+def body_flow_net_rows(
+    raw: AxisymmetricBodyFlowResult, *, pressure: float, mach: float
+) -> tuple[Row, ...]:
+    """Long-format SI node rows without display downsampling (zero-based indices)."""
+    net = raw.characteristic_net
+    if net is None:
+        return ()
+    dynamic_pressure = 0.5 * raw.gas.heat_capacity_ratio * pressure * mach**2
+    return tuple(
+        {
+            "row_index": str(i),
+            "node_index": str(k),
+            "kind": row.kind,
+            "ends_at_shock": str(row.ends_at_shock),
+            "axial_distance": float(row.axial_distance[k]),
+            "radius": float(row.radius[k]),
+            "flow_angle": float(row.flow_angle[k]),
+            "pressure": float(row.pressure[k]),
+            "total_pressure": float(row.total_pressure[k]),
+            "mach": float(row.mach[k]),
+            "cp": float((row.pressure[k] - pressure) / dynamic_pressure),
+        }
+        for i, row in enumerate(net.rows)
+        for k in range(len(row.radius))
+    )

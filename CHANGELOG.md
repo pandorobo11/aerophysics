@@ -7,6 +7,11 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Expose the optional rotational MOC characteristic net through
+  `include_characteristic_net`, `CharacteristicNet` and `CharacteristicRow`,
+  preserving default solver outputs. Add the GUI characteristic-net tab,
+  Mach/Cp node coloring and full-node CSV export in display units.
+
 - Add the single-point AIR axisymmetric body-flow GUI page with cone/ogive,
   cylinder/boattail or CSV geometry, fitted-shock and surface plots, Cp,
   atmosphere inputs, settings replay and session case saving.

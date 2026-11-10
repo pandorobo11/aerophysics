@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import numpy as np
 import pytest
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from aerophysics.atmosphere import geopotential_to_geometric, standard_atmosphere
@@ -17,6 +18,7 @@ from aerophysics.gas import AIR
 from aerophysics.gui.body_flow_adapter import (
     BodyFlowCalculation,
     body_flow_inputs_match,
+    body_flow_net_rows,
     build_meridian,
     calculate_body_flow,
     resolve_freestream,
@@ -315,7 +317,8 @@ def test_page_calculate_switch_save_replay_and_reset() -> None:
     app.button(key="body_flow_calculate").click().run()
     assert not app.exception and not app.error
     assert len(app.metric) == 6 and len(app.dataframe) == 2
-    assert len(app.get("plotly_chart")) == 3
+    assert len(app.get("plotly_chart")) == 4
+    assert "特性曲線網" in [tab.label for tab in app.tabs]
     calculation, config = app.session_state["body_flow_payload"]
     with patch(
         "aerophysics.gui.body_flow_page.calculate_body_flow",
@@ -326,6 +329,10 @@ def test_page_calculate_switch_save_replay_and_reset() -> None:
         ).run()
         assert not app.exception and not app.warning
         assert app.session_state["body_flow_payload"][0] is calculation
+        for coloring in ("mach", "cp", "none"):
+            app.selectbox(key="body_flow_net_coloring").set_value(coloring).run()
+            assert not app.exception and not app.warning
+            assert app.session_state["body_flow_payload"][0] is calculation
         app.button(key="body_flow_save_case").click().run()
         assert app.session_state["current_axisymmetric_body_case"] is calculation.raw
         assert app.success
@@ -499,3 +506,226 @@ def test_unrelated_runtime_errors_propagate() -> None:
         app.button(key="body_flow_calculate").click().run()
     assert app.exception[0].message == "unexpected failure"
     assert not app.error
+
+
+@pytest.mark.parametrize("coloring", ["none", "mach", "cp"])
+def test_net_settings_roundtrip_and_legacy(coloring: str) -> None:
+    configuration = _configuration()
+    configuration["models"]["net_coloring"] = coloring
+    assert load_configuration(dump_configuration(configuration)) == configuration
+    del configuration["models"]["net_coloring"]
+    assert (
+        cast(
+            dict[str, Any],
+            load_configuration(dump_configuration(configuration))["models"],
+        )["net_coloring"]
+        == "none"
+    )
+    configuration["models"]["net_coloring"] = "temperature"
+    with pytest.raises(ConfigurationError, match="net_coloring"):
+        dump_configuration(configuration)
+
+
+def test_net_csv_all_nodes_and_download(calculation: BodyFlowCalculation) -> None:
+    units = UnitPreferences(length="ft", pressure="kPa", angle="deg")
+    net = calculation.raw.characteristic_net
+    assert net is not None
+    rows = body_flow_net_rows(calculation.raw, pressure=101325, mach=3)
+    assert len(rows) == sum(len(row.radius) for row in net.rows)
+    displayed = display_rows("axisymmetric_body_net", rows, units)
+    csv = rows_to_csv(displayed)
+    assert (
+        csv.lstrip("\ufeff").splitlines()[0] == "行番号,節点番号,行種別,衝撃波で終端,"
+        "軸方向距離 x [ft],半径 r [ft],流れ角 θ [deg],"
+        "静圧 p [kPa],全圧 p₀ [kPa],Mach M,Cp"
+    )
+    assert csv.splitlines()[1].split(",")[:4] == ["0", "0", "initial", "True"]
+    assert displayed[0]["軸方向距離 x [ft]"] == net.rows[0].axial_distance[0] / 0.3048
+    assert displayed[0]["流れ角 θ [deg]"] == pytest.approx(
+        math.degrees(net.rows[0].flow_angle[0])
+    )
+    assert displayed[0]["静圧 p [kPa]"] == net.rows[0].pressure[0] / 1000
+    assert displayed[0]["全圧 p₀ [kPa]"] == net.rows[0].total_pressure[0] / 1000
+    assert rows[0]["cp"] == (net.rows[0].pressure[0] - 101325) / (
+        0.5 * 1.4 * 101325 * 9
+    )
+    app = AppTest.from_string(_SCRIPT, default_timeout=30)
+    app.session_state["test_units"] = units.to_dict()
+    app.run()
+    with (
+        patch(
+            "aerophysics.gui.body_flow_page.calculate_body_flow",
+            return_value=calculation,
+        ),
+        patch(
+            "aerophysics.gui.body_flow_page.st.download_button",
+            wraps=st.download_button,
+        ) as download,
+    ):
+        app.button(key="body_flow_calculate").click().run()
+    assert not app.exception and not app.error
+    call = next(
+        call
+        for call in download.call_args_list
+        if call.kwargs.get("key") == "body_flow_net_csv"
+    )
+    assert call.args[0] == "特性曲線網CSVをダウンロード"
+    assert call.args[1] == csv
+
+
+def test_fine_net_display_limits_and_caption() -> None:
+    calculation = calculate_body_flow(build_meridian(), characteristic_count=200)
+    net = calculation.raw.characteristic_net
+    assert net is not None
+    units = UnitPreferences(length="ft")
+    for coloring in ("none", "mach", "cp"):
+        figure = body_flow_figures(
+            calculation.surface.rows,
+            calculation.shock_rows,
+            units,
+            characteristic_net=net,
+            net_coloring=coloring,
+        )["特性曲線網"]
+        assert figure.layout.yaxis.scaleanchor == "x"
+        assert figure.layout.meta["downsampled"]
+        plus, minus = figure.data[2:4]
+        assert plus.name == "C+" and minus.name == "C\N{MINUS SIGN}"
+        assert plus.line.color != minus.line.color
+        assert sum(value is None for value in plus.x) == min(150, len(net.rows))
+        assert sum(value is None for value in minus.x) == min(
+            80, len(net.minus_characteristics())
+        )
+        assert plus.x[0] == net.rows[0].axial_distance[0] / 0.3048
+        assert plus.x[-2] == net.rows[-1].axial_distance[-1] / 0.3048
+        if coloring == "none":
+            assert len(figure.data) == 4
+        else:
+            markers = figure.data[4]
+            assert markers.type == "scattergl" and markers.marker.showscale
+            assert len(markers.x) <= 20000
+            rows = [
+                net.rows[i]
+                for i in np.linspace(
+                    0, len(net.rows) - 1, min(150, len(net.rows)), dtype=int
+                )
+            ]
+            values = np.concatenate(
+                [
+                    row.mach
+                    if coloring == "mach"
+                    else (row.pressure - 101325) / (0.5 * 1.4 * 101325 * 9)
+                    for row in rows
+                ]
+            )
+            indices = np.linspace(
+                0, len(values) - 1, min(20000, len(values)), dtype=int
+            )
+            np.testing.assert_array_equal(markers.marker.color, values[indices])
+    app = AppTest.from_string(_SCRIPT, default_timeout=30).run()
+    app.number_input(key="body_flow_characteristic_count").set_value(200).run()
+    with patch(
+        "aerophysics.gui.body_flow_page.calculate_body_flow", return_value=calculation
+    ):
+        app.button(key="body_flow_calculate").click().run()
+    assert not app.exception and not app.error
+    assert len(app.get("plotly_chart")) == 4
+    assert any("表示用に間引いています" in caption.value for caption in app.caption)
+
+
+def test_net_marker_cap_is_exercised() -> None:
+    calculation = calculate_body_flow(build_meridian(), characteristic_count=400)
+    net = calculation.raw.characteristic_net
+    assert net is not None
+    figure = body_flow_figures(
+        calculation.surface.rows,
+        calculation.shock_rows,
+        UnitPreferences(),
+        characteristic_net=net,
+        net_coloring="mach",
+    )["特性曲線網"]
+    assert sum(value is not None for value in figure.data[2].x) > 20000
+    assert len(figure.data[4].x) == 20000
+    assert figure.layout.meta["downsampled"]
+
+
+def test_net_csv_cache_reuses_and_rebuilds() -> None:
+    app = AppTest.from_string(_SCRIPT, default_timeout=30).run()
+    with patch(
+        "aerophysics.gui.body_flow_page.body_flow_net_rows", wraps=body_flow_net_rows
+    ) as build_csv_rows:
+        app.button(key="body_flow_calculate").click().run()
+        assert not app.exception and not app.error
+        assert build_csv_rows.call_count == 1
+        cached = app.session_state["body_flow_net_csv_cache"]
+        calculation = app.session_state["body_flow_payload"][0]
+        assert cached[0] is calculation
+        with patch(
+            "aerophysics.gui.body_flow_page.calculate_body_flow",
+            side_effect=AssertionError("must not recompute"),
+        ):
+            for key, value in (
+                ("body_flow_net_coloring", "mach"),
+                ("body_flow_net_coloring", "cp"),
+                ("body_flow_pressure_quantity", "pressure_rise"),
+            ):
+                app.selectbox(key=key).set_value(value).run()
+                assert not app.exception and not app.error and not app.warning
+                assert build_csv_rows.call_count == 1
+                assert app.session_state["body_flow_net_csv_cache"] is cached
+            app.number_input(key="body_flow_mach").set_value(4.0).run()
+            assert not app.exception and not app.error and app.warning
+            assert build_csv_rows.call_count == 1
+            assert app.session_state["body_flow_net_csv_cache"] is cached
+            app.session_state["test_units"] = {"length": "ft", "pressure": "kPa"}
+            app.run()
+            assert not app.exception and not app.error
+            assert build_csv_rows.call_count == 2
+            converted = app.session_state["body_flow_net_csv_cache"]
+            assert converted[0] is calculation
+            assert converted[2] != cached[2]
+            assert "軸方向距離 x [ft]" in converted[2]
+            app.selectbox(key="body_flow_net_coloring").set_value("none").run()
+            assert not app.exception and not app.error
+            assert build_csv_rows.call_count == 2
+            assert app.session_state["body_flow_net_csv_cache"] is converted
+        app.button(key="body_flow_calculate").click().run()
+        assert not app.exception and not app.error and not app.warning
+        assert build_csv_rows.call_count == 3
+        updated = app.session_state["body_flow_net_csv_cache"]
+        assert updated[0] is app.session_state["body_flow_payload"][0]
+        assert updated[0] is not calculation
+        assert updated[2] != converted[2]
+        with patch(
+            "aerophysics.gui.body_flow_page.calculate_body_flow",
+            side_effect=ValueError("calculation failed"),
+        ):
+            app.button(key="body_flow_calculate").click().run()
+        assert not app.exception and app.error
+        assert "body_flow_payload" not in app.session_state
+        assert "body_flow_net_csv_cache" not in app.session_state
+        assert build_csv_rows.call_count == 3
+
+
+@pytest.mark.parametrize("action", ["reset", "import", "remove_payload"])
+def test_net_csv_cache_cleared_with_payload(action: str) -> None:
+    app = AppTest.from_string(_SCRIPT, default_timeout=30).run()
+    app.button(key="body_flow_calculate").click().run()
+    assert not app.exception and not app.error
+    assert "body_flow_net_csv_cache" in app.session_state
+    with patch(
+        "aerophysics.gui.body_flow_page.body_flow_net_rows",
+        side_effect=AssertionError("no payload to export"),
+    ):
+        if action == "reset":
+            app.button(key="body_flow_reset").click().run()
+        elif action == "import":
+            app.session_state["pending_axisymmetric_body_configuration"] = (
+                _configuration()
+            )
+            app.run()
+        else:
+            del app.session_state["body_flow_payload"]
+            app.run()
+    assert not app.exception and not app.error
+    assert "body_flow_payload" not in app.session_state
+    assert "body_flow_net_csv_cache" not in app.session_state
