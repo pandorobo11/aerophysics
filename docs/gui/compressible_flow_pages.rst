@@ -149,7 +149,9 @@ rear radius strictly between zero and the base radius. The meridian starts at
 ``(0,0)``, axial distance increases strictly and subsequent radii are positive.
 Segment angles must be non-increasing; concave corners are rejected by the
 solver. The **母線CSVテンプレート** uses columns ``x,r`` in the current
-length unit. CSV vertices are embedded in exported settings, so loading the
+length unit. An uploaded file is read once, in the length unit selected when
+it is uploaded; changing the display units afterwards does not rescale the
+body. CSV vertices are embedded in exported settings, so loading the
 JSON does not require uploading the CSV again.
 
 The **接線オジーブ** nose uses 32 straight chords by default (2--200).

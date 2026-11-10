@@ -466,6 +466,49 @@ def test_malformed_embedded_vertices_show_error(x: list[float], r: list[float]) 
     assert "body_flow_payload" not in app.session_state
 
 
+def _upload(app: AppTest, name: str, data: bytes) -> None:
+    uploader: Any = next(
+        item
+        for item in app.get("file_uploader")
+        if item.key == "body_flow_meridian_upload"
+    )
+    uploader.upload(name, data, "text/csv").run()
+
+
+def test_uploaded_csv_keeps_its_si_shape_across_unit_changes() -> None:
+    app = AppTest.from_string(_SCRIPT, default_timeout=30).run()
+    app.selectbox(key="body_flow_geometry_source").set_value("csv").run()
+    _upload(app, "meridian.csv", meridian_csv_template().encode("utf-8"))
+    app.button(key="body_flow_calculate").click().run()
+    assert not app.exception and not app.error and not app.warning
+    payload = app.session_state["body_flow_payload"]
+    expected_x, expected_r = [0.0, 0.3, 1.3], [0.0, 0.05, 0.05]
+    with patch(
+        "aerophysics.gui.body_flow_page.calculate_body_flow",
+        side_effect=AssertionError("must not recompute"),
+    ):
+        for units in ({"length": "mm"}, {"length": "ft"}):
+            app.session_state["test_units"] = units
+            app.run()
+            assert not app.exception and not app.error and not app.warning
+            assert app.session_state["body_flow_payload"] is payload
+            cached = app.session_state["body_flow_meridian_upload_si"]
+            assert (cached[1], cached[2]) == (expected_x, expected_r)
+    app.button(key="body_flow_calculate").click().run()
+    assert not app.exception and not app.error and not app.warning
+    inputs = app.session_state["body_flow_payload"][1]["inputs_si"]
+    assert (inputs["meridian_x"], inputs["meridian_r"]) == (expected_x, expected_r)
+    # A replacement file is read in the length unit active when it arrives.
+    _upload(app, "feet.csv", b"x,r\n0,0\n1,0.1\n4,0.1\n")
+    app.button(key="body_flow_calculate").click().run()
+    assert not app.exception and not app.error
+    inputs = app.session_state["body_flow_payload"][1]["inputs_si"]
+    assert inputs["meridian_x"] == pytest.approx([0.0, 0.3048, 1.2192])
+    assert inputs["meridian_r"] == pytest.approx([0.0, 0.03048, 0.03048])
+    app.button(key="body_flow_reset").click().run()
+    assert "body_flow_meridian_upload_si" not in app.session_state
+
+
 def test_csv_upload_and_invalid_boattail() -> None:
     app = AppTest.from_string(_SCRIPT, default_timeout=30).run()
     app.checkbox(key="body_flow_boattail").check().run()
