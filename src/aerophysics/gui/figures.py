@@ -1695,10 +1695,13 @@ def viscosity_figures(
 def heating_trends(
     rows: tuple[Row, ...], preferences: UnitPreferences, *, field: str
 ) -> dict[str, go.Figure]:
-    """Plot heating against Mach, geometric altitude, or cylinder sweep angle."""
+    """Plot heating against Mach, altitude, radius, or cylinder sweep angle."""
     if field == "geometric_altitude":
         x = _converted(rows, field, "length", preferences)
         title = f"幾何高度 h [{preferences.length}]"
+    elif field == "radius":
+        x = _converted(rows, field, "length", preferences)
+        title = f"半径 R [{preferences.length}]"
     elif field == "sweep_angle":
         x = _converted(rows, field, "angle", preferences)
         title = f"後退角 Λ [{preferences.angle}]"

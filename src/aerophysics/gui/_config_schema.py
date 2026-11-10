@@ -324,7 +324,7 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
             "freestream": _choice("atmosphere", "manual"),
         },
         sweep_variables=frozenset(
-            {"upstream_mach", "geometric_altitude", "sweep_angle"}
+            {"upstream_mach", "geometric_altitude", "radius", "sweep_angle"}
         ),
     ),
     "detached_shock": _CalculatorSchema(
@@ -664,6 +664,12 @@ def validate_calculator_payload(
             <= math.pi / 2
         ):
             raise _SchemaError("sweep-angle sweep must lie between zero and pi/2")
+        if (
+            normalized_sweep
+            and normalized_sweep["field"] == "radius"
+            and cast(float, normalized_sweep["start"]) <= 0.0
+        ):
+            raise _SchemaError("radius sweep requires positive radii")
     return (normalized_inputs, normalized_models, normalized_sweep)
 
 

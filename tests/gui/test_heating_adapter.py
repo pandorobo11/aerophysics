@@ -125,6 +125,119 @@ def test_sweeps_and_display() -> None:
     assert {r["upstream_mach"] for r in angles.rows} == {10.0}
 
 
+@pytest.mark.parametrize("model", ["fay_riddell", "tauber"])
+def test_sphere_radius_sweep_matches_core_and_scaling(model: str) -> None:
+    result = heating_sweep(
+        field="radius",
+        start=0.05,
+        stop=0.8,
+        points=3,
+        upstream_mach=10.0,
+        temperature=226.5,
+        pressure=1197.0,
+        geometric_altitude=None,
+        radius=1.0,
+        wall_temperature=300.0,
+        geometry="sphere",
+        model=model,
+        prandtl_number=0.72,
+    )
+    expected = sphere_stagnation_heat_flux(
+        10.0,
+        226.5,
+        1197.0,
+        np.linspace(0.05, 0.8, 3),
+        wall_temperature=300.0,
+        model=StagnationHeatingModel(model),
+    )
+    flux = np.array([row["heat_flux"] for row in result.rows], dtype=float)
+    assert [row["radius"] for row in result.rows] == pytest.approx(
+        np.linspace(0.05, 0.8, 3)
+    )
+    assert flux == pytest.approx(expected.heat_flux)
+    # Laminar stagnation heating scales as R^(-1/2) at a fixed free stream.
+    assert flux[0] / flux[2] == pytest.approx(np.sqrt(0.8 / 0.05), rel=1e-12)
+    figure = heating_trends(result.rows, UnitPreferences(length="mm"), field="radius")[
+        "熱流束"
+    ]
+    assert figure.layout.xaxis.title.text == "半径 R [mm]"
+    assert list(figure.data[0].x) == pytest.approx([50.0, 425.0, 800.0])
+
+
+def test_cylinder_radius_sweep_poll_scaling_and_partial_domain() -> None:
+    inputs = {**TURBULENT_INPUTS, "geometric_altitude": None}
+    inputs["radius"] = 1.0
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = heating_sweep(
+            field="radius", start=0.01, stop=1.0, points=3, model="comparison", **inputs
+        )
+        poll = swept_cylinder_turbulent_heat_flux(
+            5.0,
+            226.5,
+            1197.0,
+            np.linspace(0.01, 1.0, 3),
+            0.4,
+            wall_temperature=300.0,
+            prandtl_number=0.8,
+        )
+    laminar = swept_cylinder_heat_flux(
+        5.0, 226.5, 1197.0, np.linspace(0.01, 1.0, 3), 0.4, wall_temperature=300.0
+    )
+    turbulent = np.array([r["poll_turbulent_heat_flux"] for r in result.rows], float)
+    assert turbulent == pytest.approx(poll.heat_flux)
+    assert [r["tauber_heat_flux"] for r in result.rows] == pytest.approx(
+        laminar.heat_flux
+    )
+    # Poll: St ~ Re^-0.42 and Re ~ R^(1/2), so q_w ~ R^-0.21.
+    assert turbulent[0] / turbulent[2] == pytest.approx(100.0**0.21, rel=1e-12)
+    out = heating_sweep(
+        field="radius",
+        start=0.01,
+        stop=1.0,
+        points=3,
+        model="comparison",
+        **{**inputs, "sweep_angle": 1.4},
+    )
+    assert {r["status"] for r in out.rows} == {"out_of_domain"}
+    assert all(r["tauber_heat_flux"] is not None for r in out.rows)
+
+
+@pytest.mark.parametrize("missing", ["upstream_mach", "temperature", "pressure"])
+def test_radius_sweep_requires_fixed_state(missing: str) -> None:
+    inputs: dict[str, Any] = {
+        "upstream_mach": 10.0,
+        "temperature": 226.5,
+        "pressure": 1197.0,
+        "geometric_altitude": None,
+        "radius": 0.1,
+        "wall_temperature": 300.0,
+        "geometry": "sphere",
+        "model": "tauber",
+        missing: None,
+    }
+    with pytest.raises(ValueError, match="radius sweep requires Mach"):
+        heating_sweep(field="radius", start=0.1, stop=1.0, points=3, **inputs)
+
+
+def test_radius_sweep_requires_positive_radii() -> None:
+    with pytest.raises(ValueError, match="radius sweep requires positive radii"):
+        heating_sweep(
+            field="radius",
+            start=0.0,
+            stop=1.0,
+            points=3,
+            upstream_mach=10.0,
+            temperature=226.5,
+            pressure=1197.0,
+            geometric_altitude=None,
+            radius=0.1,
+            wall_temperature=300.0,
+            geometry="sphere",
+            model="tauber",
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "missing", "message"),
     [

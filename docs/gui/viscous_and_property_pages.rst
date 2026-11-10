@@ -80,8 +80,11 @@ together with the geometry, wall temperature, and radius. For a sphere,
 choose Fay--Riddell, Tauber, or a comparison of both; these are laminar. For
 a swept cylinder, choose **Tauber（層流）** (laminar), **Poll（完全乱流・付着線）**
 (fully turbulent attachment line), or **Tauber 層流 / Poll 乱流 比較**, which
-shows both and their ratio. Sweeps over Mach number, altitude, or the cylinder
-sweep angle are available. Changing the geometry selects a model that suits it
+shows both and their ratio. Sweeps over Mach number, altitude, nose or
+cylinder radius, or the cylinder sweep angle are available. A radius sweep
+holds the free stream and wall temperature fixed, so the laminar heat flux
+follows :math:`q_w \propto R^{-1/2}` and the Poll turbulent heat flux
+:math:`q_w \propto R^{-0.21}`. Changing the geometry selects a model that suits it
 and clears the previous result. Heat flux is calculated in W/m² and can be
 displayed in kW/m² or MW/m².
 

@@ -7,6 +7,9 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add a nose/cylinder radius sweep to the GUI aerodynamic-heating page for
+  both geometries and all models, with saved-settings support.
+
 - Expose the optional rotational MOC characteristic net through
   `include_characteristic_net`, `CharacteristicNet` and `CharacteristicRow`,
   preserving default solver outputs. Add the GUI characteristic-net tab,
