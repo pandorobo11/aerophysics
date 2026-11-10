@@ -272,12 +272,12 @@ def _set_unit_state(preferences: UnitPreferences) -> None:
     st.session_state[_UNIT_STATE_KEY] = values
 
 
-def calculation_button(form_key: str) -> bool:
+def calculation_button(form_key: str, *, key: str | None = None) -> bool:
     """Render an explicit calculation trigger without batching input widgets."""
     return st.button(
         "計算",
         type="primary",
-        key=f"FormSubmitter:{form_key}-計算",
+        key=key if key is not None else f"FormSubmitter:{form_key}-計算",
     )
 
 

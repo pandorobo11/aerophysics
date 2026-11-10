@@ -7,6 +7,10 @@ uses Semantic Versioning, including during the pre-1.0 period.
 
 ### Added
 
+- Add the single-point AIR axisymmetric body-flow GUI page with cone/ogive,
+  cylinder/boattail or CSV geometry, fitted-shock and surface plots, Cp,
+  atmosphere inputs, settings replay and session case saving.
+
 - Add `transition_distance` to `marching_boundary_layer` with
   `regime=TRANSITIONAL` for a user-specified transition position.
   The resulting SA-noft2 transition length is not a physical prediction.
