@@ -7,6 +7,7 @@ over upstream, and angles are in
 radians. Convert explicitly with
 :func:`aerophysics.units.degrees_to_radians` and
 :func:`aerophysics.units.radians_to_degrees`.
+For worked examples, see :doc:`../guides/compressible_flow`.
 
 Physical background
 -------------------
@@ -114,8 +115,8 @@ Thermally perfect gas
 Pass ``AIR_NASA7``, ``AIR_NASA9``, ``AIR_HARMONIC_OSCILLATOR``, or a custom
 :class:`~aerophysics.thermochemistry.ThermallyPerfectGas` or
 :class:`~aerophysics.real_gas.HarmonicOscillatorGas`, together with
-``upstream_temperature`` in K. Mach, positive expansion turn in radians, and
-temperature broadcast together. Without a gas argument, the constant-gamma
+``upstream_temperature`` in K. Mach number, turn angle in radians, and
+temperature may each be a single number or an array. Without a gas argument, the constant-gamma
 ``AIR`` model is used. These models include variable heat capacity; they do
 not include chemistry, relaxation, dissociation, or real-gas pressure effects.
 
@@ -135,7 +136,7 @@ fan. Along a Mach wave, the flow-turning relation and energy conservation give
    \delta=\int_{T_2}^{T_1}
      \frac{c_p(T)}{u^2(T)}\sqrt{M^2(T)-1}\,dT.
 
-The solver evaluates this integral numerically and finds the downstream
+The function evaluates this integral numerically and finds the downstream
 temperature :math:`T_2` that gives the requested turn :math:`\delta`. It does
 not replace the variable :math:`\gamma(T)` by a fixed upstream value.
 Pressure follows from constant entropy, with :math:`s^\circ(T)` the entropy at
@@ -155,8 +156,7 @@ The NASA presets cover **200--6000 K**, and the harmonic-oscillator air preset
 covers **400--2000 K**. Every static state in the fan must stay in the gas's
 ``temperature_range``; no extrapolation is performed. A requested turn that
 requires a downstream temperature below the lower bound raises
-:class:`~aerophysics.exceptions.ModelRangeError`. Numerical quadrature or root
-convergence failures raise
+:class:`~aerophysics.exceptions.ModelRangeError`. A numerical failure to converge raises
 :class:`~aerophysics.exceptions.ExpansionConvergenceError` instead.
 
 ``available_turn_angle`` is the largest turn from this upstream state before

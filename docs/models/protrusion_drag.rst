@@ -5,7 +5,7 @@ Boundary-layer protrusion drag
 
 :func:`aerophysics.protrusion.protrusion_drag` estimates direct drag on one
 isolated protrusion by integrating the undisturbed local dynamic pressure over
-its frontal area. For a task-oriented example and guidance on supplying a
+its frontal area. For worked examples, including how to supply a
 computed boundary-layer profile, see :doc:`../guides/boundary_layers`.
 Background on aircraft excrescence drag and engineering drag coefficients is
 provided by :ref:`Young and Paterson (1981) <ref-young-paterson-1981>` and

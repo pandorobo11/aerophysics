@@ -2,10 +2,56 @@ Viscous-flow and property pages
 ===============================
 
 These notes cover pages in the **粘性流れ** (viscous flow) and **熱物性**
-(thermophysical properties) groups. The **平板境界層** and
-**圧縮性境界層プロファイル** pages follow their theory pages directly; how
-they pass results to each other and to **突起抗力** is described in
+(thermophysical properties) groups. How the boundary-layer pages pass results
+to each other and to **突起抗力** (protrusion drag) is described in
 :doc:`index`.
+
+Flat-plate boundary layer
+-------------------------
+
+The **平板境界層** page has a **圧縮性を考慮** (include compressibility)
+checkbox and, for turbulent or transitional flow, a **乱流モデル** (turbulent
+model) selector. The selector lists only the models that match the checkbox:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 44 34
+
+   * - Compressibility
+     - Model
+     - Thickness results
+   * - Off
+     - **Schlichting（1/5乗則の厚さ）** (default)
+     - Simple one-fifth-power formula
+   * - Off
+     - **Schlichting（対数則＋ウェイク則の厚さ）**
+     - More accurate at high Reynolds number; same friction and drag
+   * - On
+     - **Van Driest II＋壁温補正（Schlichting）** (default)
+     - Calculated from the velocity profile
+   * - On
+     - **Eckert基準温度法（Schlichting）**, **Van Driest II（Willems の式）**
+     - Not available
+
+Changing the checkbox resets a model that no longer fits to the default.
+
+When a model gives no thickness, the page shows **—** and leaves the thickness
+columns empty in the table, plots, and CSV file. Friction and drag are still
+shown. Such a result cannot be saved as the boundary-layer case for the profile
+page, because that page needs the thickness; **現在の境界層ケースとして保存**
+shows a warning instead.
+
+For laminar flow with compressibility switched on, leaving the wall temperature
+empty means an insulated wall. A warning appears when the boundary layer near
+the leading edge is thick enough to change the pressure on the plate, which
+the flat-plate model does not include.
+
+Settings files saved by older versions of the GUI are converted when loaded. A
+few old model combinations no longer exist; the page then asks you to select a
+model again.
+
+The models are explained in :doc:`../models/flat_plate_boundary_layer`, and
+Python examples are in :doc:`../guides/boundary_layers`.
 
 Flat-plate heat transfer and laminar profiles
 ---------------------------------------------
@@ -13,7 +59,7 @@ Flat-plate heat transfer and laminar profiles
 With **圧縮性を考慮** selected, the **平板境界層** page also reports the Stanton
 number, the heat-transfer coefficient, and the wall heat flux, with heat flux
 into the wall positive. The page uses the default Reynolds-analogy factors
-described in :doc:`../models/flat_plate_boundary_layer`; they cannot be changed
+described in :doc:`../models/flat_plate_heat_transfer`; they cannot be changed
 in the GUI.
 
 The **層流境界層プロファイル** page gives the velocity, temperature, density,

@@ -34,7 +34,7 @@ Current status
    * - Viscous flow
      - Verified
      - Published correlations, NASA TN D-6945, profile and integration checks
-     - :doc:`viscous_flow`
+     - :doc:`viscous_flow`, :doc:`flat_plate_boundary_layer`
 
 ``Verified with observations`` means that every acceptance check passes, but
 an additional, stricter comparison shows small differences that are kept on
@@ -54,3 +54,4 @@ repository's ``DEVELOPMENT.md``.
    compressible_flow
    thermophysical
    viscous_flow
+   flat_plate_boundary_layer

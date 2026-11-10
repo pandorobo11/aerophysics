@@ -3,11 +3,10 @@
 GUI manual
 ==========
 
-The optional GUI runs the package's calculators in a local browser. It calls
-the same calculation APIs and applies the same model limits as the Python
-interface; it is not a separate physical model. The GUI labels are in
-Japanese. This manual gives each Japanese page name with an English
-translation.
+The optional GUI lets you run the package's calculations in a web browser on
+your own computer, without writing Python. It uses the same models and the
+same limits as the Python functions. The labels in the GUI are in Japanese;
+this manual gives each Japanese name with an English translation.
 
 
 Installation and launch
@@ -43,8 +42,7 @@ page of this manual directly.
      - Theory and model details
    * - 飛行状態 (flight)
      - 大気・飛行条件 (atmosphere and flight conditions)
-     - :doc:`../models/standard_atmosphere`, :doc:`../models/flight_conditions`,
-       :doc:`../guides/atmosphere_flight`
+     - :doc:`../models/standard_atmosphere`, :doc:`../models/flight_conditions`
    * - 圧縮性流れ (compressible flow)
      - 連続流れ計算 (sequential flow)
      - :doc:`../guides/flow_sequence`
@@ -148,9 +146,10 @@ Every completed calculation offers two downloads:
   unsupported format version is rejected, and the current inputs are left
   unchanged.
 
-Loading a settings file checks its structure and number ranges, but not
-whether the physics will succeed; a calculation can still fail with the usual
-errors after loading.
+Loading a settings file checks that the file is well formed and that its
+numbers are within the limits of the input boxes. It does not check whether
+the calculation will succeed, so a loaded case can still report an error when
+you run it.
 
 Offline documentation
 ---------------------
@@ -159,16 +158,10 @@ The installed package includes this manual. When ``aerophysics-gui`` starts,
 it also serves the manual locally, and the **ドキュメント** page shows it
 without contacting an external site.
 
-In a source checkout, build the manual before launching the GUI:
-
-.. code-block:: console
-
-   $ uv run sphinx-build -W --keep-going -b html docs docs/_build/html
-   $ aerophysics-gui
-
-The launcher finds a valid ``docs/_build/html`` directory automatically. An
-extracted release documentation ZIP can also be read directly by opening its
-top-level ``index.html`` in a browser.
+The manual can also be read without the GUI: download the documentation ZIP
+from the release page, extract it, and open its top-level ``index.html`` in a
+browser. If you run the GUI from a source checkout, build the manual first as
+described in the repository's ``DEVELOPMENT.md``.
 
 Page notes
 ----------
@@ -176,46 +169,6 @@ Page notes
 .. toctree::
    :maxdepth: 1
 
+   flight_and_sequence_pages
    compressible_flow_pages
    viscous_and_property_pages
-
-The **大気・飛行条件** page and the **連続流れ計算** page are described in
-:doc:`../guides/atmosphere_flight` and :doc:`../guides/flow_sequence`.
-
-Compressible boundary-layer results
------------------------------------
-
-The flat-plate page separates **圧縮性を考慮** from **乱流モデル**. The model
-selector appears only for turbulent or transitional flow and offers only
-models matching the checkbox. Incompressible flow offers
-**Schlichting（1/5乗則の厚さ）** (the default) and
-**Schlichting（対数則＋ウェイク則の厚さ）**. Both give the same friction and
-drag; the second returns momentum thickness consistent with that drag and
-log-wake profile thicknesses, which may be unavailable just after a late
-prescribed transition. Compressible flow defaults to **Van Driest II＋壁温補正（Schlichting）**, which
-provides wall-temperature-corrected friction and profile-based thicknesses.
-Changing compressibility resets an incompatible selection to that default.
-**Eckert基準温度法（Schlichting）** and
-**Van Driest II（Willems の式）** return unavailable (NaN) turbulent thicknesses, including
-post-transition points. Metrics display **—**; tables, plots, and CSV exports
-retain missing thicknesses while friction and drag remain available.
-**現在の境界層ケースとして保存** warns instead of saving when delta99 or wall
-shear is not finite. See :doc:`../models/flat_plate_boundary_layer` for the
-model assumptions and comparison envelope.
-
-For laminar points, enabling **圧縮性を考慮** selects the compressible
-similarity solution for friction and thicknesses, with ``theta = x * cf_local``
-and average friction twice local friction. An omitted wall temperature gives
-a zero-heat-flux wall; recovery temperature is the solved adiabatic wall
-temperature. The effective Reynolds number at laminar points is the edge value.
-The incompressible delta99 coefficient is 4.9100. A laminar viscous-interaction
-warning indicates when leading-edge induced pressure violates the flat-plate
-assumptions; see the model page for the parameter and limits.
-
-Saved schema-version-1 configurations using the former separate correlation
-and correction keys are converted when loaded, except for turbulent or
-transitional one-fifth-power friction with NONE or ECKERT: those settings
-raise an error asking the user to select Schlichting. Legacy power-law
-selections for laminar or VD2 flow still load because the friction selection
-was unused in those cases. Exports use only
-``compressible`` and ``turbulent_model`` (null for laminar flow).

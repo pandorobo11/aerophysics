@@ -10,25 +10,26 @@ available, install the current wheel from the `latest GitHub Release`_:
 
 Check the release page for a newer version before copying a versioned URL.
 
-Confirm that the package can evaluate the reference atmosphere:
+Check that the installation works by asking for the sea-level temperature of
+the standard atmosphere:
 
 >>> from aerophysics import standard_atmosphere
 >>> standard_atmosphere(0.0).temperature
 288.15
 
-Optional local GUI
-------------------
+Optional browser interface
+--------------------------
 
-Install the GUI extra and launch the local Streamlit application:
+The GUI is an optional extra. Install it and start it with:
 
 .. code-block:: console
 
    python -m pip install "aerophysics[gui] @ https://github.com/pandorobo11/aerophysics/releases/download/v0.8.0/aerophysics-0.8.0-py3-none-any.whl"
    aerophysics-gui
 
-The wheel includes an offline copy of this manual. See :doc:`../gui/index`
-for display-unit handling, case handoffs, CSV and JSON files, and the embedded
-documentation page.
+The GUI opens in your web browser and runs entirely on your own computer. The
+package includes a copy of this manual, which the GUI shows on its
+**ドキュメント** (documentation) page. See :doc:`../gui/index`.
 
 Development installation
 ------------------------

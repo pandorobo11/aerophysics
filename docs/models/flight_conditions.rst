@@ -2,9 +2,9 @@ Flight conditions
 =================
 
 :class:`aerophysics.flight.FlightCondition` combines a standard-atmosphere
-state with either a Mach number or a velocity. It is the convenient entry
-point when one consistent ambient, dynamic, Reynolds-number, and total state
-is needed. Atmospheric properties follow :ref:`U.S. Standard Atmosphere 1976
+state with either a Mach number or a velocity. Use it when you need the
+dynamic pressure, Reynolds number, and total conditions of a flight together
+with the properties of the air. For worked examples, see :doc:`../guides/atmosphere_flight`. Atmospheric properties follow :ref:`U.S. Standard Atmosphere 1976
 <ref-us-standard-atmosphere-1976>`, and the calorically perfect total-state
 relations follow :ref:`NACA Report 1135 <ref-naca-report-1135>`.
 

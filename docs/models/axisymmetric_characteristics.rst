@@ -67,78 +67,44 @@ The default ``characteristic_count=88`` divides the starting characteristic;
 ``fan_angle_step`` defaults to one degree expressed in radians. Double the
 count and halve the fan step to refine. Surface stations are the computed
 wall intersections, plus analytic cone samples and exact geometry vertices.
-Arrays are owned and read-only. Surface distance follows the meridian from
+Result arrays are read-only. Surface distance follows the meridian from
 the sharp tip, where the state is the cone-surface limit.
 
-A convex vertex has one public surface station, with the **downstream** fan
-state. All fan states at that same coordinate are used internally. Keeping
-both limits would violate the strictly increasing distance required by the
-boundary-layer edge API. The boundary-layer conversion separately inserts
-pre-corner and midpoint stations; the public inviscid arrays are unchanged.
-This does not model viscous interaction at a sharp corner.
+At a corner the surface state jumps from the value before the expansion to the
+value after it. The result holds one station at the corner, with the state
+**after** the expansion. See `Boundary-layer connection`_ for how the jump is
+handled when the result is passed to the boundary-layer calculation.
 
-Shock stations may extend beyond the body's final axial coordinate because
-a corner's leading wave can first reach the shock farther downstream.
-Characteristics that do not reach the shock within the needed downstream
-region are truncated without imposing an outflow state. Successful downstream
-shock extrapolations are retained. If an angle iteration leaves the admissible
-shock interval, stopping its extrapolation requires both the geometric
-continuation beyond the body endpoint and a wall-dependence check: the local
-C- ray from the retained outermost point must meet the current body segment's
-extension at or beyond the endpoint. The actual body tangent is used even
-inside a centered fan. Future convex segments lie below that extension, but
-the straight-ray estimate does not include characteristic curvature. Every
-wall/row operation therefore checks that enough front points remain; a
-shortage raises a location-bearing ``ModelRangeError`` with advice to reduce
-``fan_angle_step``. Long bodies with coarse fans can require this refinement.
-No exterior states are invented, missing wall intervals are not extrapolated,
-and an incomplete wall march is never returned as a successful result.
+The shock trace can extend beyond the end of the body, and it can also stop
+before it: the trace ends at the last shock point that the calculation
+actually reached. No values are extrapolated beyond that point, so do not use
+the trace to construct a flow profile at the end of the body. The surface
+result is always complete; if the surface cannot be completed, the function
+raises ``ModelRangeError`` and names the location. On a long body with a
+coarse fan the message may advise a smaller ``fan_angle_step``.
 
-An accepted truncation leaves the trace at its last fitted shock point,
-which can be before the body endpoint;
-no terminal shock state or complete outer flow field is promised. Do not
-extrapolate missing shock data to construct a terminal transverse profile.
-Subsonic states, crossed characteristics and failures inside the requested
-domain still raise location-bearing errors. The characteristic net is not
-exposed as a public field solution.
+Accuracy
+--------
 
-For the M3/9.46-degree and M6/4.76-degree cone--cylinder verification cases,
-the cylinder length is ten diameters. The design record
-``devdocs/axisymmetric_characteristics_design.md`` records grid differences,
-observed order, mass balance, runtime and boundary-layer coupling tests.
-The original M1 cone-only result, M5 at the exact expansion vertex, and the
-constant-edge cone part of M7 agree **by construction**: they check the API,
-initialization and boundary-layer connection. They are not evidence for the
-accuracy of the MOC march itself.
+The conical nose region uses the exact Taylor--Maccoll solution. For the rest
+of the body, the numerical error of the default resolution was estimated by
+grid refinement on M3 and M6 cone--cylinders ten diameters long: the surface
+pressure error is below 0.01 percent. A separate test that marches a plain
+cone with the same method agrees with the exact cone solution to within
+0.1 percent in pressure at M2 and 10 degrees. These figures describe the
+numerical method only, not the physical model.
 
-An additional private verification starts the characteristic net at 5 percent
-of a cone's length with zero turn, and marches the remaining cone through the
-same wall, interior and shock unit processes. For M2/10 degrees, maximum
-relative errors at the default count 88 are 0.09955 percent in pressure,
-0.03534 percent in Mach and 0.01383 percent in shock-ray position. Count 87
-has pressure error 0.10177 percent; 88 is the smallest count reaching the
-requested 0.1 percent criterion. For M6/5 degrees the errors are 0.005382,
-0.000892 and 0.005287 percent. The retained 24/48/96/192 refinement study
-gives final observed orders 1.970/1.970/2.020 and 1.999/1.999/1.999,
-respectively. The normal public conical portion uses the exact similarity
-solution. The default M3 cone--cylinder calculation takes about 0.08--0.11 s
-on the development machine (cylinder length ten diameters).
+Compared with the graphical characteristics solutions of
+:ref:`NACA TN 2250, Figure 1 <ref-ehret-rossow-stevens-1950>`, the surface
+pressure :math:`(p-p_\infty)/p_\infty` differs by at most 0.010 (M3) and 0.014
+(M6). The figure can be read to about +/-0.005. That source is itself a
+calculation that neglects entropy differences between streamlines, so
+agreement with experiment has not been established.
 
-For the cone--cylinder refinement cases, the estimated maximum relative
-pressure errors of the default 88/1-degree net are 1.70e-5 (M3) and 2.82e-5
-(M6) within the first 0.1 cone lengths after the shoulder, and 7.80e-6 / 6.31e-5
-farther downstream. These are numerical Richardson estimates; they do not
-include physical-model error. Increasing only the characteristic count does
-not guarantee decreasing error: refine the fan angle step as well.
-
-Comparison with the reviewer-supplied digitization of
-:ref:`NACA TN 2250, Figure 1 <ref-ehret-rossow-stevens-1950>` gives maximum
-absolute differences 0.01035 (M3, l/d = 3) and 0.01401 (M6, l/d = 6) in
-(p - p_inf)/p_inf, within the prescribed bound 0.02. Cone length l is measured
-from tip to shoulder and the cylinder ends at x/l = 3.4. The source solution
-is **irrotational graphical MOC**, not a rotational solution or experiment.
-Reading uncertainties are +/-0.005 vertically and +/-1 percentage point in
-100*x/l. Experimental accuracy remains unestablished.
+Increasing only ``characteristic_count`` does not always reduce the error;
+refine ``fan_angle_step`` as well. The default M3 cone--cylinder calculation
+takes about 0.1 s. The full measurements are in
+``devdocs/axisymmetric_characteristics_design.md``.
 
 Boundary-layer connection
 --------------------------
@@ -149,44 +115,25 @@ pressure is constant, so
 uses :meth:`~aerophysics.marching_boundary_layer.BoundaryLayerEdge.from_pressure`
 with the post-conical-shock total pressure and the uniform total temperature.
 It returns :class:`~aerophysics.characteristics.BoundaryLayerInputs`, a named
-pair of ``edge`` and ``wall_radius``. The owned, read-only radius array matches
-``edge.distance`` exactly by piecewise linear interpolation of the meridian.
-Always pass this array, rather than the original flow-result radius, to the
-boundary-layer solver. The original perfect-gas and viscosity models are
-preserved. See the runnable example in :doc:`../guides/boundary_layers`.
+pair of ``edge`` and ``wall_radius``. The radius array matches
+``edge.distance`` point for point. Always pass this array, rather than the
+radius stored in the flow result, to the boundary-layer solver. See the runnable example in :doc:`../guides/marching_boundary_layers`.
 
-At every convex corner at surface distance ``s_c``, conversion inserts the
-pre-expansion wall pressure at ``s_c - w`` and a logarithmic-pressure midpoint
-at ``s_c - w/2``. This uses the local marched pre-fan state at later corners,
-not the original cone state. The corner itself retains the downstream state.
-The default width is ``w = 0.001 * s_c``; an explicit ``corner_length`` sets
-a common width in metres. A nonpositive or nonfinite width, a width reaching
-the preceding output point, or unresolvable inserted coordinates raises
-``ValueError``. No existing points are discarded.
+A sharp corner would give the boundary layer two different outer states at
+one position. The conversion therefore replaces the jump by a very short
+pressure ramp that ends at the corner. Its length is ``0.001`` times the
+surface distance of the corner by default; pass ``corner_length`` in metres to
+``boundary_layer_inputs`` to choose another length. The ramp must fit between
+the corner and the output point before it, otherwise ``ValueError`` is raised.
 
-The midpoint ensures that the public boundary-layer march samples the steep
-pressure gradient and issues its pressure-length warning for the default
-cone--cylinder case. The general boundary-layer warning samples only output
-stations; without the midpoint the zero PCHIP endpoint slopes can hide a
-large interior gradient. The boundary-layer module itself is unchanged.
-
-Thin-layer predictions near the shoulder, including at least several tens
-of upstream delta99 downstream, are not reliable local corner solutions.
-They depend on the artificial width ``w``; the extra points do not resolve
-viscous interaction or displacement feedback. Width-sensitivity measurements
-for M3, cone length 0.3 m, radius 0.05 m, cylinder length 1 m and wall
-temperature 300 K are recorded in the design memo. Here the default width
-is 0.304138 mm. Relative to a 0.2 mm width, at 5 upstream thicknesses the
-default changes laminar Cf by -0.617 percent, heat flux by -0.442 percent
-and delta99 by +0.046 percent; the SA changes are -0.016, +0.006 and
--0.018 percent. Relative to 1 mm the laminar differences are +3.825,
-+2.271 and -0.295 percent (SA +0.100, -0.031 and +0.114 percent).
-At 20 thicknesses, default versus 1 mm still changes laminar Cf by
-+0.877 percent and heat flux by +0.553 percent. At 100 thicknesses these
-differences are +0.105 and +0.043 percent. Small width differences do not
-establish physical validity; some SA differences are comparable to the
-measured streamwise discretization uncertainty. The design memo gives all
-three quantities at 5/20/100 thicknesses and the step-refinement check.
+The ramp is artificial. A real boundary layer changes the outer flow near a
+corner, which this one-way calculation does not include. The boundary-layer
+march therefore warns about the steep pressure change, and its results near
+the corner are not reliable. They also depend on the ramp length. For an M3
+cone--cylinder (cone 0.3 m, radius 0.05 m, wall at 300 K), changing the ramp
+from the default 0.3 mm to 1 mm changed the laminar Cf by 3.8 percent at
+5 boundary-layer thicknesses downstream of the corner, 0.9 percent at 20, and
+0.1 percent at 100. The turbulent Cf changed by 0.1 percent at 5 thicknesses.
 
 The classical characteristic framework is described by
 :ref:`Zucrow and Hoffman <ref-zucrow-hoffman-1977>` and

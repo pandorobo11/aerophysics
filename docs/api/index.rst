@@ -1,16 +1,18 @@
 API reference
 =============
 
-The API reference is organized by calculation domain. Public objects are
-documented once, in their defining module. Frequently used classes and
-functions are also re-exported from ``aerophysics`` for concise imports:
+The API reference lists every public function and class with its inputs,
+outputs, and units, grouped by subject. For worked examples, see the
+:doc:`../guides/index`.
+
+The most frequently used classes and functions can be imported directly from
+``aerophysics``:
 
 .. code-block:: python
 
    from aerophysics import FlightCondition, oblique_shock, standard_atmosphere
 
-Compatibility re-exports in older modules are listed by their defining module
-rather than documented a second time.
+Everything else is imported from its own module, as shown on each page.
 
 .. automodule:: aerophysics
 

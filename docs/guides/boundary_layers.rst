@@ -1,51 +1,37 @@
 .. _boundary-layer-workflows:
 
-Boundary-layer workflows
-========================
+Flat-plate boundary layers
+==========================
 
-Use these workflows to estimate a smooth flat-plate boundary layer, construct
-a compressible turbulent mean profile, or account for the reduced dynamic
-pressure acting on an immersed protrusion. All dimensional inputs and outputs
-use SI units.
+A boundary layer is the thin layer of slowed air next to a surface. It causes
+skin-friction drag and, at high speed, heats the surface. This guide covers a
+smooth flat plate with a steady outer flow, plus two related calculations:
+velocity profiles through the layer, and the drag of a small object standing in
+it.
 
-Choose a workflow
------------------
+If the outer flow changes along the surface, for example because the pressure
+rises or falls, use :doc:`marching_boundary_layers` instead.
 
-.. list-table:: Boundary-layer tasks
+.. list-table::
    :header-rows: 1
-   :widths: 23 30 27 20
+   :widths: 45 55
 
    * - Task
-     - Start with
-     - Required state
-     - Detailed model
-   * - Estimate thickness, friction, and one-sided plate drag
-     - ``flat_plate_boundary_layer``
-     - Distance and edge velocity, density, and viscosity
-     - :doc:`../models/flat_plate_boundary_layer`
-   * - Follow a laminar or SA-noft2 layer through a changing edge pressure
-     - ``marching_boundary_layer``
-     - Edge pressure and total state; optional wall radii for thin axisymmetric flow
-     - :doc:`../models/marching_boundary_layer`
-   * - Transform a measured or computed compressible velocity profile
-     - ``transform_compressible_velocity_profile``
-     - Wall-normal velocity, density, and viscosity profiles plus wall shear
-     - :doc:`../models/compressible_velocity_transformations`
-   * - Construct a smooth turbulent ZPG mean profile
-     - ``compressible_turbulent_boundary_layer_profile``
-     - Edge state, :math:`\delta_{99}`, and wall shear
-     - :doc:`../models/compressible_velocity_transformations`
-   * - Estimate direct drag on one immersed protrusion
-     - ``protrusion_drag``
-     - Protrusion geometry, edge state, and either boundary-layer thickness or
-       supplied profiles
-     - :doc:`../models/protrusion_drag`
+     - Function
+   * - Thickness, friction, drag, and heat transfer on a flat plate
+     - :func:`~aerophysics.boundary_layer.flat_plate_boundary_layer`
+   * - Velocity and temperature through the layer at one position
+     - :func:`~aerophysics.boundary_layer.flat_plate_boundary_layer_profile`
+   * - Drag of a small protrusion inside the layer
+     - :func:`~aerophysics.protrusion.protrusion_drag`
 
-Estimate a flat-plate boundary layer
-------------------------------------
+Thickness, friction, and drag
+-----------------------------
 
-Select the boundary-layer state explicitly. This laminar example uses SI
-edge conditions and returns the one-sided drag per unit width:
+Give the distance from the leading edge and the flow just outside the boundary
+layer, called the **edge** flow. On a flat plate at zero incidence the edge
+flow is simply the free stream. You must also say whether the layer is laminar
+or turbulent:
 
 >>> from aerophysics import BoundaryLayerRegime, flat_plate_boundary_layer
 >>> layer = flat_plate_boundary_layer(
@@ -59,58 +45,169 @@ edge conditions and returns the one-sided drag per unit width:
 1000000.0
 >>> round(layer.boundary_layer_thickness, 6)
 0.00491
+>>> round(layer.local_skin_friction_coefficient, 6)
+0.000664
 >>> round(layer.drag_per_unit_width, 6)
 0.0664
 
-Use ``LAMINAR`` or ``TURBULENT`` when the state is known. ``TRANSITIONAL``
-requires a caller-supplied transition Reynolds number; the API does not
-predict natural transition. Downstream of it, the turbulent part continues
-the fully turbulent plate with the same momentum thickness, so drag is
-continuous while local friction jumps. Returned momentum thickness is
-continuous for the log-wake and wall-temperature models; see the model page
-for the exceptions. Compressibility
-corrections are opt-in. See
-:doc:`../models/flat_plate_boundary_layer` for the available correlations,
-required thermodynamic inputs, and applicability ranges.
+``boundary_layer_thickness`` is the height at which the velocity reaches 99% of
+the edge velocity, in metres. ``drag_per_unit_width`` is the friction drag of
+one side of the plate from the leading edge to ``distance``, in newtons per
+metre of width. The result also holds the displacement and momentum
+thicknesses, the average friction coefficient, and the wall shear stress.
 
-Construct or transform a mean profile
--------------------------------------
+The edge flow can come straight from a flight condition:
 
-:func:`aerophysics.boundary_layer_profile.compressible_turbulent_boundary_layer_profile`
-predicts a smooth-wall, zero-pressure-gradient mean profile from supplied edge
-conditions, :math:`\delta_{99}`, and wall shear stress. It combines Spalding's
-wall law and the Coles wake with either a Van Driest or Volpiani inverse
-transformation. GRA is the default temperature--velocity closure; Walz is
-selectable. The result includes velocity and thermodynamic arrays plus
-profile-integrated displacement and momentum thicknesses.
+>>> from aerophysics import FlightCondition
+>>> flight = FlightCondition.from_mach(10_000.0, 0.8)
+>>> air = flight.atmosphere
+>>> layer = flat_plate_boundary_layer(
+...     2.0,
+...     edge_velocity=flight.velocity,
+...     edge_density=air.density,
+...     edge_dynamic_viscosity=air.dynamic_viscosity,
+...     regime=BoundaryLayerRegime.TRANSITIONAL,
+...     transition_reynolds=5e5,
+... )
+>>> round(layer.drag_per_unit_width, 2)
+66.42
 
-The profile API accepts thickness and shear explicitly. For compressible
-thicknesses, select ``VAN_DRIEST_II_WALL_TEMPERATURE`` in the flat-plate API;
-``ECKERT`` and ``VAN_DRIEST_II`` do not supply turbulent thicknesses.
-A typical sequence is:
+Laminar, turbulent, or both
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#. Evaluate ``flat_plate_boundary_layer`` at the station of interest.
-#. Create a wall-normal grid from zero through the returned
-   ``boundary_layer_thickness``.
-#. Pass that thickness and ``wall_shear_stress`` explicitly to
-   ``compressible_turbulent_boundary_layer_profile``. To reproduce the new
-   flat-plate closure, select ``VAN_DRIEST`` and ``WALZ`` and use the same
-   wall temperature and thermophysical models.
-#. Use the returned velocity, density, temperature, and viscosity arrays for
-   analysis or as provided profiles for ``protrusion_drag``.
+* ``LAMINAR`` and ``TURBULENT`` treat the whole plate as one or the other.
+* ``TRANSITIONAL`` is laminar up to the Reynolds number you give in
+  ``transition_reynolds`` and turbulent after it.
 
-If profiles already come from measurements or simulation, use
-``transform_compressible_velocity_profile`` instead. The model is limited to
-fully turbulent, smooth, approximately zero-pressure-gradient flow. The
-transformation equations, selection table, complete examples, and further
-limitations are in
-:doc:`../models/compressible_velocity_transformations`.
+The package does not predict where transition happens; that depends on
+roughness, noise, and other things outside these models. You choose it. A value
+near :math:`5\times10^5` is a common assumption for a smooth plate in a quiet
+flow.
 
-Estimate protrusion drag
-------------------------
+Thickness at high Reynolds number
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Scale a separately known free-stream drag coefficient by the dynamic pressure
-available across a protrusion's frontal area:
+The default turbulent thickness formula is simple but loses accuracy above a
+Reynolds number of about :math:`10^7`, where it emits a warning. For those
+cases select the log-wake model, which gives the same friction and drag with a
+better thickness:
+
+>>> from aerophysics import TurbulentModel
+>>> layer = flat_plate_boundary_layer(
+...     1.0,
+...     edge_velocity=100.0,
+...     edge_density=1.0,
+...     edge_dynamic_viscosity=1e-5,
+...     regime=BoundaryLayerRegime.TURBULENT,
+...     turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
+... )
+>>> round(layer.boundary_layer_thickness, 6)
+0.014564
+
+High-speed flow and heat transfer
+---------------------------------
+
+At high Mach number, friction heats the air inside the boundary layer. This
+changes its density and viscosity, and so the friction itself. To include the
+effect, set ``compressible=True`` and add the Mach number and temperature at
+the edge. For turbulent flow, also choose a compressible model:
+
+>>> flight = FlightCondition.from_mach(20_000.0, 3.0)
+>>> air = flight.atmosphere
+>>> layer = flat_plate_boundary_layer(
+...     1.0,
+...     edge_velocity=flight.velocity,
+...     edge_density=air.density,
+...     edge_dynamic_viscosity=air.dynamic_viscosity,
+...     regime=BoundaryLayerRegime.TURBULENT,
+...     compressible=True,
+...     turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE,
+...     mach=3.0,
+...     edge_temperature=air.temperature,
+...     wall_temperature=400.0,
+... )
+>>> round(layer.local_skin_friction_coefficient, 6)
+0.001904
+>>> round(layer.recovery_temperature, 1)
+566.2
+>>> round(layer.wall_heat_flux)
+14260
+
+``recovery_temperature`` is the temperature the wall would reach if no heat
+flowed through it. Here the wall is held at 400 K, which is cooler, so heat
+flows into the wall: ``wall_heat_flux`` is positive, in W/m². The result also
+holds the Stanton number and the heat-transfer coefficient.
+
+If you leave out ``wall_temperature``, the wall is taken to be insulated. It
+then sits at the recovery temperature and the heat flux is zero.
+
+.. list-table:: Turbulent models for ``compressible=True``
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Model
+     - Notes
+   * - ``VAN_DRIEST_II_WALL_TEMPERATURE``
+     - Recommended. Accounts for wall temperature and returns friction, heat
+       transfer, and all three thicknesses.
+   * - ``VAN_DRIEST_II``
+     - Friction, drag, and heat transfer only. The thicknesses are ``NaN``.
+   * - ``ECKERT``
+     - A simpler reference-temperature method. Friction, drag, and heat
+       transfer only. The thicknesses are ``NaN``.
+
+Laminar flow needs no model choice. With ``compressible=True`` it is solved
+directly from the laminar boundary-layer equations.
+
+The equations, the ranges over which each model was checked, and the remaining
+options are in :doc:`../models/flat_plate_boundary_layer`.
+
+Profiles through the layer
+--------------------------
+
+:func:`~aerophysics.boundary_layer.flat_plate_boundary_layer_profile` returns
+the velocity, temperature, density, viscosity, and local Mach number between
+the wall and the edge of the layer at one position. It takes the edge velocity,
+density, and temperature, and works out the Mach number and viscosity itself:
+
+>>> from aerophysics import flat_plate_boundary_layer_profile
+>>> profile = flat_plate_boundary_layer_profile(
+...     1.0,
+...     flight.velocity,
+...     air.density,
+...     air.temperature,
+...     regime=BoundaryLayerRegime.TURBULENT,
+...     wall_temperature=400.0,
+... )
+>>> profile.wall_distance.shape
+(201,)
+>>> round(float(profile.temperature[0]), 1)
+400.0
+>>> round(float(profile.temperature.max()), 1)
+414.3
+
+The temperature peaks inside the layer, above both the wall and the edge
+values, because that is where friction heats the air. The matching thickness
+and friction values are in ``profile.boundary_layer``.
+
+Two more specialised functions are described in
+:doc:`../models/compressible_velocity_transformations`:
+
+* :func:`~aerophysics.boundary_layer_profile.compressible_turbulent_boundary_layer_profile`
+  builds a turbulent profile from a thickness and wall shear stress that you
+  supply, for example from a measurement.
+* :func:`~aerophysics.boundary_layer_profile.transform_compressible_velocity_profile`
+  converts a measured or computed high-speed profile into the form used to
+  compare it with low-speed data.
+
+Drag of a small protrusion
+--------------------------
+
+A rivet head, a sensor, or a step that sits inside the boundary layer meets
+slower air than the free stream, so its drag is lower than its free-stream drag
+coefficient suggests. :func:`~aerophysics.protrusion.protrusion_drag` makes
+this correction. Give the drag coefficient the object would have in a uniform
+stream, its height and width, the edge flow, and the boundary-layer thickness:
 
 >>> from aerophysics import protrusion_drag
 >>> drag = protrusion_drag(
@@ -126,284 +223,42 @@ available across a protrusion's frontal area:
 >>> round(drag.direct_drag, 6)
 0.661721
 
-The default uses a one-seventh-power turbulent velocity profile. For a
-measured or computed profile, pass ``profile_height``, ``profile_velocity``,
-and, when available, ``profile_density``. The profile arrays returned by
-``compressible_turbulent_boundary_layer_profile`` can be supplied directly.
-See :doc:`../models/protrusion_drag` for the integral definition, optional
-compressible approximation, and excluded three-dimensional effects.
+``shielding_factor`` is the fraction of the free-stream dynamic pressure that
+the object actually meets, and ``direct_drag`` is the resulting force in
+newtons.
 
-Follow a boundary layer through a pressure change
--------------------------------------------------
+By default the velocity in the layer follows a one-seventh power law, a common
+approximation for a turbulent layer. To use a profile of your own, pass
+``profile_height``, ``profile_velocity``, and optionally ``profile_density``.
+The arrays from the profile functions above fit directly:
 
-``flat_plate_boundary_layer`` evaluates each state independently.
-``marching_boundary_layer`` instead marches from the leading edge, so each
-station inherits the upstream history. Supply the edge pressure along the wall,
-starting at the leading edge:
-
->>> import numpy as np
->>> from aerophysics import (
-...     BoundaryLayerEdge,
-...     BoundaryLayerRegime,
-...     marching_boundary_layer,
+>>> drag = protrusion_drag(
+...     1.1,
+...     height=0.005,
+...     frontal_width=0.01,
+...     edge_velocity=flight.velocity,
+...     edge_density=air.density,
+...     boundary_layer_thickness=profile.boundary_layer.boundary_layer_thickness,
+...     profile_height=profile.wall_distance,
+...     profile_velocity=profile.velocity,
+...     profile_density=profile.density,
 ... )
->>> distance = np.linspace(0.0, 1.0, 51)
->>> pressure = 2.0e4 * (1.0 - 0.2 * distance)
->>> edge = BoundaryLayerEdge.from_pressure(
-...     distance,
-...     pressure,
-...     total_pressure=1.6e5,
-...     total_temperature=500.0,
-... )
->>> layer = marching_boundary_layer(
-...     edge,
-...     regime=BoundaryLayerRegime.LAMINAR,
-...     wall_temperature=300.0,
-... )
->>> layer.distance.size
-50
->>> bool(np.all(layer.pressure_gradient_parameter > 0.0))
+>>> 0.0 < drag.shielding_factor < 1.0
 True
 
-Use ``regime=BoundaryLayerRegime.TURBULENT`` for SA-noft2. The defaults are
-``turbulent_prandtl_number=0.9`` and ``edge_sa_ratio=3.0`` at the first edge
-station; dimensional ``nu_tilde`` is conserved along the outer streamline.
-``edge_sa_ratio=0`` gives the laminar limit. Both options are validated in every
-regime, and both SA regimes use them. The result's read-only
-``nu_tilde_ratio`` array has shape ``(N_s, N_eta)``; laminar results use None.
-Omit ``wall_temperature`` for an adiabatic wall.
+The model only accounts for the slower air. It does not describe how the
+object disturbs the flow around it. See :doc:`../models/protrusion_drag`.
 
-SA-noft2 develops its own laminar start and transition near the leading edge.
-This is not a transition prediction. Accuracy against experiment is not
-established; agreement with CFD using the same model does not establish it.
+What these models leave out
+---------------------------
 
-To prescribe where SA production starts, provide a wall distance explicitly::
+These are quick engineering estimates for a smooth flat plate. They do not
+include surface roughness, a pressure that changes along the plate, flow
+separation, or suction and blowing through the wall. A warning tells you when
+an input lies outside the range that a formula was fitted to; see
+:doc:`vectorization_errors`.
 
-    layer = marching_boundary_layer(
-        edge,
-        regime=BoundaryLayerRegime.TRANSITIONAL,
-        transition_distance=0.3,  # metres from the leading edge along the wall
-        wall_temperature=300.0,
-    )
-
-Choose a finite scalar strictly between zero and the final edge distance.
-``transition_distance`` is required for ``TRANSITIONAL`` and rejected in other
-regimes. This mode requires ``edge_sa_ratio > 0`` and supports ``wall_radius``.
-It solves SA-noft2 everywhere, suppressing only production at and upstream of
-the specified position. The solver visits that position even if it is absent
-from the output stations. Small upstream eddy viscosity remains, so the
-upstream solution is not exactly the separate ``LAMINAR`` result.
-
-The resulting transition length is a numerical SA-noft2 response, **not a
-prediction of physical transition length**. Inspect the onset region with
-streamwise and wall-normal refinement. Natural-transition prediction,
-intermittency, roughness, and SA trip functions are not included. For the
-method, measured upstream differences and separate checks of transition
-implementation and the laminar limit, see :ref:`marching-boundary-layer-model`.
-
-An adverse pressure gradient can separate the boundary layer. The march then
-raises ``BoundaryLayerSeparationError``, which holds ``separation_distance`` and
-the ``result`` at the stations upstream.
-
-Thin axisymmetric boundary layers
----------------------------------
-
-Supply ``wall_radius`` in metres at the edge nodes. Here a 20 degree cone
-with constant edge conditions demonstrates the laminar Mangler relation:
-
->>> cone_edge = BoundaryLayerEdge.from_pressure(
-...     [0.0, 1.0], [20000.0, 20000.0],
-...     total_pressure=160000.0, total_temperature=500.0,
-... )
->>> plate = marching_boundary_layer(cone_edge, regime=BoundaryLayerRegime.LAMINAR)
->>> cone = marching_boundary_layer(
-...     cone_edge, regime=BoundaryLayerRegime.LAMINAR,
-...     wall_radius=cone_edge.distance * np.sin(np.radians(20.0)),
-... )
->>> round(float(cone.local_skin_friction_coefficient[0]
-...             / plate.local_skin_friction_coefficient[0]), 6)
-1.732051
-
-The ratio is sqrt(3) at equal wall distance; the cone thickness is divided by
-sqrt(3). This is an analytical verification example. Radius uses piecewise
-linear interpolation, so curved bodies need sufficiently dense nodes.
-``wall_radius=None`` keeps the planar calculation; a positive scalar describes
-a constant-radius wall beginning at a sharp edge. Only the first array radius
-may be zero. Results exclude the singular tip.
-
-Transverse curvature is neglected. A warning reports delta99/r_w above 0.1,
-an uncalibrated indicator; near-tip stations commonly trigger it. Longitudinal
-curvature and normal pressure gradients are also neglected. Use SI units and
-wall arc length, local-edge Cf, and positive-into-wall heat flux.
-
-For a sharp convex cone--cylinder with an attached supersonic flow, see
-`Cone--cylinder outer flow and boundary layer`_ below for an inviscid
-characteristic solution and one-way boundary-layer connection.
-``flow_sequence`` cannot provide the shoulder's edge distribution.
-The synthetic shoulder verification is only a numerical stress test.
-
-.. _rm3633-example:
-
-Worked measured body: R&M 3633
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:ref:`Winter, Rotta and Smith <ref-winter-rotta-smith-1968>` measured a waisted
-body of revolution, with a 20 degree conical nose, at M_inf=1.700 and
-Re_l=10.08e6. Length is 60 in (1.524 m). The comparison below is generated,
-not executed as a doctest. The generator contains the five Fig. 1 polynomials
-for R/l versus X/l, with the final segment cubic, and checks all radius
-junctions to 1e-5. Wall distance is the accurate quadrature of
-``sqrt(1+(dR/dX)^2)`` using analytic polynomial derivatives.
-
-The Table 1 phi=0 values are transcribed without alteration in
-``tests/reference_data/viscous_flow/rm3633_m17.csv``. The total-pressure ratios
-0.9926--0.9962 calculated from Cp and M_delta check transcription consistency.
-Static edge
-pressure uses ``p/p_inf = 1 + 0.7 M_inf**2 Cp`` and the edge total pressure is
-the freestream total pressure times the Taylor--Maccoll loss for a 20 degree
-cone at M1.7 (ratio 0.9957049344). At the added tip, pressure equals the X=3 in
-value. Measured Cp is unsmoothed. PCHIP of ln(p) in wall distance supplies a
-dense grid at approximately 0.25 in axial spacing, with measured stations and
-geometry junctions included; radii on those nodes use the body polynomials.
-The march ends at the last measured pressure station, X=59 in.
-
-Total temperature and wall thermal condition are not stated. We assume
-T0=310 K and an adiabatic wall, consistent with the paper's zero-heat-transfer
-analysis, and scale freestream pressure to the measured Reynolds number.
-The table includes 290 K and 330 K sensitivities and a separate substitution
-of Taylor--Maccoll cone pressure at X<=6 in. ``edge_sa_ratio=3``.
-
-The 0.005 in ballotini trip was at 1.5 in from the nose and was inadequate at
-Mach numbers of 1.4 and above. X=3 in is transitional (Cf=0.00140 versus
-0.00393 at 6 in); comparisons use X>=12 in only. Cf is based on local dynamic
-pressure. This comparison retains the original all-SA calculation; no
-prescribed transition is applied to these experimental data. The source gives Cf accuracy +/-0.0002 and Cp accuracy +/-0.005.
-A missing Cf at 15 in is not interpolated or treated as zero.
-
-The calculated delta99/r_w is large near the waist, consistent with the
-paper's warning that the layer is not small relative to radius there. Wall Cp
-may also differ from edge Cp through normal pressure gradients. Thus the
-comparison exposes limits of the thin-layer model; it is not an accuracy
-certification or a fitted correlation.
-
-.. include:: ../_generated/marching_axisymmetric_verification.rst
-
-Check applicability before using the result
--------------------------------------------
-
-These APIs are engineering models, and none of them is coupled to the outer
-flow. The marching solver takes the edge state as an input and supports
-laminar and SA-noft2 flow.
-The flat-plate correlations exclude roughness, streamwise pressure gradients,
-separation, suction, blowing, and natural-transition prediction. The profile
-construction assumes a smooth, fully turbulent, approximately ZPG boundary
-layer. The protrusion model integrates an undisturbed profile and does not
-resolve wall interference, vortices, shocks, or interactions among multiple
-elements.
-
-Incompressible turbulent thicknesses
-------------------------------------
-
-With ``compressible=False``, turbulent thicknesses default to the
-one-fifth-power correlation. Select ``TurbulentModel.SCHLICHTING_LOG_WAKE``
-for the same friction with a momentum thickness consistent with the returned
-drag and a log-wake profile delta99:
-
->>> from aerophysics import TurbulentModel
->>> layer = flat_plate_boundary_layer(
-...     1.0,
-...     edge_velocity=100.0,
-...     edge_density=1.0,
-...     edge_dynamic_viscosity=1e-5,
-...     regime=BoundaryLayerRegime.TURBULENT,
-...     turbulent_model=TurbulentModel.SCHLICHTING_LOG_WAKE,
-... )
->>> round(layer.boundary_layer_thickness, 6)
-0.014564
->>> round(layer.momentum_thickness, 6)
-0.001502
->>> round(layer.distance * layer.average_skin_friction_coefficient / 2, 6)
-0.001502
-
-The one-fifth-power delta99 is about 40% thick at :math:`Re_x=10^6` and
-becomes too thin above about :math:`5\times10^7`; it warns above
-:math:`10^7`. See
-:ref:`flat-plate-log-wake-thickness` for the closure, its accuracy, and the
-points where it returns ``NaN``.
-
-Compressible turbulent thicknesses
-----------------------------------
-
-Use ``compressible=True`` and
-``turbulent_model=TurbulentModel.VAN_DRIEST_II_WALL_TEMPERATURE`` for the
-wall-temperature-corrected Schlichting/VD2 friction pair and Van Driest/Walz
-profile thicknesses. Momentum thickness follows the accumulated friction
-integral; displacement thickness is integrated only through delta99.
-Supply local edge conditions. See :doc:`../models/flat_plate_boundary_layer`
-for the external validation envelope and limitations.
-
-``ECKERT`` and ``VAN_DRIEST_II`` return ``NaN`` for all three turbulent
-thicknesses, also after a prescribed transition. Their friction and drag remain available.
-
-
-Compressible laminar thicknesses
---------------------------------
-
-With ``compressible=True``, laminar points solve the perfect-gas similarity equations
-for friction and thicknesses. Momentum thickness obeys ``theta = x * cf_local``
-and average friction is twice local friction, on the edge dynamic-pressure
-basis. Omitted wall temperature means zero wall heat flux; recovery temperature
-is the solved adiabatic temperature even for a specified isothermal wall.
-``effective_reynolds_number`` is the external Reynolds number at laminar points.
-These rules also apply before transition, and to the laminar momentum
-thickness that starts the turbulent part after transition. ``compressible=False`` retains the Blasius delta99 coefficient 4.9100.
-See :doc:`../models/flat_plate_boundary_layer` for equations, numerical accuracy,
-and the constant-cp, constant-Pr, zero-pressure-gradient assumptions.
-
-An ``ApplicabilityWarning`` reports laminar viscous interaction when
-``chi_bar = Mach**3 * sqrt(Cw / Re_x) > 1``. Leading-edge induced pressure
-then invalidates the zero-pressure-gradient assumption. The warning excludes
-``compressible=False`` and turbulent points; it does not correct the edge state.
-
-Cone--cylinder outer flow and boundary layer
---------------------------------------------
-
-Use :doc:`../models/axisymmetric_characteristics` for an attached, supersonic,
-zero-incidence outer flow on a sharp convex body. Both geometry arrays below
-are in metres. The returned distance follows the surface; the matching
-radius array preserves the exact shoulder in the boundary-layer geometry.
-The shoulder station carries the downstream expansion state. Conversion adds
-the upstream limit at ``s_c - w`` and a logarithmic-pressure midpoint, where
-``w = 0.001 * s_c`` by default and ``s_c`` is the corner surface distance.
-The returned wall radii match these extra edge stations exactly.
-This one-way coupling neglects displacement feedback and corner interaction.
-
->>> from aerophysics import axisymmetric_body_flow, marching_boundary_layer
->>> outer = axisymmetric_body_flow(
-...     [0.0, 0.3, 1.3], [0.0, 0.05, 0.05],
-...     mach=3.0, pressure=10000.0, temperature=220.0,
-... )
->>> inputs = outer.boundary_layer_inputs()
->>> layer = marching_boundary_layer(
-...     inputs.edge, regime=BoundaryLayerRegime.LAMINAR,
-...     wall_radius=inputs.wall_radius, wall_temperature=300.0,
-... )
->>> bool(layer.distance[-1] == outer.surface_distance[-1])
-True
-
-``BoundaryLayerRegime.TURBULENT`` selects the SA-noft2 model. It does not
-predict transition, and its applicability warnings still need assessment.
-
-The narrow pressure ramp intentionally triggers the pressure-length applicability
-warning. Thin-layer results near the shoulder, including at least several tens
-of upstream boundary-layer thicknesses downstream, are not reliable local
-corner predictions and depend on ``w``. An explicit positive ``corner_length``
-sets this width in metres; it must fit strictly inside the preceding output
-interval. In this example the default width is 0.304 mm. Compared with 1 mm,
-laminar Cf and heat flux differ by +3.82 and +2.27 percent at 5 upstream
-delta99, and +0.88 and +0.55 percent at 20 delta99. At 5 delta99, the default
-versus 0.2 mm differences are -0.62 and -0.44 percent; SA Cf differences
-are +0.10 percent versus 1 mm and -0.016 percent versus 0.2 mm.
-See :doc:`../models/axisymmetric_characteristics` for further measurements.
-The midpoint makes the steep gradient visible to warnings;
-it does not restore the thin-layer approximation or resolve viscous interaction.
+At very high Mach number and low Reynolds number, the boundary layer near the
+leading edge becomes thick enough to change the pressure on the plate. The
+laminar compressible calculation warns when this is likely. The result is then
+a rough guide only.

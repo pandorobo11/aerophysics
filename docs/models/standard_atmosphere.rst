@@ -7,7 +7,7 @@ conductivity at a given altitude. The layer definitions, constants, and
 equations follow :ref:`U.S. Standard Atmosphere 1976
 <ref-us-standard-atmosphere-1976>`. The air properties use the ``AIR`` gas
 constants described in :doc:`gas_models` and the viscosity and conductivity
-models in :doc:`transport_properties`.
+models in :doc:`transport_properties`. For worked examples, see :doc:`../guides/atmosphere_flight`.
 
 Physical background
 -------------------

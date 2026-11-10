@@ -408,6 +408,243 @@ M1.2→4 and M2→6 also trigger the thin-layer pressure-gradient warning.
 These timings and stable wall quantities do not establish physical accuracy
 where pressure or wall-temperature changes occur on a boundary-layer scale.
 
+## Aerodynamic heating: notes moved from the user manual
+
+This literature check of the turbulent attachment-line correlations was part
+of `docs/models/aerodynamic_heating.rst`.
+
+Comparison with Poll (1981) itself remains incomplete;
+identity with the original paper is not assumed. Bénard et al.'s separate
+correlation, equations (11)--(12), is **not implemented**: the `e0` subscript
+in its Stanton density `\rho_{e0}` is undefined in the nomenclature,
+and the high-Reynolds-number Stanton plateau in figure 2, titled "Typical
+transition case", reads approximately `St=2.0\times10^{-3}` at
+`\overline R^*\approx330`--380. The figure conditions are
+`\Lambda=60^\circ`, `M_\infty=7.14`,
+`T_w/T_0\approx0.38`, and `M_e\approx3.28`.
+Evaluating equation (11) at `\overline R^*=350`, assuming
+`T_0=750` K within the paper's 650--800 K wind-tunnel range, and using
+this library's air viscosity model to convert from the `T^*` to the
+`\overline T` Reynolds-number basis, gives
+`St\approx4.6\times10^{-3}` (about 2.3 times
+the figure reading). This is inconsistent with the reported 11.7% standard
+deviation. No inferred coefficient correction is used.
+
+Tests verify analytical relations, algebraic equivalence with CR-181893
+(5.12), direct edge-state calculations, and numerical regression values.
+Independent comparison against experimental data has not yet been performed.
+The existing laminar APIs and their angle conventions are unchanged.
+
+## Flat-plate boundary layer: notes moved from the user manual
+
+These paragraphs were part of `docs/models/flat_plate_boundary_layer.rst`
+until that page was split and reduced to the models, their limits, and their
+use. They are kept here unchanged in substance.
+
+### Model-selection input handling
+
+Set `compressible` independently of the turbulent model. It accepts Python
+`bool` and NumPy `bool_` values. Thermal inputs (`mach`,
+`edge_temperature`, and `wall_temperature`) require `compressible=True`;
+Mach and edge temperature are mandatory in that case. Temperatures use K.
+
+Other combinations raise `ValueError`; an irrelevant selection is never
+silently ignored. Each member of
+`aerophysics.boundary_layer.TurbulentModel` has a `compressible`
+property indicating which setting it requires.
+
+### One-fifth-power thickness after a specified transition
+
+For `TRANSITIONAL`, `x` and `Re_x` in these equations are
+`x_\mathrm{eq}` and `Re_\mathrm{eq}` of the equivalent turbulent
+plate described under :ref:`flat-plate-specified-transition`, the same origin
+used for friction. The power-law `\theta_m` is then 1.3--2.2% above the
+Blasius value at transition for `Re_\mathrm{tr}=5\times10^5`--
+`5\times10^6`, the power law's own mismatch with Schlichting friction
+at `Re_\mathrm{eq}\approx1.4\times10^5`--`6\times10^5`.
+`\delta_{99}` jumps there, because the assumed profile changes from
+Blasius to the one-seventh-power shape.
+
+### Specified transition: root finding
+
+For Van Driest II with `w=1`, `k/s=F_\theta`, the momentum-thickness
+Reynolds number transformation. The Schlichting root is found by Brent's
+method in `\ln R`; the Willems average equation is inverted explicitly as
+`R=S(\log_{10}S/0.242)^2` with `S=R\bar C_{f,i}`. Thickness
+correlations, including the `SCHLICHTING` power law, use
+`x_\mathrm{eq}` and `Re_\mathrm{eq}`, and
+`effective_reynolds_number` returns `kRe_\mathrm{eq}` at turbulent
+points (`k=1` for `compressible=False`). `Re_0` for
+`Re_\mathrm{tr}=5\times10^5` is `1.417\times10^5` with
+Schlichting friction.
+
+### Specified transition: change from the earlier mixed average
+
+Earlier versions kept the leading-edge origin for turbulent friction and
+used the Prandtl-type mixed average
+`\bar C_{f,t}(Re_x)+(Re_\mathrm{tr}/Re_x)[\bar C_{f,l}-\bar C_{f,t}]_{Re_\mathrm{tr}}`.
+That average conserves drag, but its local friction belongs to a layer whose
+momentum thickness is 2.8 times the laminar value at
+`Re_\mathrm{tr}=5\times10^5`. With Schlichting friction, the local
+coefficient just after transition is now 26% higher for
+`Re_\mathrm{tr}=5\times10^5` and 42% higher for
+`5\times10^6`. Average friction is 6--9% higher at
+`Re_x/Re_\mathrm{tr}=1.2`--2 for `Re_\mathrm{tr}=5\times10^5`, up
+to 15% for `5\times10^6`, and less than 1% higher beyond
+`100Re_\mathrm{tr}`. Fully turbulent and laminar results are unchanged.
+
+Drag continuity, the exact drag derivatives, the `SCHLICHTING` theta offset,
+and the fully turbulent limits are verified analytically in the test suite. The equivalent plate has not been compared
+
+### Compressible laminar similarity solver
+
+The calculation groups exactly equal states (Mach, edge temperature, wall
+condition, Pr, gamma) within each call, without rounding or a persistent
+state cache. Conservative second-order finite differences and damped Newton
+iteration operate in batches of at most 256 states. A stretched, fixed
+161/321-node pair and Richardson extrapolation are followed by 321/641
+nodes only for uncertain states. The solver checks residuals, boundaries,
+positive temperatures and viscosities, grid differences, far-field decay,
+and the independent momentum integral. Remaining states use
+`scipy.integrate.solve_bvp(tol=1e-8)` with an enlarged-domain check.
+Unresolved states raise `ModelRangeError` with their original input indices
+and state. Blasius and Walz profiles supply initial guesses only; they are
+not the returned physical approximation. There are no interpolation tables.
+
+
+## Marching boundary layer: notes moved from the user manual
+
+These paragraphs were part of `docs/models/marching_boundary_layer.rst` until
+the user manual was reduced to the model, its limits, and its use. They are
+kept here unchanged in substance. Some repeat material in the sections above.
+
+### Station-solve Jacobians
+
+The laminar and SA-noft2 station solves use analytic Jacobians for the exact
+built-in Sutherland and Keyes viscosity model types. Other viscosity models,
+including subclasses, use finite-difference Jacobians. SA differentiates the
+active nonsmooth branch, with right-sided derivatives at exact ties. These
+linearizations solve the same discrete equations with the same convergence
+tolerances; they do not change the physical model or its applicability.
+
+### SA unknowns, active-set Newton, Picard fallback and eta grid
+
+The five unknowns per node are `(f, u, g, n, Y)`. Projected active-set Newton
+solves the local interior SA conditions `n \geq 0`, `R \leq 0`,
+and `nR=0`, where `R` is the discrete SA residual. Positive
+interior values satisfy the SA equation; zero values admit a nonpositive
+residual. Convergence requires a small applied update, the same active set in
+two consecutive linearizations, and
+`\max_i|\min(n_i,-R_i/|J_{ii}|)|/\max(1,\max n)<10^{-9}`
+over interior SA rows. This uses the existing pre-update linearization and the
+same `n` scale as the update tolerance. If Phi fails this bound, a nonzero
+applied update permits further iteration within the iteration limit; a zero
+update requests Picard. Projection or damping stagnation cannot count as
+convergence. Undamped active rows are assigned exactly zero; damped rows
+retain the partial step toward zero. Newton falls back to relaxed Picard
+with nonnegative `n` clipping.
+At convergence, an active or projected-zero first interior SA node also
+requests Picard. Such wall-attached zero regions select the trivial partially
+laminar branch; the intended clipped set is the outer turbulent front.
+The explicitly zero edge-SA case retains legacy Newton for its intentional
+zero-SA limit.
+Picard projects the result of a coupled tridiagonal solve, satisfying
+`\min(n,A(n)^{-1}R)=0` at its fixed point. This differs from Newton's
+local complementarity condition: clipping can leave residuals at positive
+neighbors of clipped nodes. Remeasured with the analytic Jacobian in M2--3
+fixed-wall and adiabatic marches, the maximum difference in `n` was less than
+`2.12\times10^{-6}` of maximum `n`; other output fields differed by less than
+`7.08\times10^{-8}` of their respective maxima. These are not general
+bounds: remeasured with the wall guard at `Re=10^{10}`, M2, edge 220 K
+and wall 300 K, the largest `n` difference is 8.099
+(`6.03\times10^{-5}` of the profile maximum), two nodes before clipping.
+The last positive node changes from `n=1996.166` to `2002.957`.
+Velocity and temperature profile differences are below
+`8.2\times10^{-8}` of their maxima. These comparisons do not establish grid
+convergence or physical validation of the outer SA front.
+If both solvers fail the streamwise step halves.
+The eta grid has first spacing 0.0007 and spacing
+ratio 1.04. Before marching, define `Re_equivalent = max(R)^2/2` over the
+output stations and `scale = max(1, (Re_equivalent/1e8)^0.42)`. The extent is
+`150 scale` and the outer spacing cap is `scale`. Up to Re_equivalent=1e8
+this is the original 312-node grid. These are geometric spacings, not
+geometrically positioned nodes. The outer-boundary check remains active:
+a compression can grow beyond this estimate and stop the march.
+
+### Specified transition: implementation
+
+SA-noft2 is solved over the entire domain on the same grid as `TURBULENT`.
+Only `c_{b1}\widetilde S n` is multiplied by zero for
+`s \le s_{tr}` and by one downstream. Destruction, diffusion, convection,
+and the outer boundary condition remain active. The implementation applies
+the multiplier in the residual, its numerical Newton Jacobian, and Picard's
+lagged source and source-based relaxation. No profile or grid is replaced at
+the switch. The march passes through the transition position internally; the
+returned stations remain exactly `edge.distance[1:]`.
+
+### Specified transition: upstream differences from the laminar solver
+
+The upstream solution retains small eddy viscosity supplied from the edge.
+For `edge_sa_ratio=3` the measured maximum upstream departures from the
+laminar solver are 0.374% in Cf and 0.356% in wall heat flux over the four
+uniform-edge verification cases (M0.3, M2 cooled/adiabatic, M6 cooled).
+These are case-specific numerical measurements, not physical accuracy bounds.
+Reducing the seed reduces eddy viscosity but does not remove differences
+between the two existing discretizations: at M2, Te=220 K and Tw=300 K,
+`edge_sa_ratio=1e-3` gives a 0.05304% upstream heat-flux difference from
+`LAMINAR`. This difference is recorded as a discretization diagnostic, without
+a pass/fail criterion. The laminar-limit check retains the V6 Cf target of 0.05%.
+The transition implementation is checked separately against
+`TURBULENT(edge_sa_ratio=0)` on the same SA grid and with the same operators,
+using a maximum relative-difference limit of 1e-8% for both Cf and heat flux.
+
+### Thin axisymmetric geometry: measured relations and synthetic shoulder
+
+The measured cone relation errors are below 6e-12 percent. With 801 nodes,
+the variable-radius laminar mapping differs by at most 0.000827 percent in Cf;
+the interpolation is performed in different distance variables. Axisymmetric
+momentum residual medians are below 0.05 percent. Streamwise and wall-normal
+refinement are recorded separately in the development memo, section 12.
+The R&M 3633 worked example reaches delta99/r_w=0.4774
+and differs from measured Cf by up to 0.0004443 (measurement accuracy
++/-0.0002). This comparison does not establish a physical validity range.
+
+The recorded synthetic cone-to-cylinder shoulder stress measurement (development
+memo, section 12) used a tanh pressure drop; it is **not a physical shoulder edge
+condition**. With input nodes locally spaced
+at most width/5, the pressure-length warning fires for SA at width 0.001 m
+(maximum delta99 times abs(d ln p/ds) 1.24051--1.26509), and for both regimes
+at width 0.0002 m (1.33059--6.29451). Widths 0.02 and 0.005 m do not trigger
+that warning. All 16 cases completed in 2.82--8.85 s in the recorded run,
+with zero Picard fallbacks. This is a timing observation, not a performance bound.
+The curvature maxima occur near the tip or downstream end, so that warning
+alone does not identify a shoulder problem. At s=0.31 m, relative SA-variable
+oscillations reach 1.46404%; the final station has no evaluable extrema triplets.
+Some oscillations occur without a pressure-length warning. These applicability
+warnings therefore do not establish local profile convergence or physical
+accuracy; the need for an additional oscillation diagnostic remains open.
+
+### Viscosity derivative, outer nu_tilde oscillation and solver cost
+
+Turbulent flow requires the viscosity model to accept `T_e * exp(+/-1e-5)`
+for an edge viscosity derivative, including when `edge_sa_ratio=0`. Near a
+temperature-range limit, a model that raises outside its range can fail at
+these temperatures, and a model that warns outside its range can warn.
+Laminar flow does not evaluate this SA derivative.
+
+The outer part of `nu_tilde_ratio` can oscillate and is not grid-converged
+in strong expansions or with a small `edge_sa_ratio`. In the measured
+cases, relative oscillation amplitudes reached about 100% on the default
+grid and about 60% after outer-grid refinement, measured as half the excursion
+between neighbouring extrema divided by their mean. Wall quantities and
+delta99 were insensitive to that refinement in these cases: Cf changed by
+less than 0.01% and delta99 by less than 0.06%. These measurements are not
+general bounds.
+
+With the legacy positivity-damped Newton, M1.2 to 4 took about 25 s on one
+machine because of Picard fallbacks. Active-set Newton substantially reduced
+fallbacks in the measured verification tier; timings remain machine-dependent.
+
 ## Flow sequence
 
 - Temperature restoration from validated solver ratios repairs at most one

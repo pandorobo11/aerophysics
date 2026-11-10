@@ -3,7 +3,7 @@ Conical shocks
 
 State ratios are downstream over upstream, and angles are in radians. The
 conservation laws and the physical meaning of a shock are explained in
-:doc:`shock_waves`.
+:doc:`shock_waves`. For worked examples, see :doc:`../guides/compressible_flow`.
 
 Sharp cone at zero incidence
 ----------------------------
@@ -79,7 +79,7 @@ Thermally perfect conical shocks
 
 For a frozen thermally perfect gas, pass ``upstream_temperature`` in kelvin
 to ``conical_shock`` or ``maximum_attached_cone_angle``. Mach number, cone
-half-angle, and temperature broadcast together. The velocity equations keep
+half-angle, and temperature may each be a single number or an array. The velocity equations keep
 the same form, but velocities are divided by the free-stream speed
 :math:`U_\infty`, and temperature comes from the energy equation with the
 gas's own enthalpy:

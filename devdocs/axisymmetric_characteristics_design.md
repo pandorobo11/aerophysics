@@ -1134,3 +1134,111 @@ Commands used `UV_CACHE_DIR=/private/tmp/moc-domain-fix/uv-cache`, preserving
 `uv run --no-sync` and avoiding the known sandbox restriction on the default
 cache. No privilege escalation, commit, push, or environment synchronization
 was performed. `scripts/check.sh --full --check-only` remains for the reviewer.
+
+## Notes moved from the user manual
+
+These paragraphs were part of `docs/models/axisymmetric_characteristics.rst`
+until the user manual was reduced to the model, its limits, and its use. They
+are kept here unchanged in substance and partly repeat the sections above.
+
+### Shock-trace truncation and front exhaustion
+
+Shock stations may extend beyond the body's final axial coordinate because
+a corner's leading wave can first reach the shock farther downstream.
+Characteristics that do not reach the shock within the needed downstream
+region are truncated without imposing an outflow state. Successful downstream
+shock extrapolations are retained. If an angle iteration leaves the admissible
+shock interval, stopping its extrapolation requires both the geometric
+continuation beyond the body endpoint and a wall-dependence check: the local
+C- ray from the retained outermost point must meet the current body segment's
+extension at or beyond the endpoint. The actual body tangent is used even
+inside a centered fan. Future convex segments lie below that extension, but
+the straight-ray estimate does not include characteristic curvature. Every
+wall/row operation therefore checks that enough front points remain; a
+shortage raises a location-bearing `ModelRangeError` with advice to reduce
+`fan_angle_step`. Long bodies with coarse fans can require this refinement.
+No exterior states are invented, missing wall intervals are not extrapolated,
+and an incomplete wall march is never returned as a successful result.
+
+An accepted truncation leaves the trace at its last fitted shock point,
+which can be before the body endpoint;
+no terminal shock state or complete outer flow field is promised. Do not
+extrapolate missing shock data to construct a terminal transverse profile.
+Subsonic states, crossed characteristics and failures inside the requested
+domain still raise location-bearing errors. The characteristic net is not
+exposed as a public field solution.
+
+### Verification measurements quoted in the manual
+
+For the M3/9.46-degree and M6/4.76-degree cone--cylinder verification cases,
+the cylinder length is ten diameters. The design record
+`devdocs/axisymmetric_characteristics_design.md` records grid differences,
+observed order, mass balance, runtime and boundary-layer coupling tests.
+The original M1 cone-only result, M5 at the exact expansion vertex, and the
+constant-edge cone part of M7 agree **by construction**: they check the API,
+initialization and boundary-layer connection. They are not evidence for the
+accuracy of the MOC march itself.
+
+An additional private verification starts the characteristic net at 5 percent
+of a cone's length with zero turn, and marches the remaining cone through the
+same wall, interior and shock unit processes. For M2/10 degrees, maximum
+relative errors at the default count 88 are 0.09955 percent in pressure,
+0.03534 percent in Mach and 0.01383 percent in shock-ray position. Count 87
+has pressure error 0.10177 percent; 88 is the smallest count reaching the
+requested 0.1 percent criterion. For M6/5 degrees the errors are 0.005382,
+0.000892 and 0.005287 percent. The retained 24/48/96/192 refinement study
+gives final observed orders 1.970/1.970/2.020 and 1.999/1.999/1.999,
+respectively. The normal public conical portion uses the exact similarity
+solution. The default M3 cone--cylinder calculation takes about 0.08--0.11 s
+on the development machine (cylinder length ten diameters).
+
+For the cone--cylinder refinement cases, the estimated maximum relative
+pressure errors of the default 88/1-degree net are 1.70e-5 (M3) and 2.82e-5
+(M6) within the first 0.1 cone lengths after the shoulder, and 7.80e-6 / 6.31e-5
+farther downstream. These are numerical Richardson estimates; they do not
+include physical-model error. Increasing only the characteristic count does
+not guarantee decreasing error: refine the fan angle step as well.
+
+Comparison with the reviewer-supplied digitization of
+NACA TN 2250, Figure 1 gives maximum
+absolute differences 0.01035 (M3, l/d = 3) and 0.01401 (M6, l/d = 6) in
+(p - p_inf)/p_inf, within the prescribed bound 0.02. Cone length l is measured
+from tip to shoulder and the cylinder ends at x/l = 3.4. The source solution
+is **irrotational graphical MOC**, not a rotational solution or experiment.
+Reading uncertainties are +/-0.005 vertically and +/-1 percentage point in
+100*x/l. Experimental accuracy remains unestablished.
+
+### Corner stations and width sensitivity
+
+At every convex corner at surface distance `s_c`, conversion inserts the
+pre-expansion wall pressure at `s_c - w` and a logarithmic-pressure midpoint
+at `s_c - w/2`. This uses the local marched pre-fan state at later corners,
+not the original cone state. The corner itself retains the downstream state.
+The default width is `w = 0.001 * s_c`; an explicit `corner_length` sets
+a common width in metres. A nonpositive or nonfinite width, a width reaching
+the preceding output point, or unresolvable inserted coordinates raises
+`ValueError`. No existing points are discarded.
+
+The midpoint ensures that the public boundary-layer march samples the steep
+pressure gradient and issues its pressure-length warning for the default
+cone--cylinder case. The general boundary-layer warning samples only output
+stations; without the midpoint the zero PCHIP endpoint slopes can hide a
+large interior gradient. The boundary-layer module itself is unchanged.
+
+Thin-layer predictions near the shoulder, including at least several tens
+of upstream delta99 downstream, are not reliable local corner solutions.
+They depend on the artificial width `w`; the extra points do not resolve
+viscous interaction or displacement feedback. Width-sensitivity measurements
+for M3, cone length 0.3 m, radius 0.05 m, cylinder length 1 m and wall
+temperature 300 K are recorded in the design memo. Here the default width
+is 0.304138 mm. Relative to a 0.2 mm width, at 5 upstream thicknesses the
+default changes laminar Cf by -0.617 percent, heat flux by -0.442 percent
+and delta99 by +0.046 percent; the SA changes are -0.016, +0.006 and
+-0.018 percent. Relative to 1 mm the laminar differences are +3.825,
++2.271 and -0.295 percent (SA +0.100, -0.031 and +0.114 percent).
+At 20 thicknesses, default versus 1 mm still changes laminar Cf by
++0.877 percent and heat flux by +0.553 percent. At 100 thicknesses these
+differences are +0.105 and +0.043 percent. Small width differences do not
+establish physical validity; some SA differences are comparable to the
+measured streamwise discretization uncertainty. The design memo gives all
+three quantities at 5/20/100 thicknesses and the step-refinement check.

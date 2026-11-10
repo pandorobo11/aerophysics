@@ -9,8 +9,7 @@ radians. Convert explicitly with
 :func:`aerophysics.units.degrees_to_radians` and
 :func:`aerophysics.units.radians_to_degrees`.
 
-For task-oriented model selection and examples, see
-:doc:`../guides/compressible_flow`.
+For worked examples, see :doc:`../guides/compressible_flow`.
 
 Physical background
 -------------------
@@ -125,7 +124,7 @@ than once.
 >>> analysis.state is not None
 True
 
-The returned fields follow the broadcast shape of all supplied inputs.
+The returned fields have the combined shape of the supplied inputs.
 Absolute state and mass-flux fields are ``None`` unless both reservoir
 temperature and pressure are supplied. At Mach zero, the fused result records
 the limiting area ratio as positive infinity; the standalone

@@ -36,6 +36,16 @@ and expansions load with the constant-gamma `AIR` model. Older settings
 without the optional pressure, viscosity, and representative-length inputs
 load with those outputs disabled.
 
+## Legacy flat-plate settings
+
+Saved schema-version-1 flat-plate configurations that use the former separate
+correlation and correction keys are converted when loaded, except for
+turbulent or transitional one-fifth-power friction with NONE or ECKERT: those
+settings raise an error asking the user to select Schlichting. Legacy
+power-law selections for laminar or VD2 flow still load because the friction
+selection was unused in those cases. Exports use only `compressible` and
+`turbulent_model` (null for laminar flow).
+
 ## Documentation links
 
 `render_documentation_link` in `gui/documentation.py` adds a theory-page

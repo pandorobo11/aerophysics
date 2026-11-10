@@ -1,20 +1,28 @@
 Conventions and model selection
 ===============================
 
+This page collects the rules that all the functions follow, the symbols used
+in the manual, and tables that help you choose a model.
+
 Core conventions
 ----------------
 
-* Calculation APIs use SI units. Angles are in radians.
-* A scalar input returns a Python ``float``. Array-like inputs are broadcast
-  together and return float64 NumPy arrays.
-* Isentropic ratios are total over static, for example :math:`T_0/T`.
-  Shock and expansion ratios are downstream over upstream, for example
-  :math:`p_2/p_1`. The shock total-pressure ratio is :math:`p_{02}/p_{01}`.
-* An invalid input (not finite, or physically impossible such as a negative
-  temperature) makes the whole call fail. Outside a model's supported range,
-  the model either raises :class:`~aerophysics.exceptions.ModelRangeError` or
-  emits :class:`~aerophysics.exceptions.ApplicabilityWarning`. Each model page
-  states which.
+* **Units.** All inputs and outputs are in SI units. Angles are in radians.
+  Temperatures are absolute, in kelvin.
+* **Numbers and arrays.** A single number in gives a Python ``float`` out.
+  Arrays in give NumPy arrays out.
+* **Ratios.** Isentropic ratios are total over static, for example
+  :math:`T_0/T`. Shock and expansion ratios are downstream over upstream, for
+  example :math:`p_2/p_1`. The total-pressure ratio of a shock is
+  :math:`p_{02}/p_{01}`.
+* **Heat flux.** Heat flowing into the wall is positive.
+* **Distances along a surface** are measured from the leading edge or tip.
+* **Errors and warnings.** An input that makes no sense, such as a negative
+  temperature, makes the call fail. Outside the range a model supports, the
+  model either raises :class:`~aerophysics.exceptions.ModelRangeError` or
+  returns a value with an
+  :class:`~aerophysics.exceptions.ApplicabilityWarning`. See
+  :doc:`../guides/vectorization_errors`.
 
 Notation
 --------
@@ -115,8 +123,8 @@ Not every calculation accepts every gas model:
      - Yes
      - Yes
      - No
-   * - Detached-shock correlations, flat-plate boundary layer, aerodynamic
-       heating
+   * - Detached-shock correlations, boundary layers, body characteristics,
+       aerodynamic heating
      - Yes (calorically perfect only)
      - No
      - No
@@ -192,6 +200,15 @@ Choosing a calculation
      - Laminar/turbulent state, turbulent correlation, compressibility
        correction
      - Roughness, pressure gradient, separation, transition prediction
+   * - Boundary layer under a changing outer flow, including bodies of
+       revolution
+     - :mod:`aerophysics.marching_boundary_layer`
+     - Laminar, turbulent (SA-noft2), or a specified transition position
+     - Effect on the outer flow, blunt noses, flow after separation
+   * - Outer flow on a pointed body of revolution such as a cone--cylinder
+     - :mod:`aerophysics.characteristics`
+     - Body outline and free stream
+     - Blunt noses, flares, incidence, viscous effects
    * - Stagnation-point heating
      - :mod:`aerophysics.heating`
      - Sphere or swept cylinder; Fay--Riddell or Tauber
@@ -205,5 +222,4 @@ Choosing a calculation
      - Velocity profile and supplied drag coefficient
      - Flow around the protrusion itself
 
-See :doc:`../guides/vectorization_errors` for array and error-handling
-examples.
+Each entry has a matching guide with examples under :doc:`../guides/index`.
