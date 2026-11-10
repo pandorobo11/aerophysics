@@ -99,8 +99,50 @@ which can be before the body endpoint;
 no terminal shock state or complete outer flow field is promised. Do not
 extrapolate missing shock data to construct a terminal transverse profile.
 Subsonic states, crossed characteristics and failures inside the requested
-domain still raise location-bearing errors. The characteristic net is not
-exposed as a public field solution.
+domain still raise location-bearing errors.
+
+Optional characteristic net
+---------------------------
+
+Set ``include_characteristic_net=True`` to populate the result's
+``characteristic_net`` with a
+:class:`~aerophysics.characteristics.CharacteristicNet`. The default is
+``False``: no rows are collected, and surface/shock results are unchanged.
+The option must be a Python ``bool``. Each
+:class:`~aerophysics.characteristics.CharacteristicRow` owns read-only arrays
+of axial distance and radius (m), flow angle (rad, positive from +x toward
+increasing radius), static and total pressure (Pa), and dimensionless Mach.
+Total pressure varies across streamlines in this rotational solution.
+
+Each row is a C+ characteristic ordered from wall outward. The ``initial``
+row is the exact Taylor--Maccoll C+ from the first convex vertex to the
+shock (or from the cone endpoint if there is no convex vertex). The conical
+region upstream of this line is the exact similarity solution, not a marched
+net. Subsequent kinds are ``fan`` (centered expansion), ``wall`` (regular wall
+step, including a full step reaching an endpoint) and ``inverse_wall``
+(a wall step prescribed at a segment endpoint). Fan rows share one physical
+wall vertex but retain their distinct intermediate flow states.
+
+For a row with ``parent_offset = s``, node k connects along C- to previous-row
+node k - 1 + s. Regular wall rows use s = 2, fan and inverse-wall rows s = 1;
+the initial row has s = 0 and no parents. This rule applies to interior nodes
+and regular wall nodes. A fitted shock node instead starts a new C- line.
+Fan wall connections have zero length. At an inverse-wall node the incoming
+foot is interpolated between previous nodes 0 and 1 and is not itself a node:
+:meth:`~aerophysics.characteristics.CharacteristicNet.minus_characteristics`
+omits that incoming segment rather than drawing a false node connection.
+It returns read-only (x, r) polylines upstream to downstream, omitting
+zero-length connections and isolated nodes.
+
+All produced rows are retained, including truncated rows without a shock
+point; ``ends_at_shock`` identifies whether the final node is a fitted shock
+station. No resampling or extrapolation is used. This net is a numerical
+discretization, not a converged field solution. The same perfect-gas,
+supersonic, sharp-convex-body applicability limits apply. Refine both the
+starting count and fan angle before interpreting local features. Regression
+checks establish bit-identical existing outputs, exact recorded states,
+wall/shock locations and the trapezoidal C+ and C- chord directions; they do
+not establish experimental accuracy or field convergence.
 
 For the M3/9.46-degree and M6/4.76-degree cone--cylinder verification cases,
 the cylinder length is ten diameters. The design record

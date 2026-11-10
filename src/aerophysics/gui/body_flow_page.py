@@ -11,6 +11,7 @@ import streamlit as st
 from aerophysics.exceptions import ShockConvergenceError
 from aerophysics.gui.body_flow_adapter import (
     body_flow_inputs_match,
+    body_flow_net_rows,
     build_meridian,
     calculate_body_flow,
     resolve_freestream,
@@ -57,6 +58,7 @@ _MODELS = {
     "freestream_basis": "static",
     "altitude_basis": "geometric",
     "pressure_quantity": "cp",
+    "net_coloring": "none",
 }
 _QUANTITIES: dict[str, QuantityKind] = {
     "pressure": "pressure",
@@ -329,9 +331,15 @@ def render_axisymmetric_body(preferences: UnitPreferences) -> None:
         "表面圧の表示量",
         {"cp": "Cp", "pressure_rise": "(p−p∞)/p∞"},
     )
+    net_coloring = choice(
+        "net_coloring",
+        "特性曲線網の節点色",
+        {"none": "なし", "mach": "Mach", "cp": "Cp"},
+    )
     st.session_state["body_flow_draft"] = {"inputs_si": inputs, "models": models}
     if submitted:
         st.session_state.pop("body_flow_payload", None)
+        st.session_state.pop("body_flow_net_csv_cache", None)
         try:
             if geometry_error is not None:
                 raise geometry_error
@@ -360,12 +368,13 @@ def render_axisymmetric_body(preferences: UnitPreferences) -> None:
             st.error(str(error))
     payload = st.session_state.get("body_flow_payload")
     if payload is None:
+        st.session_state.pop("body_flow_net_csv_cache", None)
         return
     calculation, configuration = payload
     if not body_flow_inputs_match(inputs, configuration["inputs_si"]) or any(
         models[k] != configuration["models"][k]
         for k in models
-        if k != "pressure_quantity"
+        if k not in {"pressure_quantity", "net_coloring"}
     ):
         st.warning(
             "入力が変更されています。以下は前回計算の結果です。再計算してください。"
@@ -395,17 +404,61 @@ def render_axisymmetric_body(preferences: UnitPreferences) -> None:
         column.metric(label, f"{value:.6g}")
     exported = {
         **configuration,
-        "models": {**configuration["models"], "pressure_quantity": quantity},
+        "models": {
+            **configuration["models"],
+            "pressure_quantity": quantity,
+            "net_coloring": net_coloring,
+        },
     }
+    figures = body_flow_figures(
+        rows,
+        calculation.shock_rows,
+        preferences,
+        pressure_quantity=quantity,
+        characteristic_net=raw.characteristic_net,
+        net_coloring=net_coloring,
+        freestream_pressure=configuration["inputs_si"]["pressure"],
+        freestream_mach=configuration["inputs_si"]["mach"],
+        heat_capacity_ratio=raw.gas.heat_capacity_ratio,
+    )
     render_result_bundle(
         calculator="axisymmetric_body",
         result=calculation.surface,
         configuration=exported,
         preferences=preferences,
-        figures=body_flow_figures(
-            rows, calculation.shock_rows, preferences, pressure_quantity=quantity
-        ),
+        figures=figures,
         filename_prefix="body_flow_results",
+    )
+    if figures["特性曲線網"].layout.meta["downsampled"]:
+        st.caption(
+            "特性曲線網は表示用に間引いています（C+ 最大150本、C− 最大80本、"
+            "節点色 最大20,000点）。"
+            "CSVには全節点を保存します。"
+        )
+    csv_cache = st.session_state.get("body_flow_net_csv_cache")
+    display_units = preferences.to_dict()
+    if (
+        csv_cache is None
+        or csv_cache[0] is not calculation
+        or csv_cache[1] != display_units
+    ):
+        net_rows = body_flow_net_rows(
+            raw,
+            pressure=configuration["inputs_si"]["pressure"],
+            mach=configuration["inputs_si"]["mach"],
+        )
+        csv_text = rows_to_csv(
+            display_rows("axisymmetric_body_net", net_rows, preferences)
+        )
+        # Retain identity, not a bare id that could be reused after collection.
+        csv_cache = (calculation, display_units, csv_text)
+        st.session_state["body_flow_net_csv_cache"] = csv_cache
+    st.download_button(
+        "特性曲線網CSVをダウンロード",
+        csv_cache[2],
+        "aerophysics-body-net.csv",
+        "text/csv",
+        key="body_flow_net_csv",
     )
     st.subheader("衝撃波の軌跡")
     shock_rows = display_rows(
@@ -420,7 +473,7 @@ def render_axisymmetric_body(preferences: UnitPreferences) -> None:
         key="body_flow_shock_csv",
     )
     st.info(
-        "凸な頂点ではファンの下流状態だけを保持します。衝撃波の軌跡は物体後端より手前で終わる場合も、先まで延びる場合もあります。外部流れ場全体は返しません。実験に対する精度は確立されていません。"
+        "表面結果は凸な頂点でファンの下流状態だけを保持し、特性曲線網は中間状態も含みます。衝撃波の軌跡は物体後端より手前で終わる場合も、先まで延びる場合もあります。特性曲線網は数値離散化であり、収束済みの流れ場を保証しません。実験に対する精度は確立されていません。"
     )
     if st.button("現在の物体流れケースとして保存", key="body_flow_save_case"):
         st.session_state["current_axisymmetric_body_case"] = raw

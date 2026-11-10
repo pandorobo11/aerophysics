@@ -175,8 +175,10 @@ shown in the selected angle unit). For refinement, double the count and
 halve the increment. Long bodies with coarse fans can fail and require a
 smaller increment; failures retain the solver's location-bearing message.
 
-**形状と衝撃波** plots the body meridian and fitted shock at equal length
-scales. **表面圧** defaults to the pressure coefficient
+**形状と衝撃波** draws the body section at equal length scales, in the same
+style as the oblique- and conical-shock pages: the grey body is the meridian
+mirrored about the dashed axis (closing at the flat base), and the red line is
+the fitted shock, shown above the axis only. **表面圧** defaults to the pressure coefficient
 
 .. math::
 
@@ -193,10 +195,30 @@ and CSV give shock ``x_s``, ``r_s`` and angle ``β``. Metrics show tip surface
 ``p/p∞`` (the cone-surface limit), tip shock angle, post-shock body-streamline
 total pressure, uniform total temperature, minimum Cp and body-end Cp.
 
+The fourth tab, **特性曲線網**, draws the same body section and fitted shock with
+C+ rows (blue) and reconstructed C- lines (green) above the axis, with equal axes in display
+length units. The GUI requests the optional net automatically. At most 150
+C+ rows and 80 C- lines are evenly selected for display, retaining the first
+and last of each family; a caption reports downsampling. **特性曲線網の節点色**
+selects **なし** (default), **Mach** or **Cp**, with a colorbar and at most
+20,000 markers from the displayed rows. This selector and the surface-pressure
+selector reuse the saved result without recalculating or marking inputs stale.
+Settings store ``net_coloring`` as ``none``, ``mach`` or ``cp``; older settings
+without it load as ``none``.
+
+**特性曲線網CSVをダウンロード** exports every recorded node, without display
+thinning. Columns are zero-based row and node indices, row kind, whether the
+row ends at the shock, x, r, flow angle, static pressure, total pressure,
+Mach and Cp. Lengths, angles and pressures use the selected display units.
+Fan rows retain intermediate states at the same physical vertex; the
+inverse-wall incoming foot is not a node and its segment is omitted from C-.
+The upstream conical region is an exact similarity solution, not a marched
+net. The displayed net does not establish a converged field solution.
+
 **現在の物体流れケースとして保存** stores the raw solver result for future
 use in the current GUI session. No downstream consumer is included here.
-Convex vertices keep only the downstream fan state. The shock trace can end
-before or extend beyond the body endpoint; a full outer field is not returned.
+Surface results at convex vertices keep only the downstream fan state. The shock trace can end
+before or extend beyond the body endpoint; rows can terminate without a shock node.
 The model excludes blunt noses, incidence, concave corners, subsonic regions,
 viscous displacement, separation and high-temperature chemistry. Crossed
 characteristics and convergence failures remove the previous result and show

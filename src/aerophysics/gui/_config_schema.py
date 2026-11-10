@@ -99,6 +99,7 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
             "freestream_basis": _choice("static", "atmosphere"),
             "altitude_basis": _choice("geometric", "geopotential"),
             "pressure_quantity": _choice("cp", "pressure_rise"),
+            "net_coloring": _choice("none", "mach", "cp", required=False),
         },
         sweep_variables=None,
     ),
@@ -604,6 +605,8 @@ def validate_calculator_payload(
     if calculator == "boundary_layer":
         models = _migrate_boundary_models(models)
     normalized_models = _validate_object(models, schema.models, "models")
+    if calculator == "axisymmetric_body":
+        normalized_models.setdefault("net_coloring", "none")
     if calculator == "boundary_layer":
         model = normalized_models["turbulent_model"]
         try:

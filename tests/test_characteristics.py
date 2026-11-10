@@ -1241,3 +1241,209 @@ def test_front_exhaustion_is_checked_before_consumption(
                 temperature=220,
                 fan_angle_step=radians(10),
             )
+
+
+@pytest.mark.parametrize("boattail", [False, True])
+def test_characteristic_net_exact_states_and_connectivity(
+    boattail: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    x = [0.0, 0.3, 1.3]
+    r = [0.0, 0.05, 0.05]
+    if boattail:
+        x.append(1.5)
+        r.append(0.025)
+    kwargs: dict[str, Any] = {"mach": 3.0, "pressure": 101325.0, "temperature": 288.15}
+    baseline, last_before = moc._solve(x, r, **kwargs)
+    assert baseline.characteristic_net is None
+    recorded: list[tuple[list[moc._Point], float, bool]] = []
+    original = moc._row
+
+    def record(*args: Any, **kwargs: Any) -> tuple[list[moc._Point], float, bool]:
+        result = original(*args, **kwargs)
+        recorded.append(result)
+        return result
+
+    monkeypatch.setattr(moc, "_row", record)
+    result, last_after = moc._solve(x, r, **kwargs, include_characteristic_net=True)
+    assert last_before == last_after
+    for descriptor in fields(baseline):
+        if descriptor.name == "characteristic_net":
+            continue
+        before, after = (
+            getattr(baseline, descriptor.name),
+            getattr(result, descriptor.name),
+        )
+        if isinstance(before, np.ndarray):
+            np.testing.assert_array_equal(before, after)
+        else:
+            assert before == after
+    net = result.characteristic_net
+    assert net is not None
+    assert len(net.rows) == len(recorded) + 1
+    flow = moc._Flow(3.0, AIR)
+    for row, (points, _, has_shock) in zip(net.rows[1:], recorded, strict=True):
+        assert row.ends_at_shock is has_shock
+        for name, values in (
+            ("axial_distance", [p.x for p in points]),
+            ("radius", [p.r for p in points]),
+            ("flow_angle", [p.theta for p in points]),
+            ("pressure", 101325 * np.exp([p.p for p in points])),
+            ("total_pressure", 101325 * np.exp([p.p0 for p in points])),
+            ("mach", [flow.mach_at(p) for p in points]),
+        ):
+            np.testing.assert_array_equal(getattr(row, name), values)
+    initial = net.rows[0]
+    assert initial.kind == "initial" and initial.parent_offset == 0
+    np.testing.assert_allclose(
+        [initial.axial_distance[0], initial.radius[0]], [0.3, 0.05], rtol=1e-15
+    )
+    shock_index = 1  # The origin is the analytic cone shock's tip, not a net node.
+    assert any(not row.ends_at_shock for row in net.rows)
+    assert {row.kind for row in net.rows} == {"initial", "fan", "wall", "inverse_wall"}
+    for row in net.rows:
+        assert row.radius[0] == pytest.approx(
+            np.interp(row.axial_distance[0], x, r), abs=1e-14
+        )
+        if row.ends_at_shock:
+            assert row.axial_distance[-1] == result.shock_axial_distance[shock_index]
+            assert row.radius[-1] == result.shock_radius[shock_index]
+            shock_index += 1
+        for descriptor in fields(row):
+            value = getattr(row, descriptor.name)
+            if isinstance(value, np.ndarray):
+                assert value.flags.owndata and not value.flags.writeable
+                with pytest.raises(ValueError):
+                    value[0] = 0
+    assert shock_index == len(result.shock_axial_distance)
+
+    expected_segments = []
+    for parent, row in pairwise(net.rows):
+        if row.kind == "fan":
+            assert row.parent_offset == 1
+            assert (row.axial_distance[0], row.radius[0]) == (
+                parent.axial_distance[0],
+                parent.radius[0],
+            )
+        else:
+            assert row.parent_offset == (1 if row.kind == "inverse_wall" else 2)
+        stop = len(row.radius) - int(row.ends_at_shock)
+        for k in range(stop):
+            j = k - 1 + row.parent_offset
+            if k == 0 and row.kind == "inverse_wall":
+                continue
+            segment = (
+                parent.axial_distance[j],
+                parent.radius[j],
+                row.axial_distance[k],
+                row.radius[k],
+            )
+            if segment[:2] != segment[2:]:
+                expected_segments.append(segment)
+            if k == 0:
+                continue
+            mu = np.arcsin(1 / row.mach[k])
+            plus = (
+                np.tan(row.flow_angle[k - 1] + np.arcsin(1 / row.mach[k - 1]))
+                + np.tan(row.flow_angle[k] + mu)
+            ) / 2
+            minus = (
+                np.tan(parent.flow_angle[j] - np.arcsin(1 / parent.mach[j]))
+                + np.tan(row.flow_angle[k] - mu)
+            ) / 2
+            assert (row.radius[k] - row.radius[k - 1]) / (
+                row.axial_distance[k] - row.axial_distance[k - 1]
+            ) == pytest.approx(plus, rel=1e-8)
+            assert (row.radius[k] - parent.radius[j]) / (
+                row.axial_distance[k] - parent.axial_distance[j]
+            ) == pytest.approx(minus, rel=1e-8)
+    actual_segments: list[tuple[float, float, float, float]] = []
+    for xx, rr in net.minus_characteristics():
+        assert np.all(np.isfinite(xx)) and np.all(np.isfinite(rr))
+        assert np.all(np.diff(xx) >= 0)
+        assert xx.flags.owndata and rr.flags.owndata
+        assert not xx.flags.writeable and not rr.flags.writeable
+        actual_segments.extend(zip(xx[:-1], rr[:-1], xx[1:], rr[1:], strict=True))
+    # Exact edge equality also excludes any spurious inverse-wall foot segment.
+    assert sorted(actual_segments) == sorted(expected_segments)
+
+
+def test_characteristic_net_default_does_not_collect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("default path must not snapshot rows")
+
+    monkeypatch.setattr(moc, "_characteristic_row", forbidden)
+    assert solve().characteristic_net is None
+
+
+@pytest.mark.parametrize("value", [None, 0, 1, "true", np.bool_(True)])
+def test_characteristic_net_requires_bool(value: Any) -> None:
+    with pytest.raises(ValueError, match="include_characteristic_net must be a bool"):
+        axisymmetric_body_flow(
+            [0, 1],
+            [0, 0.1],
+            mach=3,
+            pressure=10000,
+            temperature=220,
+            include_characteristic_net=value,
+        )
+
+
+def test_characteristic_row_owns_arrays_and_public_exports() -> None:
+    from aerophysics import CharacteristicNet, CharacteristicRow
+
+    source = np.array([1.0, 2.0])
+    row = CharacteristicRow(
+        source, source, source, source, source, source, "initial", 0, True
+    )
+    source[:] = 0
+    for name in (
+        "axial_distance",
+        "radius",
+        "flow_angle",
+        "pressure",
+        "total_pressure",
+        "mach",
+    ):
+        np.testing.assert_array_equal(getattr(row, name), [1, 2])
+        assert not np.shares_memory(source, getattr(row, name))
+    assert CharacteristicNet((row,)).minus_characteristics() == ()
+    assert CharacteristicNet(()).minus_characteristics() == ()
+
+
+def test_characteristic_net_full_wall_step_at_endpoint() -> None:
+    kwargs: dict[str, Any] = {
+        "mach": 3,
+        "pressure": 101325,
+        "temperature": 288.15,
+        "include_characteristic_net": True,
+    }
+    full = axisymmetric_body_flow([0, 0.3, 1.3], [0, 0.05, 0.05], **kwargs)
+    assert full.characteristic_net is not None
+    endpoint = next(
+        row.axial_distance[0]
+        for row in full.characteristic_net.rows
+        if row.kind == "wall"
+    )
+    shortened = axisymmetric_body_flow([0, 0.3, endpoint], [0, 0.05, 0.05], **kwargs)
+    assert shortened.characteristic_net is not None
+    row = shortened.characteristic_net.rows[-1]
+    assert row.kind == "wall" and row.parent_offset == 2
+    assert row.axial_distance[0] == endpoint
+    assert not row.ends_at_shock
+
+
+def test_characteristic_net_pure_cone() -> None:
+    result = axisymmetric_body_flow(
+        [0, 0.3],
+        [0, 0.05],
+        mach=3,
+        pressure=101325,
+        temperature=288.15,
+        include_characteristic_net=True,
+    )
+    assert result.characteristic_net is not None
+    assert len(result.characteristic_net.rows) == 1
+    assert result.characteristic_net.rows[0].kind == "initial"
+    assert result.characteristic_net.minus_characteristics() == ()

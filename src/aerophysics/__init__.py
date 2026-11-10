@@ -22,6 +22,8 @@ from aerophysics.boundary_layer_profile import (
 from aerophysics.characteristics import (
     AxisymmetricBodyFlowResult,
     BoundaryLayerInputs,
+    CharacteristicNet,
+    CharacteristicRow,
     axisymmetric_body_flow,
 )
 from aerophysics.detached_shock import (
@@ -107,6 +109,8 @@ __all__ = [
     "BoundaryLayerEdge",
     "BoundaryLayerInputs",
     "BoundaryLayerRegime",
+    "CharacteristicNet",
+    "CharacteristicRow",
     "CompressibleBoundaryLayerProfileResult",
     "CompressibleVelocityTransformation",
     "DetachedShockComparisonResult",
