@@ -487,6 +487,33 @@ BODY_FLOW_NET_COLUMNS = (
     Column("mach", "Mach M"),
     Column("cp", "Cp"),
 )
+MARCHING_BOUNDARY_LAYER_COLUMNS = (
+    Column("surface_distance", "表面距離 s", "length"),
+    Column("radius", "壁面半径 r_w", "length", optional=True),
+    Column("edge_pressure", "エッジ静圧 p_e", "pressure"),
+    Column("edge_temperature", "エッジ静温 T_e", "temperature"),
+    Column("edge_mach", "エッジ Mach M_e"),
+    Column("edge_velocity", "エッジ速度 U_e", "speed"),
+    Column("reynolds_number", "Reynolds数 Re_s"),
+    Column("boundary_layer_thickness", "境界層厚さ δ99", "length"),
+    Column("displacement_thickness", "排除厚さ δ*", "length"),
+    Column("momentum_thickness", "運動量厚さ θ", "length"),
+    Column("shape_factor", "形状係数 H"),
+    Column("local_skin_friction_coefficient", "局所摩擦係数 Cf"),
+    Column("wall_shear_stress", "壁面せん断応力 τw", "pressure"),
+    Column("wall_temperature", "壁温 Tw", "temperature"),
+    Column("wall_heat_flux", "壁面熱流束 qw", "heat_flux"),
+    Column("pressure_gradient_parameter", "圧力勾配パラメータ β"),
+)
+MARCHING_BOUNDARY_LAYER_PROFILE_COLUMNS = (
+    Column("wall_distance", "壁面距離 y", "length"),
+    Column("eta", "相似座標 η"),
+    Column("velocity_ratio", "u/U_e"),
+    Column("temperature_ratio", "T/T_e"),
+    Column("velocity", "速度 u", "speed"),
+    Column("temperature", "静温 T", "temperature"),
+    Column("nu_tilde_ratio", "ν̃/ν_e", optional=True),
+)
 
 
 def columns_for(calculator: str) -> tuple[Column, ...]:
@@ -506,6 +533,8 @@ def columns_for(calculator: str) -> tuple[Column, ...]:
         "boundary_layer": BOUNDARY_LAYER_COLUMNS,
         "boundary_layer_profile": BOUNDARY_LAYER_PROFILE_COLUMNS,
         "laminar_boundary_layer_profile": LAMINAR_BOUNDARY_LAYER_PROFILE_COLUMNS,
+        "marching_boundary_layer": MARCHING_BOUNDARY_LAYER_COLUMNS,
+        "marching_boundary_layer_profile": MARCHING_BOUNDARY_LAYER_PROFILE_COLUMNS,
         "protrusion_drag": PROTRUSION_COLUMNS,
         "thermochemistry": THERMOCHEMISTRY_COLUMNS,
         "viscosity": VISCOSITY_COLUMNS,

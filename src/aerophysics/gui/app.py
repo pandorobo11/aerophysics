@@ -21,6 +21,7 @@ from aerophysics.gui.flow_pages import (
     render_normal_shock,
 )
 from aerophysics.gui.heating_page import render_heating
+from aerophysics.gui.marching_page import render_marching_boundary_layer
 from aerophysics.gui.pages import (
     render_boundary_layer,
     render_conical_shock,
@@ -76,6 +77,10 @@ def expansion_page() -> None:
 
 def detached_shock_page() -> None:
     render_detached_shock(preferences)
+
+
+def marching_boundary_layer_page() -> None:
+    render_marching_boundary_layer(preferences)
 
 
 def heating_page() -> None:
@@ -158,6 +163,11 @@ pages = {
             boundary_layer_page,
             title="平板境界層",
             icon="📐",
+        ),
+        st.Page(
+            marching_boundary_layer_page,
+            title="境界層マーチング解析",
+            icon="🌊",
         ),
         st.Page(heating_page, title="空力加熱", icon="🌡️"),
         st.Page(

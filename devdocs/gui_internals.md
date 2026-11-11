@@ -112,7 +112,8 @@ the calculated inputs. Input changes show a previous-result warning.
 `NoAttachedShockError`) and `ShockConvergenceError` display their original
 message via `st.error`; a new failed calculation clears the old payload.
 Other exception types propagate. `current_axisymmetric_body_case` holds the
-raw result only after an explicit save; this change adds no consumer.
+raw result only after an explicit save; the marching boundary-layer page
+consumes it.
 
 
 The adapter requests `include_characteristic_net=True` and retains it in
@@ -138,3 +139,46 @@ text. Unit changes replace the entry. A new calculation attempt or missing
 payload clears it, including failed calculations; reset and settings import
 clear it through the `body_flow_` prefix. The download button receives the
 cached string directly, without depending on callable data support.
+
+## Marching boundary-layer page
+
+`marching_boundary_layer` is single-case only, with `AIR` and Sutherland
+viscosity fixed and no sweep. `marching_adapter.py` owns the pure SI edge
+construction (`uniform_edge`, `body_case_edge`), the solver call, station rows
+and profile rows; it does not change the public solver. `marching_page.py`
+uses the `march_bl_` widget prefix and `march_bl_payload`.
+
+Settings `inputs_si` contains `mach` (at least 0.01), `pressure`,
+`temperature`, `length`, `station_count` (2--1000), nullable `cone_half_angle`
+(0.1--89 degrees stored as radians; null unless the uniform cone is selected),
+resolved `total_pressure` / `total_temperature`, nullable number lists
+`edge_distance` / `edge_pressure` / `edge_radius` (null for the uniform edge;
+`edge_radius` is also null for planar CSV input), nullable `wall_temperature`
+(null for an adiabatic wall), nullable `transition_distance` (null unless
+transitional), `prandtl_number`, `turbulent_prandtl_number` and
+`edge_sa_ratio`. Models are `edge_source` (`uniform`/`csv`/`body`), `geometry`
+(`planar`/`cone`, used by the uniform edge), `regime`
+(`laminar`/`turbulent`/`transitional`) and `wall` (`adiabatic`/`isothermal`).
+The uniform-edge fields keep their last values when another source is
+selected.
+
+CSV and body-case edges are embedded as SI arrays, so settings replay without
+an upload or a saved case. An upload is parsed once per Streamlit `file_id`
+and cached in `march_bl_edge_upload_si`; removing the upload drops that cache
+and the arrays it supplied, while arrays from an imported settings file (which
+leave no cache) stay in use. `edge_csv_template` writes the template in the
+current display units. Selecting another edge source drops the embedded arrays. For the body source the session's
+`current_axisymmetric_body_case` is converted on every rerun, except after a
+settings import: `march_bl_keep_embedded` then keeps the loaded arrays until
+the user presses the switch button, which is rendered only when both exist.
+
+The payload holds `MarchingCalculation` (station `CalculationResult` with
+captured `ApplicabilityWarning` messages, the raw result, the edge and an
+optional separation distance) and the calculated configuration. The profile
+station selector (`march_bl_profile_station`, reset by each calculation) and
+display units reuse the payload. `BoundaryLayerSeparationError` with at least
+one solved station is returned by the adapter as a truncated result plus
+`separation_distance`; the page shows an error banner above that result.
+A separation without solved stations, other `ValueError`s and
+`BoundaryLayerConvergenceError` display the message via `st.error` and clear
+the old payload. Other exception types propagate.
