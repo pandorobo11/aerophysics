@@ -68,6 +68,9 @@ page of this manual directly.
      - 平板境界層 (flat-plate boundary layer)
      - :doc:`../models/flat_plate_boundary_layer`
    * -
+     - 境界層マーチング解析 (marching boundary layer)
+     - :doc:`../models/marching_boundary_layer`
+   * -
      - 空力加熱 (aerodynamic heating)
      - :doc:`../models/aerodynamic_heating`
    * -
@@ -129,6 +132,10 @@ at full precision rather than the rounded displayed values:
    edge state, thickness, and wall shear stress.
 3. Save one generated boundary-layer profile. The **突起抗力** (protrusion
    drag) page can then use its velocity and density profile.
+
+4. Run **軸対称物体流れ（特性曲線法）** and save the body-flow case. The
+   **境界層マーチング解析** (marching boundary layer) page can then use its
+   surface pressure, radius, and post-shock total conditions as the edge.
 
 Saved cases last only until the GUI is closed. Download a settings JSON file
 to reproduce a calculation later.

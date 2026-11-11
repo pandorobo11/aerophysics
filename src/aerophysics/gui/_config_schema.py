@@ -103,6 +103,35 @@ _SCHEMAS: dict[str, _CalculatorSchema] = {
         },
         sweep_variables=None,
     ),
+    "marching_boundary_layer": _CalculatorSchema(
+        inputs={
+            "mach": _number(minimum=0.01),
+            "pressure": _POSITIVE,
+            "temperature": _POSITIVE,
+            "length": _POSITIVE,
+            "station_count": _FieldRule("int", minimum=2, maximum=1000),
+            "cone_half_angle": _number(
+                nullable=True, minimum=math.pi / 1800, maximum=89 * math.pi / 180
+            ),
+            "total_pressure": _POSITIVE,
+            "total_temperature": _POSITIVE,
+            "edge_distance": _nullable_number_list(),
+            "edge_pressure": _nullable_number_list(),
+            "edge_radius": _nullable_number_list(),
+            "wall_temperature": _NULLABLE_POSITIVE,
+            "transition_distance": _NULLABLE_POSITIVE,
+            "prandtl_number": _POSITIVE,
+            "turbulent_prandtl_number": _POSITIVE,
+            "edge_sa_ratio": _NON_NEGATIVE,
+        },
+        models={
+            "edge_source": _choice("uniform", "csv", "body"),
+            "geometry": _choice("planar", "cone"),
+            "regime": _choice("laminar", "turbulent", "transitional"),
+            "wall": _choice("adiabatic", "isothermal"),
+        },
+        sweep_variables=None,
+    ),
     "flight": _CalculatorSchema(
         inputs={
             "geometric_altitude": _number(minimum=-5000.0, maximum=86000.0),

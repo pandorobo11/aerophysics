@@ -2,8 +2,9 @@ Viscous-flow and property pages
 ===============================
 
 These notes cover pages in the **粘性流れ** (viscous flow) and **熱物性**
-(thermophysical properties) groups. How the boundary-layer pages pass results
-to each other and to **突起抗力** (protrusion drag) is described in
+(thermophysical properties) groups, including **境界層マーチング解析**. How
+the flat-plate and profile pages pass results to each other and to
+**突起抗力** (protrusion drag) is described in
 :doc:`index`.
 
 Flat-plate boundary layer
@@ -70,6 +71,84 @@ the Sutherland law. The **平板境界層** page takes those two values as separ
 inputs, so it matches this page only if they agree. The profile page assumes a
 laminar layer at the given position and does not test for transition. It has no
 sweep mode.
+
+Marching boundary layer (境界層マーチング解析)
+----------------------------------------------
+
+This single-case page calls
+:func:`~aerophysics.marching_boundary_layer.marching_boundary_layer` when
+**計算** is pressed. It uses calorically perfect ``AIR``, the Sutherland
+viscosity law and a constant Prandtl number. Editing inputs retains the
+previous result with a warning; changing the display units or the profile
+station does not rerun the solver. Inputs and outputs use the sidebar display
+units; settings JSON stores SI values and radians. There is no sweep mode.
+
+The solver does not compute the outer flow. Choose the edge under
+**エッジ条件の入力**:
+
+* **一様エッジ（平板・円錐）** takes a constant edge Mach number, static
+  pressure and static temperature (defaults Mach 2, 10000 Pa, 220 K) over a
+  wall length (1 m) divided into equally spaced output stations (50, range
+  2--1000). The total conditions follow from the isentropic relations. With
+  **鋭い円錐** the wall radius is :math:`r_w = s\sin\theta_c` for the entered
+  half-angle (0.1--89 degrees); the edge values must then be the cone-surface
+  state behind the conical shock, for example from the **円錐衝撃波** page.
+* **圧力分布CSV** reads columns ``s,p`` (wall distance and edge static
+  pressure) and an optional ``r`` column (wall radius) that selects the
+  axisymmetric computation. ``s`` starts at zero and increases strictly, ``p``
+  is positive and below the entered edge total pressure, and ``r`` may be zero
+  only at ``s = 0``. The total pressure (the post-shock value behind a shock)
+  and total temperature are entered separately. A file is read once, in the
+  length and pressure units selected when it is uploaded; the downloadable
+  template is written in those units. Removing the uploaded file also removes
+  its edge, so a calculation then needs a new upload. Output stations are
+  the CSV rows after the first. The solver follows a monotone interpolation of
+  the pressure, so resolve pressure changes with enough rows.
+* **保存した軸対称物体流れケース** uses the case saved on the
+  **軸対称物体流れ（特性曲線法）** page through
+  :meth:`~aerophysics.characteristics.AxisymmetricBodyFlowResult.boundary_layer_inputs`
+  with its default corner length: each convex corner becomes a pressure ramp
+  0.1% of the corner's wall distance long. Results within a few tens of
+  :math:`\delta_{99}` of a corner depend on that length and are not reliable.
+
+CSV and body-case edges are embedded in the exported settings, so a settings
+file replays without the upload or the saved case. A loaded body-case edge
+stays in use until **現在の物体流れケースに切り替える** is pressed.
+
+**境界層の状態** is **層流** (laminar), **乱流（SA-noft2、前縁から）**, or
+**指定位置で遷移（SA-noft2）**, which needs a transition position strictly
+between zero and the wall length. The position is an input: the page does not
+predict transition, and the resulting transition length is a numerical
+response of the model. **壁面条件** is an adiabatic wall or an isothermal wall
+at the entered temperature (default 300 K). **詳細設定** exposes the Prandtl
+number (0.72), the turbulent Prandtl number (0.9) and the edge
+:math:`\tilde\nu/\nu_e` (3); the last two affect only the SA regimes.
+
+Each table row is one output station: wall distance ``s`` from the leading
+edge, wall radius (axisymmetric cases only), edge pressure, temperature, Mach
+number and velocity, :math:`Re_s`, :math:`\delta_{99}`, :math:`\delta^*`,
+:math:`\theta`, the shape factor :math:`H=\delta^*/\theta`, the local skin
+friction coefficient based on the local edge dynamic pressure, wall shear
+stress, wall temperature, wall heat flux (positive into the wall, zero for an
+adiabatic wall) and the pressure-gradient parameter :math:`\beta` (positive
+for accelerating flow). The metrics repeat the most downstream solved station.
+The figures plot friction, shear and either the heat flux or the adiabatic
+wall temperature; the three thicknesses; and the edge pressure, Mach number
+and :math:`\beta`. A prescribed transition position is marked.
+
+**境界層プロファイル** shows :math:`u/U_e`, :math:`T/T_e` and, for the SA
+regimes, :math:`\tilde\nu/\nu_e` against wall distance at a selected station.
+The plot stops at :math:`2\delta_{99}`; the table and CSV contain every node
+of the numerical domain.
+
+Applicability warnings from the solver (thin-layer pressure gradient,
+transverse curvature, first-node :math:`y^+`, laminar viscous interaction)
+are shown above the figures. If the layer separates, the page reports the
+separation distance and shows only the stations upstream of it; a separation
+upstream of the first station, invalid inputs and convergence failures show
+the solver's message and remove the previous result. See
+:doc:`../models/marching_boundary_layer` for the equations, assumptions,
+verification and limitations.
 
 Aerodynamic heating
 -------------------

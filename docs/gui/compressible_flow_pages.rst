@@ -215,8 +215,9 @@ inverse-wall incoming foot is not a node and its segment is omitted from C-.
 The upstream conical region is an exact similarity solution, not a marched
 net. The displayed net does not establish a converged field solution.
 
-**現在の物体流れケースとして保存** stores the raw solver result for future
-use in the current GUI session. No downstream consumer is included here.
+**現在の物体流れケースとして保存** stores the raw solver result for the
+current GUI session. The **境界層マーチング解析** page can use it as the
+boundary-layer edge; see :doc:`viscous_and_property_pages`.
 Surface results at convex vertices keep only the downstream fan state. The shock trace can end
 before or extend beyond the body endpoint; rows can terminate without a shock node.
 The model excludes blunt noses, incidence, concave corners, subsonic regions,

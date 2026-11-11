@@ -1891,3 +1891,130 @@ def _body_flow_net_figure(
         }
     )
     return _style(figure, "特性曲線網")
+
+
+def marching_boundary_layer_figures(
+    rows: tuple[Row, ...],
+    preferences: UnitPreferences,
+    *,
+    adiabatic: bool = True,
+    transition_distance: float | None = None,
+    separation_distance: float | None = None,
+) -> dict[str, go.Figure]:
+    """Plot marched wall, thickness and edge quantities against wall distance."""
+    x = _converted(rows, "surface_distance", "length", preferences)
+    x_title = f"表面距離 s [{preferences.length}]"
+    thermal_title = "断熱壁温 Tw" if adiabatic else "壁面熱流束 qw"
+    wall = make_subplots(
+        rows=1, cols=3, subplot_titles=("局所摩擦係数 Cf", "τw", thermal_title)
+    )
+    wall.add_trace(
+        go.Scatter(x=x, y=_numeric(rows, "local_skin_friction_coefficient"), name="Cf"),
+        row=1,
+        col=1,
+    )
+    wall.add_trace(
+        go.Scatter(
+            x=x,
+            y=_converted(rows, "wall_shear_stress", "pressure", preferences),
+            name="τw",
+        ),
+        row=1,
+        col=2,
+    )
+    wall.add_trace(
+        go.Scatter(
+            x=x,
+            y=_converted(rows, "wall_temperature", "temperature", preferences)
+            if adiabatic
+            else _converted(rows, "wall_heat_flux", "heat_flux", preferences),
+            name=thermal_title,
+        ),
+        row=1,
+        col=3,
+    )
+    wall.update_yaxes(title_text="Cf", row=1, col=1)
+    wall.update_yaxes(title_text=preferences.pressure, row=1, col=2)
+    wall.update_yaxes(
+        title_text=preferences.temperature if adiabatic else preferences.heat_flux,
+        row=1,
+        col=3,
+    )
+    thickness = go.Figure()
+    for key, name in (
+        ("boundary_layer_thickness", "δ₉₉"),
+        ("displacement_thickness", "δ*"),
+        ("momentum_thickness", "θ"),
+    ):
+        thickness.add_trace(
+            go.Scatter(x=x, y=_converted(rows, key, "length", preferences), name=name)
+        )
+    thickness.update_yaxes(title_text=f"厚さ [{preferences.length}]")
+    edge = make_subplots(
+        rows=1, cols=3, subplot_titles=("エッジ静圧 p_e", "エッジ Mach M_e", "β")
+    )
+    for column, values, title in (
+        (
+            1,
+            _converted(rows, "edge_pressure", "pressure", preferences),
+            preferences.pressure,
+        ),
+        (2, _numeric(rows, "edge_mach"), "M_e"),
+        (3, _numeric(rows, "pressure_gradient_parameter"), "β"),
+    ):
+        edge.add_trace(go.Scatter(x=x, y=values, name=title), row=1, col=column)
+        edge.update_yaxes(title_text=title, row=1, col=column)
+    figures = {
+        "壁面摩擦・熱": _style(wall, "壁面摩擦・熱"),
+        "境界層厚さ": _style(thickness, "境界層厚さ"),
+        "エッジ条件": _style(edge, "エッジ条件"),
+    }
+    unit = preferences.length
+    for figure in figures.values():
+        figure.update_xaxes(title_text=x_title)
+        for position, label in (
+            (transition_distance, "指定遷移位置"),
+            (separation_distance, "剥離"),
+        ):
+            if position is not None:
+                figure.add_vline(
+                    x=float(from_si(position, "length", unit)),
+                    line_dash="dash",
+                    annotation_text=label,
+                )
+    wall.update_layout(showlegend=False)
+    edge.update_layout(showlegend=False)
+    return figures
+
+
+def marching_boundary_layer_profile_figure(
+    rows: tuple[Row, ...],
+    preferences: UnitPreferences,
+    *,
+    boundary_layer_thickness: float,
+) -> go.Figure:
+    """Plot one station's profiles against wall distance up to twice delta99."""
+    y = _converted(rows, "wall_distance", "length", preferences)
+    turbulent = any("nu_tilde_ratio" in row for row in rows)
+    panels = [("velocity_ratio", "u/U_e"), ("temperature_ratio", "T/T_e")]
+    if turbulent:
+        panels.append(("nu_tilde_ratio", "ν̃/ν_e"))
+    figure = make_subplots(
+        rows=1,
+        cols=len(panels),
+        subplot_titles=[title for _, title in panels],
+        shared_yaxes=True,
+    )
+    limit = float(from_si(2.0 * boundary_layer_thickness, "length", preferences.length))
+    shown = y <= limit
+    for column, (key, title) in enumerate(panels, start=1):
+        figure.add_trace(
+            go.Scatter(x=_numeric(rows, key)[shown], y=y[shown], name=title),
+            row=1,
+            col=column,
+        )
+        figure.update_xaxes(title_text=title, row=1, col=column)
+    figure.update_yaxes(title_text=f"壁面距離 y [{preferences.length}]", row=1, col=1)
+    _style(figure, "境界層プロファイル")
+    figure.update_layout(hovermode="y unified", showlegend=False)
+    return figure
