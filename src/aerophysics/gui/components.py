@@ -151,7 +151,9 @@ def _convert_display_input_state() -> None:
         for key in keys:
             _convert_state_value(key, kind, old, new)
 
-    if _state_matches("heating_sweep_field", "geometric_altitude"):
+    if _state_matches("heating_sweep_field", "geometric_altitude") or _state_matches(
+        "heating_sweep_field", "radius"
+    ):
         for key in ("heating_sweep_start", "heating_sweep_stop"):
             _convert_state_value(key, "length", old, new)
     if _state_matches("heating_sweep_field", "sweep_angle"):

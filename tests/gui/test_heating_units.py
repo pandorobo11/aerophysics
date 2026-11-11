@@ -41,3 +41,24 @@ def test_heating_sweep_angle_unit_changes(
     for key, value in expected.items():
         assert state[key] == pytest.approx(value)
     assert state["_gui_display_units"] == new.to_dict()
+
+
+@pytest.mark.parametrize("field", ["radius", "geometric_altitude"])
+def test_heating_length_sweep_unit_changes(
+    monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    old = UnitPreferences(length="m")
+    new = UnitPreferences(length="mm")
+    state: dict[str, object] = {
+        f"unit_{name}": value for name, value in new.to_dict().items()
+    }
+    state["_gui_display_units"] = old.to_dict()
+    state["heating_sweep_field"] = field
+    state["heating_sweep_start"] = 0.05
+    state["heating_sweep_stop"] = 0.5
+    monkeypatch.setattr(components, "st", SimpleNamespace(session_state=state))
+
+    components._convert_display_input_state()
+
+    assert state["heating_sweep_start"] == pytest.approx(50.0)
+    assert state["heating_sweep_stop"] == pytest.approx(500.0)

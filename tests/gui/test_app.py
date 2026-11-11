@@ -955,7 +955,7 @@ render_heating(render_unit_sidebar())
     assert not replay.exception and not replay.error
     assert replay.session_state["heating_payload"][0].rows == result.rows
     app.radio(key="heating_freestream").set_value("manual").run()
-    assert app.radio(key="heating_sweep_field").options == ["Mach", "後退角"]
+    assert app.radio(key="heating_sweep_field").options == ["Mach", "半径", "後退角"]
     assert app.radio(key="heating_sweep_field").value == "upstream_mach"
     assert {"heating_temperature", "heating_pressure"} <= {
         x.key for x in app.number_input
@@ -969,6 +969,23 @@ render_heating(render_unit_sidebar())
     app.selectbox(key="heating_geometry").set_value("sphere").run()
     assert app.selectbox(key="heating_model").value == "fay_riddell"
     assert app.radio(key="heating_sweep_field").value == "upstream_mach"
+    assert app.radio(key="heating_sweep_field").options == ["Mach", "半径"]
+    app.radio(key="heating_sweep_field").set_value("radius").run()
+    assert "heating_radius" not in {x.key for x in app.number_input}
+    app.number_input(key="heating_sweep_start").set_value(0.05).run()
+    app.number_input(key="heating_sweep_stop").set_value(0.45).run()
+    app.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not app.exception and not app.error
+    result, configuration = app.session_state["heating_payload"]
+    assert [row["radius"] for row in result.rows] == pytest.approx([0.05, 0.25, 0.45])
+    assert configuration["sweep_si"]["field"] == "radius"
+    replay = AppTest.from_string(script, default_timeout=30)
+    replay.session_state["pending_aerodynamic_heating_configuration"] = configuration
+    replay.run()
+    assert replay.radio(key="heating_sweep_field").value == "radius"
+    replay.button(key="FormSubmitter:heating_form-計算").click().run()
+    assert not replay.exception and not replay.error
+    assert replay.session_state["heating_payload"][0].rows == result.rows
 
 
 def test_heating_manual_configuration_and_input_units() -> None:

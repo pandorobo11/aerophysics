@@ -23,7 +23,7 @@ def heating_condition(
     upstream_mach: float | np.ndarray,
     temperature: float | np.ndarray,
     pressure: float | np.ndarray,
-    radius: float,
+    radius: float | np.ndarray,
     wall_temperature: float,
     geometry: str,
     model: str,
@@ -38,10 +38,11 @@ def heating_condition(
     }
     if model not in choices.get(geometry, set()):
         raise ValueError("invalid heating geometry and model combination")
-    mach, temp, press, sweep, _ = np.broadcast_arrays(
+    mach, temp, press, rad, sweep, _ = np.broadcast_arrays(
         np.asarray(upstream_mach),
         np.asarray(temperature),
         np.asarray(pressure),
+        np.asarray(radius),
         np.asarray(sweep_angle),
         np.asarray(geometric_altitude if geometric_altitude is not None else 0.0),
     )
@@ -91,7 +92,7 @@ def heating_condition(
                     mach,
                     temp,
                     press,
-                    radius,
+                    rad,
                     sweep,
                     wall_temperature=wall_temperature,
                     prandtl_number=prandtl_number,
@@ -101,7 +102,7 @@ def heating_condition(
                     mach[valid],
                     temp[valid],
                     press[valid],
-                    radius,
+                    rad[valid],
                     sweep[valid],
                     wall_temperature=wall_temperature,
                     prandtl_number=prandtl_number,
@@ -159,7 +160,7 @@ def heating_condition(
             "pressure": at(pressure, i),
             "freestream_density": at(density, i),
             "freestream_velocity": at(velocity, i),
-            "radius": radius,
+            "radius": at(radius, i),
             "sweep_angle": at(sweep_angle, i) if geometry == "swept_cylinder" else None,
             "wall_temperature": wall_temperature,
             "geometry": geometry,
@@ -245,13 +246,14 @@ def heating_sweep(
     sweep_angle: float = 0.0,
     prandtl_number: float = 0.72,
 ) -> CalculationResult:
-    """Calculate a Mach, geometric-altitude, or cylinder sweep-angle sweep."""
+    """Calculate a Mach, altitude, radius, or cylinder sweep-angle sweep."""
     values = sweep_values(start, stop, points)
     mach: float | np.ndarray
     temp: float | np.ndarray
     press: float | np.ndarray
     altitude: float | np.ndarray | None
     angle: float | np.ndarray = sweep_angle
+    size: float | np.ndarray = radius
     if field == "upstream_mach":
         if temperature is None or pressure is None:
             raise ValueError("Mach sweep requires temperature and pressure")
@@ -281,6 +283,18 @@ def heating_sweep(
             geometric_altitude,
         )
         angle = values
+    elif field == "radius":
+        if upstream_mach is None or temperature is None or pressure is None:
+            raise ValueError("radius sweep requires Mach, temperature, and pressure")
+        if values[0] <= 0.0:
+            raise ValueError("radius sweep requires positive radii")
+        mach, temp, press, altitude = (
+            upstream_mach,
+            temperature,
+            pressure,
+            geometric_altitude,
+        )
+        size = values
     else:
         raise ValueError("invalid heating sweep field")
     return heating_condition(
@@ -288,7 +302,7 @@ def heating_sweep(
         temperature=temp,
         pressure=press,
         geometric_altitude=altitude,
-        radius=radius,
+        radius=size,
         wall_temperature=wall_temperature,
         geometry=geometry,
         model=model,

@@ -307,6 +307,11 @@ def test_heating_schema_validation() -> None:
             {**models, "freestream": "manual"},
             {"field": "geometric_altitude", "start": 1.0, "stop": 2.0, "points": 2},
         )
+    config(inputs, models, {"field": "radius", "start": 0.05, "stop": 1.0, "points": 3})
+    with pytest.raises(ConfigurationError, match="positive radii"):
+        config(
+            inputs, models, {"field": "radius", "start": 0.0, "stop": 1.0, "points": 3}
+        )
     for model in ("tauber", "poll_turbulent", "comparison"):
         config(inputs, {**models, "geometry": "swept_cylinder", "model": model})
     for model in ("fay_riddell", "tauber", "comparison"):

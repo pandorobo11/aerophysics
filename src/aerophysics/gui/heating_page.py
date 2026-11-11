@@ -119,6 +119,7 @@ def render_heating(preferences: UnitPreferences) -> None:
         fields = (
             "upstream_mach",
             *(("geometric_altitude",) if freestream == "atmosphere" else ()),
+            "radius",
             *(("sweep_angle",) if geometry == "swept_cylinder" else ()),
         )
         default_field = sweep.get("field", "upstream_mach")
@@ -129,6 +130,7 @@ def render_heating(preferences: UnitPreferences) -> None:
             format_func=lambda x: {
                 "upstream_mach": "Mach",
                 "geometric_altitude": "幾何高度",
+                "radius": "半径",
                 "sweep_angle": "後退角",
             }[x],
             key="heating_sweep_field",
@@ -189,16 +191,18 @@ def render_heating(preferences: UnitPreferences) -> None:
             preferences.pressure,
         )
     radius_label = "nose radius Rn" if geometry == "sphere" else "cylinder radius r"
-    radius = _si(
-        finite_number(
-            f"{radius_label} [{preferences.length}]",
-            _display(_number(inputs, "radius", 0.1), "length", preferences.length),
-            key="heating_radius",
-            min_value=1e-12,
-        ),
-        "length",
-        preferences.length,
-    )
+    radius = _number(inputs, "radius", 0.1)
+    if mode == "single" or field != "radius":
+        radius = _si(
+            finite_number(
+                f"{radius_label} [{preferences.length}]",
+                _display(radius, "length", preferences.length),
+                key="heating_radius",
+                min_value=1e-12,
+            ),
+            "length",
+            preferences.length,
+        )
     angle = _number(inputs, "sweep_angle", np.pi / 6)
     if geometry == "swept_cylinder" and (mode == "single" or field != "sweep_angle"):
         angle = _si(
@@ -243,6 +247,7 @@ def render_heating(preferences: UnitPreferences) -> None:
                 60000.0,
                 0.0,
             ),
+            "radius": ("length", preferences.length, "半径", 0.01, 1.0, 1e-12),
             "sweep_angle": ("angle", preferences.angle, "後退角", 0.0, np.pi / 2, 0.0),
         }[field]
         start_default = _number(sweep, "start", default_start)
